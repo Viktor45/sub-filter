@@ -34,7 +34,9 @@
 
 Если у вас установлен Go, просто выполните в терминале:
 
+ ```
 go build -o filter main.go
+ ```
 
 После этого появится файл `filter` — это и есть ваша программа.
 
@@ -44,11 +46,15 @@ go build -o filter main.go
 
 ### Пример с полными настройками
 
+ ```
 ./filter 8000 1800 ./config/sub.txt ./config/bad.txt ./config/uagent.txt
+ ```
 
 ### Пример с минимальными настройками
 
+ ```
 ./filter 8000 1800
+ ```
 
 (В этом случае программа возьмёт файлы по умолчанию из папки `./config/`)
 
@@ -72,7 +78,9 @@ go build -o filter main.go
 
 Попробуйте запросить отфильтрованную подписку из первой строки файла `sub.txt`:
 
+ ```
 curl -H "User-Agent: Clash" "http://localhost:8000/filter?id=1"
+ ```
 
 Если всё настроено правильно — вы увидите «чистую» подписку.
 
@@ -94,8 +102,9 @@ http://localhost:8000/filter?id=1
 ## Как собрать Docker-образ?
 
 Если вы используете Docker:
-
+ ```
 docker build -t sub-filter .
+ ```
 
 ---
 
@@ -103,6 +112,7 @@ docker build -t sub-filter .
 
 ### Через Docker
 
+ ```
 docker run -d \
   --name sub-filter \
   -p 8000:8000 \
@@ -110,9 +120,11 @@ docker run -d \
   -v $(pwd)/cache:/cache:rw \
   sub-filter \
   8000 1800
+ ```
 
 ### Через Podman (альтернатива Docker)
 
+ ```
 podman run -d --replace \
   --name sub-filter \
   -p 8000:8000 \
@@ -120,5 +132,6 @@ podman run -d --replace \
   -v $(pwd)/cache:/cache:rw,z \
   sub-filter \
   8000 1800
+ ```
 
 > 📁 Убедитесь, что папки `./config` и `./cache` существуют перед запуском!
