@@ -35,3 +35,21 @@ simple subscription filter
 получения отфильтрованной подписки из списка sub.txt с номером строки 1
 
 http://localhost:8000/filter?id=1
+
+### Сборка образа
+
+ ```
+docker build -t sub-filter .
+ ```
+#### Запуск с аргументами (порт 8080, TTL 300, файлы в рабочей директории)
+
+ ```
+docker run -d \
+  --name sub-filter \
+  -p 8080:8080 \
+  -v $(pwd)/sub.txt:/sub.txt:ro \
+  -v $(pwd)/bad.txt:/bad.txt:ro \
+  -v $(pwd)/uagent.txt:/uagent.txt:ro \
+  sub-filter \
+  8080 1800 ./sub.txt ./bad.txt ./uagent.txt
+ ```
