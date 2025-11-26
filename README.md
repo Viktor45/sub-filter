@@ -34,4 +34,4 @@ simple subscription filter
 
 получения отфильтрованной подписки sub.txt с номером строки 1
 
-http://localhost:8080/filter?id=1
+http://localhost:8000/filter?id=1
