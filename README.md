@@ -31,8 +31,15 @@ simple subscription filter
 
 ### Запуск
 
+Пример с полными аргументами
+
  ```
- ./filter 8000 1800 sub.txt bad.txt uagent.txt
+ ./filter 8000 1800 ./config/sub.txt ./config/bad.txt ./config/uagent.txt
+ ```
+
+Пример с важными аргументами
+ ```
+ ./filter 8000 1800
  ```
 
 ### Параметры:
