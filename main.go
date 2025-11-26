@@ -203,7 +203,7 @@ func main() {
 	cacheTTL = time.Duration(cacheTTLSeconds) * time.Second
 	cacheDir = defaultCacheDir
 
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "Cannot create cache dir: %v\n", err)
 		os.Exit(1)
 	}
@@ -308,8 +308,27 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Re-validate sourceURL to ensure it's safe and extract host
+	parsedSource, err := url.Parse(sourceURL)
+	if err != nil || parsedSource.Host == "" {
+		http.Error(w, "Invalid source URL", http.StatusBadRequest)
+		return
+	}
+	host := parsedSource.Hostname()
+	if !isValidHost(host) {
+		http.Error(w, "Invalid source host", http.StatusBadRequest)
+		return
+	}
+
+	// Create safe cache file paths
 	origCache := filepath.Join(cacheDir, "orig_"+id+".txt")
 	modCache := filepath.Join(cacheDir, "mod_"+id+".txt")
+
+	// Ensure cache file paths are within cacheDir to prevent path traversal
+	if !isPathSafe(origCache, cacheDir) || !isPathSafe(modCache, cacheDir) {
+		http.Error(w, "Invalid id", http.StatusBadRequest)
+		return
+	}
 
 	// Try mod cache
 	if info, err := os.Stat(modCache); err == nil && time.Since(info.ModTime()) <= cacheTTL {
@@ -327,9 +346,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if origContent == nil {
-		parsedSource, _ := url.Parse(sourceURL)
-		host := parsedSource.Hostname()
-
 		client := &http.Client{
 			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
@@ -369,9 +385,13 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Write original content atomically
 		tmpFile := origCache + ".tmp"
-		if err := os.WriteFile(tmpFile, origContent, 0644); err == nil {
-			os.Rename(tmpFile, origCache)
+		if err := os.WriteFile(tmpFile, origContent, 0o644); err == nil {
+			if err := os.Rename(tmpFile, origCache); err != nil {
+				// Log error or handle it, original file might be left if rename fails
+				fmt.Fprintf(os.Stderr, "Failed to rename temp cache file: %v\n", err)
+			}
 		}
 	}
 
@@ -424,9 +444,13 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	finalLines = append(finalLines, out...)
 	final := strings.Join(finalLines, "\n")
 
+	// Write modified content atomically
 	tmpFile := modCache + ".tmp"
-	if err := os.WriteFile(tmpFile, []byte(final), 0644); err == nil {
-		os.Rename(tmpFile, modCache)
+	if err := os.WriteFile(tmpFile, []byte(final), 0o644); err == nil {
+		if err := os.Rename(tmpFile, modCache); err != nil {
+			// Log error or handle it, modified file might be left if rename fails
+			fmt.Fprintf(os.Stderr, "Failed to rename temp modified cache file: %v\n", err)
+		}
 	}
 
 	serveFile(w, r, []byte(final), sourceURL, id)
@@ -445,10 +469,23 @@ func serveFile(w http.ResponseWriter, r *http.Request, content []byte, sourceURL
 		filename += ".txt"
 	}
 
+	// Ensure filename is safe by taking only the base name
+	filename = filepath.Base(filename)
+
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	w.Header().Set("Content-Length", strconv.Itoa(len(content)))
 	w.Write(content)
+}
+
+// isPathSafe checks if the path is within the allowed directory
+func isPathSafe(p, baseDir string) bool {
+	cleanPath := filepath.Clean(p)
+	rel, err := filepath.Rel(baseDir, cleanPath)
+	if err != nil {
+		return false
+	}
+	return !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".."
 }
 
 // === VLESS ===
