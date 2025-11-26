@@ -63,10 +63,17 @@ func loadTextFile(filename string, processor LineProcessor) ([]string, error) {
 	}
 	defer file.Close()
 
+	// Skip UTF-8 BOM if present
+	reader := bufio.NewReader(file)
+	if b, err := reader.Peek(3); err == nil && bytes.Equal(b, []byte{0xEF, 0xBB, 0xBF}) {
+		reader.Discard(3)
+	}
+
 	var result []string
-	scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+		// Create a copy of the line to avoid buffer reuse issues
+		line := strings.TrimSpace(string([]byte(scanner.Text())))
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
@@ -323,9 +330,10 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	// Create safe cache file paths
 	origCache := filepath.Join(cacheDir, "orig_"+id+".txt")
 	modCache := filepath.Join(cacheDir, "mod_"+id+".txt")
+	rejectedCache := filepath.Join(cacheDir, "rejected_"+id+".txt")
 
 	// Ensure cache file paths are within cacheDir to prevent path traversal
-	if !isPathSafe(origCache, cacheDir) || !isPathSafe(modCache, cacheDir) {
+	if !isPathSafe(origCache, cacheDir) || !isPathSafe(modCache, cacheDir) || !isPathSafe(rejectedCache, cacheDir) {
 		http.Error(w, "Invalid id", http.StatusBadRequest)
 		return
 	}
@@ -396,29 +404,71 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var out []string
+	var rejectedLines []string
+
+	// Process lines and separate valid and rejected ones
 	lines := bytes.Split(origContent, []byte("\n"))
 	for _, lineBytes := range lines {
-		line := strings.TrimRight(string(lineBytes), "\r\n")
-		if line == "" {
+		originalLine := strings.TrimRight(string(lineBytes), "\r\n")
+		if originalLine == "" {
 			continue
 		}
-		if len(line) > maxURILength {
+
+		// NEW: Ignore comment lines that start with '#'
+		if strings.HasPrefix(originalLine, "#") {
 			continue
 		}
-		lowerLine := strings.ToLower(line)
-		var filtered string
-		switch {
-		case strings.HasPrefix(lowerLine, "vless://"):
-			filtered = processVLESS(line)
-		case strings.HasPrefix(lowerLine, "ss://"):
-			filtered = processSS(line)
-		case strings.HasPrefix(lowerLine, "trojan://"):
-			filtered = processTrojan(line)
-		default:
+
+		// Check length first
+		if len(originalLine) > maxURILength {
+			rejectedLines = append(rejectedLines, "# REASON: Line too long", originalLine)
 			continue
 		}
-		if filtered != "" {
-			out = append(out, filtered)
+
+		lowerLine := strings.ToLower(originalLine)
+
+		var processedLine string
+		var reason string
+		// Process only supported protocols
+		if strings.HasPrefix(lowerLine, "vless://") {
+			processedLine = processVLESS(originalLine)
+			reason = "Processing failed (invalid format, forbidden word, etc.)"
+		} else if strings.HasPrefix(lowerLine, "ss://") {
+			processedLine = processSS(originalLine)
+			reason = "Processing failed (invalid format, forbidden word, etc.)"
+		} else if strings.HasPrefix(lowerLine, "trojan://") {
+			processedLine = processTrojan(originalLine)
+			reason = "Processing failed (invalid format, forbidden word, etc.)"
+		} else {
+			// Not a supported protocol
+			reason = "Unsupported protocol"
+			processedLine = "" // Explicitly set to empty
+		}
+
+		if processedLine != "" {
+			out = append(out, processedLine)
+		} else {
+			// Add to rejected if processing failed or protocol is unsupported
+			rejectedLines = append(rejectedLines, "# REASON: "+reason, originalLine)
+		}
+	}
+
+	// Write rejected lines to file atomically
+	if len(rejectedLines) > 0 {
+		rejectedContent := strings.Join(rejectedLines, "\n")
+		tmpRejectedFile := rejectedCache + ".tmp"
+		if err := os.WriteFile(tmpRejectedFile, []byte(rejectedContent), 0o644); err == nil {
+			if err := os.Rename(tmpRejectedFile, rejectedCache); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to rename temp rejected cache file: %v\n", err)
+			}
+		}
+	} else {
+		// Only remove the rejected file if it exists and there are no rejected lines this time
+		if _, err := os.Stat(rejectedCache); err == nil {
+			if err := os.Remove(rejectedCache); err != nil {
+				// Log error, but don't fail the request
+				fmt.Fprintf(os.Stderr, "Failed to remove rejected cache file: %v\n", err)
+			}
 		}
 	}
 
@@ -498,7 +548,7 @@ func processVLESS(raw string) string {
 		return ""
 	}
 
-	uuid := u.User.Username()
+	uuid := u.User.Username() // Username can be UUID or arbitrary string
 	host := u.Hostname()
 	portStr := u.Port()
 
@@ -511,7 +561,12 @@ func processVLESS(raw string) string {
 		return ""
 	}
 
-	if !isValidUUID(uuid) || !isValidHost(host) {
+	// VLESS now allows arbitrary usernames, not just UUIDs
+	if uuid == "" || len(uuid) > maxIDLength {
+		return ""
+	}
+
+	if !isValidHost(host) {
 		return ""
 	}
 
