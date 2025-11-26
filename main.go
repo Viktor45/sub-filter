@@ -20,9 +20,9 @@ import (
 )
 
 const (
-	defaultSourcesFile  = "sub.txt"
-	defaultBadWordsFile = "bad.txt"
-	defaultUAgentFile   = "uagent.txt"
+	defaultSourcesFile  = "./config/sub.txt"
+	defaultBadWordsFile = "./config/bad.txt"
+	defaultUAgentFile   = "./config/uagent.txt"
 	defaultCacheDir     = "./cache"
 )
 
