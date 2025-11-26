@@ -432,7 +432,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	updateInterval := int(cacheTTL.Seconds() / 60)
+	updateInterval := int(cacheTTL.Seconds() / 3600)
 	if updateInterval < 1 {
 		updateInterval = 1
 	}
