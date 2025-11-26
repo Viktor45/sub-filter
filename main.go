@@ -3,7 +3,9 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net"
@@ -17,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -24,25 +28,34 @@ const (
 	defaultBadWordsFile = "./config/bad.txt"
 	defaultUAgentFile   = "./config/uagent.txt"
 	defaultCacheDir     = "./cache"
+	maxIDLength         = 64
+	maxURILength        = 4096
+	maxUserinfoLength   = 1024
+	maxSourceBytes      = 10 * 1024 * 1024 // 10 MB
 )
 
 type SourceMap map[string]string
 
 var (
-	cacheDir  string
-	cacheTTL  time.Duration
-	sources   SourceMap
-	badWords  []string
-	allowedUA []string
-	mu        sync.RWMutex
+	cacheDir   string
+	cacheTTL   time.Duration
+	sources    SourceMap
+	badWords   []string
+	allowedUA  []string
+	validIDRe  = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
+	uuidRegex1 = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	hostRegex  = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+	ssCipherRe = regexp.MustCompile(`^[a-zA-Z0-9_+-]+$`)
+
+	// Rate limiter: 10 requests per second per IP, burst 5
+	ipLimiter    = make(map[string]*rate.Limiter)
+	limiterMutex sync.RWMutex
 )
 
 var builtinAllowedPrefixes = []string{"clash", "happ"}
 
-// LineProcessor defines how to transform a line
 type LineProcessor func(string) string
 
-// loadTextFile reads a text file, skips empty lines and comments, applies processor
 func loadTextFile(filename string, processor LineProcessor) ([]string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -63,6 +76,102 @@ func loadTextFile(filename string, processor LineProcessor) ([]string, error) {
 		result = append(result, line)
 	}
 	return result, scanner.Err()
+}
+
+// isValidSourceURL validates the URL structure (not DNS resolution)
+func isValidSourceURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+	host := u.Hostname()
+	if host == "" {
+		return false
+	}
+	if host == "localhost" {
+		return false
+	}
+	if strings.HasPrefix(host, "127.") {
+		return false
+	}
+	if strings.HasSuffix(host, ".local") ||
+		strings.HasSuffix(host, ".internal") {
+		return false
+	}
+	if strings.HasPrefix(host, "xn--") {
+		// Block IDN homograph attacks
+		return false
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+			ip.IsLinkLocalMulticast() || ip.IsMulticast() {
+			return false
+		}
+	}
+	return true
+}
+
+// isIPAllowed checks if an IP is safe to connect to
+func isIPAllowed(ip net.IP) bool {
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsMulticast() {
+		return false
+	}
+	// Block IPv6 with zone ID (e.g., fe80::1%eth0)
+	if ip.To4() == nil && strings.Contains(ip.String(), "%") {
+		return false
+	}
+	return true
+}
+
+// safeDialContext prevents SSRF by validating resolved IPs
+func safeDialContext(ctx context.Context, network, addr string, originalHost string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid address format")
+	}
+
+	// Resolve host
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return nil, err
+	}
+
+	// Find first public, allowed IP
+	var allowedIP net.IP
+	for _, ip := range ips {
+		if isIPAllowed(ip) {
+			allowedIP = ip
+			break
+		}
+	}
+
+	if allowedIP == nil {
+		return nil, fmt.Errorf("no public/resolvable IP for host %s", host)
+	}
+
+	dialer := &net.Dialer{Timeout: 5 * time.Second}
+	return dialer.DialContext(ctx, network, net.JoinHostPort(allowedIP.String(), port))
+}
+
+func getLimiter(ip string) *rate.Limiter {
+	limiterMutex.RLock()
+	limiter, exists := ipLimiter[ip]
+	limiterMutex.RUnlock()
+	if !exists {
+		limiterMutex.Lock()
+		// Double-check
+		limiter, exists = ipLimiter[ip]
+		if !exists {
+			limiter = rate.NewLimiter(rate.Every(100*time.Millisecond), 5) // 10 req/s
+			ipLimiter[ip] = limiter
+		}
+		limiterMutex.Unlock()
+	}
+	return limiter
 }
 
 func main() {
@@ -99,28 +208,35 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Load sources: special case (map with auto-numbered keys)
-	{
-		lines, err := loadTextFile(sourcesFile, nil)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to load sources: %v\n", err)
-			os.Exit(1)
+	// Load and validate sources
+	lines, err := loadTextFile(sourcesFile, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load sources: %v\n", err)
+		os.Exit(1)
+	}
+	sources = make(SourceMap)
+	validIndex := 1
+	for _, line := range lines {
+		if !isValidSourceURL(line) {
+			fmt.Fprintf(os.Stderr, "⚠️  Skipping invalid or unsafe source URL: %s\n", line)
+			continue
 		}
-		sources = make(SourceMap)
-		for i, line := range lines {
-			sources[strconv.Itoa(i+1)] = line
-		}
+		sources[strconv.Itoa(validIndex)] = line
+		validIndex++
+	}
+	if len(sources) == 0 {
+		fmt.Fprintf(os.Stderr, "No valid sources loaded. Exiting.\n")
+		os.Exit(1)
 	}
 
-	// Load bad words: to lower case
-	var err error
+	// Load bad words
 	badWords, err = loadTextFile(badWordsFile, strings.ToLower)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to load bad words: %v (using empty list)\n", err)
 		badWords = []string{}
 	}
 
-	// Load user agents: as-is
+	// Load user agents
 	allowedUA, err = loadTextFile(uagentFile, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Note: using built-in User-Agent rules only (no %s or error: %v)\n", uagentFile, err)
@@ -129,35 +245,29 @@ func main() {
 
 	http.HandleFunc("/filter", handler)
 	fmt.Printf("Server starting on :%s\n", port)
-	fmt.Printf("Sources: %s\n", sourcesFile)
+	fmt.Printf("Valid sources loaded: %d\n", len(sources))
 	fmt.Printf("Bad words: %s\n", badWordsFile)
 	fmt.Printf("User-Agent file: %s\n", uagentFile)
 	fmt.Printf("Cache TTL: %ds\n", cacheTTLSeconds)
-	if len(allowedUA) > 0 {
-		fmt.Printf("Additional allowed User-Agents loaded: %d entries\n", len(allowedUA))
-	} else {
-		fmt.Println("Using built-in User-Agent rules: 'clash' or 'happ' (case-insensitive)")
+
+	server := &http.Server{
+		Addr:         ":" + port,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
 	}
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
+	if err := server.ListenAndServe(); err != nil {
 		fmt.Fprintf(os.Stderr, "Server failed: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-// isValidUserAgent checks if UA is allowed
 func isValidUserAgent(ua string) bool {
 	lowerUA := strings.ToLower(ua)
-
-	// 1. Built-in prefixes
 	for _, prefix := range builtinAllowedPrefixes {
 		if strings.HasPrefix(lowerUA, prefix) {
 			return true
 		}
 	}
-
-	// 2. Custom list from uagent.txt (substring match, case-insensitive)
-	mu.RLock()
-	defer mu.RUnlock()
 	for _, allowed := range allowedUA {
 		if allowed == "" {
 			continue
@@ -166,26 +276,33 @@ func isValidUserAgent(ua string) bool {
 			return true
 		}
 	}
-
 	return false
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
-	userAgent := r.Header.Get("User-Agent")
-	if !isValidUserAgent(userAgent) {
+	// Rate limiting per IP
+	clientIP, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		clientIP = r.RemoteAddr
+	}
+	limiter := getLimiter(clientIP)
+	if !limiter.Allow() {
+		http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+		return
+	}
+
+	if !isValidUserAgent(r.Header.Get("User-Agent")) {
 		http.Error(w, "Forbidden: invalid User-Agent", http.StatusForbidden)
 		return
 	}
 
 	id := r.URL.Query().Get("id")
-	if id == "" {
-		http.Error(w, "Missing id", http.StatusBadRequest)
+	if id == "" || len(id) > maxIDLength || !validIDRe.MatchString(id) {
+		http.Error(w, "Invalid id", http.StatusBadRequest)
 		return
 	}
 
-	mu.RLock()
 	sourceURL, exists := sources[id]
-	mu.RUnlock()
 	if !exists {
 		http.Error(w, "Invalid id", http.StatusBadRequest)
 		return
@@ -194,30 +311,34 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	origCache := filepath.Join(cacheDir, "orig_"+id+".txt")
 	modCache := filepath.Join(cacheDir, "mod_"+id+".txt")
 
-	// Try mod cache first
-	if info, err := os.Stat(modCache); err == nil {
-		if time.Since(info.ModTime()) <= cacheTTL {
-			content, err := os.ReadFile(modCache)
-			if err == nil {
-				serveFile(w, r, content, sourceURL, id)
-				return
-			}
+	// Try mod cache
+	if info, err := os.Stat(modCache); err == nil && time.Since(info.ModTime()) <= cacheTTL {
+		if content, err := os.ReadFile(modCache); err == nil {
+			serveFile(w, r, content, sourceURL, id)
+			return
 		}
 	}
 
-	// Fetch original
 	var origContent []byte
 	if info, err := os.Stat(origCache); err == nil && time.Since(info.ModTime()) <= cacheTTL {
-		origContent, err = os.ReadFile(origCache)
-		if err != nil {
-			http.Error(w, "Failed to read origin cache", http.StatusInternalServerError)
-			return
+		if content, err := os.ReadFile(origCache); err == nil {
+			origContent = content
 		}
-	} else {
+	}
+
+	if origContent == nil {
+		parsedSource, _ := url.Parse(sourceURL)
+		host := parsedSource.Hostname()
+
 		client := &http.Client{
 			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: false},
+				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					return safeDialContext(ctx, network, addr, host)
+				},
+				TLSClientConfig: &tls.Config{
+					ServerName: host,
+				},
 				MaxIdleConns:    10,
 				IdleConnTimeout: 30 * time.Second,
 			},
@@ -242,129 +363,78 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		origContent, err = io.ReadAll(resp.Body)
+		origContent, err = io.ReadAll(io.LimitReader(resp.Body, maxSourceBytes))
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to read response: %v", err), http.StatusBadGateway)
 			return
 		}
 
-		_ = os.WriteFile(origCache, origContent, 0644)
+		tmpFile := origCache + ".tmp"
+		if err := os.WriteFile(tmpFile, origContent, 0644); err == nil {
+			os.Rename(tmpFile, origCache)
+		}
 	}
 
-	// Process lines
-	lines := bytes.Split(origContent, []byte("\n"))
 	var out []string
-
+	lines := bytes.Split(origContent, []byte("\n"))
 	for _, lineBytes := range lines {
 		line := strings.TrimRight(string(lineBytes), "\r\n")
 		if line == "" {
 			continue
 		}
-		if !strings.HasPrefix(strings.ToLower(line), "vless://") {
+		if len(line) > maxURILength {
 			continue
 		}
-
-		u, err := url.Parse(line)
-		if err != nil || u.Scheme != "vless" {
+		lowerLine := strings.ToLower(line)
+		var filtered string
+		switch {
+		case strings.HasPrefix(lowerLine, "vless://"):
+			filtered = processVLESS(line)
+		case strings.HasPrefix(lowerLine, "ss://"):
+			filtered = processSS(line)
+		case strings.HasPrefix(lowerLine, "trojan://"):
+			filtered = processTrojan(line)
+		default:
 			continue
 		}
-
-		uuid := u.User.Username()
-		host := u.Hostname()
-		portStr := u.Port()
-		var port int
-		if portStr != "" {
-			port, err = strconv.Atoi(portStr)
-			if err != nil || port <= 0 || port > 65535 {
-				continue
-			}
+		if filtered != "" {
+			out = append(out, filtered)
 		}
-
-		if !isValidUUID(uuid) || !isValidHost(host) || (portStr != "" && !isValidPort(port)) {
-			continue
-		}
-
-		fragmentEncoded := u.Fragment
-		fragmentDecoded := fragmentEncoded
-		if fragmentEncoded != "" {
-			if decoded, err := url.QueryUnescape(fragmentEncoded); err == nil {
-				fragmentDecoded = decoded
-			}
-		}
-
-		if isForbiddenAnchor(fragmentEncoded) {
-			continue
-		}
-
-		query := u.RawQuery
-		newQuery := normalizeALPN(query)
-		if isOnlyEncryptionSecurityTypeGRPC(newQuery) {
-			continue
-		}
-
-		// Rebuild URI
-		var buf strings.Builder
-		buf.WriteString("vless://")
-		buf.WriteString(url.PathEscape(uuid))
-		buf.WriteString("@")
-		if net.ParseIP(host) != nil && strings.Contains(host, ":") {
-			buf.WriteString("[" + host + "]")
-		} else {
-			buf.WriteString(host)
-		}
-		if portStr != "" {
-			buf.WriteString(":")
-			buf.WriteString(portStr)
-		}
-		if u.Path != "" {
-			buf.WriteString(u.Path)
-		}
-		if newQuery != "" {
-			buf.WriteString("?")
-			buf.WriteString(newQuery)
-		}
-		if fragmentDecoded != "" {
-			buf.WriteString("#")
-			buf.WriteString(fragmentDecoded)
-		}
-
-		out = append(out, buf.String())
 	}
 
-	// --- ДОБАВЛЕНИЕ ЗАГОЛОВКА ПРОФИЛЯ ---
+	// Profile header
 	sourceHost := "unknown"
 	if parsedSource, err := url.Parse(sourceURL); err == nil && parsedSource.Host != "" {
-		// Разделяем хост и порт (если порт есть)
 		if host, _, err := net.SplitHostPort(parsedSource.Host); err == nil {
 			sourceHost = host
 		} else {
-			// Порт отсутствует — весь Host и есть имя хоста
 			sourceHost = parsedSource.Host
 		}
 	}
 
-	// Округление TTL вверх до ближайшего часа
-	ttlHours := int64((cacheTTL + time.Hour - 1) / time.Hour)
-	if ttlHours < 1 {
-		ttlHours = 1
+	updateInterval := int(cacheTTL.Seconds() / 60)
+	if updateInterval < 1 {
+		updateInterval = 1
 	}
 
 	profileTitle := fmt.Sprintf("#profile-title: %s filtered %s", sourceHost, id)
-	profileInterval := fmt.Sprintf("#profile-update-interval: %d", ttlHours)
+	profileInterval := fmt.Sprintf("#profile-update-interval: %d", updateInterval)
 
-	// Формируем финальный файл: заголовок + пустая строка + URI
 	finalLines := []string{profileTitle, profileInterval, ""}
 	finalLines = append(finalLines, out...)
 	final := strings.Join(finalLines, "\n")
 
-	_ = os.WriteFile(modCache, []byte(final), 0644)
+	tmpFile := modCache + ".tmp"
+	if err := os.WriteFile(tmpFile, []byte(final), 0644); err == nil {
+		os.Rename(tmpFile, modCache)
+	}
+
 	serveFile(w, r, []byte(final), sourceURL, id)
 }
 
 func serveFile(w http.ResponseWriter, r *http.Request, content []byte, sourceURL, id string) {
-	u, err := url.Parse(sourceURL)
 	filename := "filtered_" + id + ".txt"
-	if err == nil {
+	if u, err := url.Parse(sourceURL); err == nil {
 		base := path.Base(u.Path)
 		if base != "" && regexp.MustCompile(`^[a-zA-Z0-9._-]+\.txt$`).MatchString(base) {
 			filename = base
@@ -381,23 +451,192 @@ func serveFile(w http.ResponseWriter, r *http.Request, content []byte, sourceURL
 	w.Write(content)
 }
 
-// --- Validation helpers ---
+// === VLESS ===
+func processVLESS(raw string) string {
+	if len(raw) > maxURILength {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "vless" {
+		return ""
+	}
 
-var (
-	uuidRegex1 = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
-	uuidRegex2 = regexp.MustCompile(`^[0-9a-fA-F]{32}$`)
-	hostRegex  = regexp.MustCompile(`^([a-z0-9_][a-z0-9_-]*\.)*[a-z0-9_][a-z0-9_-]*$`)
-)
+	uuid := u.User.Username()
+	host := u.Hostname()
+	portStr := u.Port()
 
+	if portStr == "" {
+		return ""
+	}
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil || !isValidPort(port) {
+		return ""
+	}
+
+	if !isValidUUID(uuid) || !isValidHost(host) {
+		return ""
+	}
+
+	if isForbiddenAnchor(u.Fragment) {
+		return ""
+	}
+
+	query := normalizeALPN(u.RawQuery)
+	if isOnlyEncryptionSecurityTypeGRPC(query) {
+		return ""
+	}
+
+	var buf strings.Builder
+	buf.WriteString("vless://")
+	buf.WriteString(url.PathEscape(uuid))
+	buf.WriteString("@")
+	buf.WriteString(net.JoinHostPort(host, portStr))
+	if u.Path != "" {
+		buf.WriteString(u.Path)
+	}
+	if query != "" {
+		buf.WriteString("?")
+		buf.WriteString(query)
+	}
+	if u.Fragment != "" {
+		buf.WriteString("#")
+		buf.WriteString(u.Fragment)
+	}
+	return buf.String()
+}
+
+// === Shadowsocks ===
+func processSS(raw string) string {
+	if len(raw) > maxURILength {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "ss" {
+		return ""
+	}
+
+	userinfo := u.User.String()
+	if userinfo == "" || len(userinfo) > maxUserinfoLength {
+		return ""
+	}
+
+	var decoded []byte
+	var decodeErr error
+	if strings.HasSuffix(userinfo, "=") {
+		decoded, decodeErr = base64.URLEncoding.DecodeString(userinfo)
+	} else {
+		decoded, decodeErr = base64.RawURLEncoding.DecodeString(userinfo)
+	}
+	if decodeErr != nil {
+		return ""
+	}
+
+	parts := strings.SplitN(string(decoded), ":", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+	cipher, password := parts[0], parts[1]
+	if cipher == "" || password == "" {
+		return ""
+	}
+	if !ssCipherRe.MatchString(cipher) {
+		return ""
+	}
+
+	host := u.Hostname()
+	portStr := u.Port()
+	if portStr == "" {
+		return ""
+	}
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil || !isValidPort(port) {
+		return ""
+	}
+	if !isValidHost(host) {
+		return ""
+	}
+
+	if isForbiddenAnchor(u.Fragment) {
+		return ""
+	}
+
+	newUser := base64.RawURLEncoding.EncodeToString([]byte(cipher + ":" + password))
+	var buf strings.Builder
+	buf.WriteString("ss://")
+	buf.WriteString(newUser)
+	buf.WriteString("@")
+	buf.WriteString(net.JoinHostPort(host, portStr))
+	if u.Fragment != "" {
+		buf.WriteString("#")
+		buf.WriteString(u.Fragment)
+	}
+	return buf.String()
+}
+
+// === Trojan ===
+func processTrojan(raw string) string {
+	if len(raw) > maxURILength {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "trojan" {
+		return ""
+	}
+
+	password := u.User.Username()
+	if password == "" {
+		return ""
+	}
+
+	host := u.Hostname()
+	portStr := u.Port()
+	if portStr == "" {
+		return ""
+	}
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil || !isValidPort(port) {
+		return ""
+	}
+	if !isValidHost(host) {
+		return ""
+	}
+
+	if isForbiddenAnchor(u.Fragment) {
+		return ""
+	}
+
+	var buf strings.Builder
+	buf.WriteString("trojan://")
+	buf.WriteString(url.PathEscape(password))
+	buf.WriteString("@")
+	buf.WriteString(net.JoinHostPort(host, portStr))
+	if u.RawQuery != "" {
+		buf.WriteString("?")
+		buf.WriteString(u.RawQuery)
+	}
+	if u.Fragment != "" {
+		buf.WriteString("#")
+		buf.WriteString(u.Fragment)
+	}
+	return buf.String()
+}
+
+// === Helpers ===
 func isValidUUID(uuid string) bool {
-	return uuid != "" && (uuidRegex1.MatchString(uuid) || uuidRegex2.MatchString(uuid))
+	return uuid != "" && uuidRegex1.MatchString(uuid)
 }
 
 func isValidHost(host string) bool {
 	if host == "" {
 		return false
 	}
-	if net.ParseIP(host) != nil {
+	if strings.HasPrefix(host, "xn--") {
+		return false // block IDN
+	}
+	if ip := net.ParseIP(host); ip != nil {
 		return true
 	}
 	return hostRegex.MatchString(strings.ToLower(host))
@@ -411,49 +650,30 @@ func normalizeALPN(query string) string {
 	if query == "" {
 		return ""
 	}
-
-	values, err := url.ParseQuery(query)
+	vals, err := url.ParseQuery(query)
 	if err != nil {
 		return query
 	}
-
-	alpnValues := values["alpn"]
-	var pairs []string
-
-	for key, vals := range values {
-		if strings.ToLower(key) == "alpn" {
-			continue
-		}
-		for _, v := range vals {
-			pairs = append(pairs, url.QueryEscape(key)+"="+url.QueryEscape(v))
-		}
+	if alpnList := vals["alpn"]; len(alpnList) > 0 {
+		vals["alpn"] = alpnList[:1]
 	}
-
-	if len(alpnValues) > 0 {
-		pairs = append(pairs, "alpn="+url.QueryEscape(alpnValues[0]))
-	}
-
-	return strings.Join(pairs, "&")
+	return vals.Encode()
 }
 
 func isOnlyEncryptionSecurityTypeGRPC(query string) bool {
 	if query == "" {
 		return false
 	}
-
-	values, err := url.ParseQuery(query)
+	vals, err := url.ParseQuery(query)
 	if err != nil {
 		return false
 	}
-
-	if len(values) != 3 {
+	if len(vals) != 3 {
 		return false
 	}
-
-	enc := strings.ToLower(values.Get("encryption"))
-	sec := strings.ToLower(values.Get("security"))
-	typ := strings.ToLower(values.Get("type"))
-
+	enc := strings.ToLower(vals.Get("encryption"))
+	sec := strings.ToLower(vals.Get("security"))
+	typ := strings.ToLower(vals.Get("type"))
 	return enc == "none" && sec == "none" && typ == "grpc"
 }
 
@@ -466,11 +686,8 @@ func isForbiddenAnchor(fragment string) bool {
 		decoded = fragment
 	}
 	decodedLower := strings.ToLower(decoded)
-
-	mu.RLock()
-	defer mu.RUnlock()
 	for _, word := range badWords {
-		if strings.Contains(decodedLower, word) {
+		if word != "" && strings.Contains(decodedLower, word) {
 			return true
 		}
 	}
