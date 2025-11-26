@@ -33,3 +33,4 @@ go.work.sum
 .cache/
 cache/
 filter
+.DS_Store
