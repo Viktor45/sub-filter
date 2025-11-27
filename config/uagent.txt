@@ -1,5 +1,35 @@
 # Дополнительные разрешённые User-Agent (подстроки)
 # Пустые и комментарии — игнорируются
+BifrostV
 clash
+FlClash
+Go-http-client
+GoodCloud
 Happ
+Hiddify
+Hysteria
+Karing
+LawnchairClash
+Lumos
+Matsuri
+Mihomo
+NaiveProxy
+NapsternetV
+Nekoray
+Pharos
+Quantumult
+Qv2ray
+SagerNet
+SFA
+shadowsocks
+Shadowrocket
+Stash
+Streisand
+Surge
+Trojan-Go
+TUIC
+v2ray
+Wings
+X-UI
+Xray
 #Mozilla
