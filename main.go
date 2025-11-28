@@ -1,5 +1,7 @@
-// Пакет main реализует HTTP-сервер для фильтрации прокси-подписок.
-// Поддерживает протоколы: VLESS, VMess, Trojan, Shadowsocks.
+// Пакет main реализует утилиту для фильтрации прокси-подписок.
+// Поддерживает два режима работы:
+//   - HTTP-сервер для динамической фильтрации (/filter?id=1)
+//   - CLI-режим для однократной обработки всех подписок (--cli)
 package main
 
 import (
@@ -9,6 +11,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -82,11 +85,11 @@ var (
 )
 
 // === HTTP-фетчер с дедупликацией ===
+// fetchGroup используется для предотвращения параллельных фетчей одного источника.
+var fetchGroup singleflight.Group
 
-var (
-	fetchGroup             singleflight.Group          // Группа для дедупликации одновременных фетчей
-	builtinAllowedPrefixes = []string{"clash", "happ"} // Встроенные разрешённые User-Agent-префиксы
-)
+// Встроенные разрешённые User-Agent-префиксы.
+var builtinAllowedPrefixes = []string{"clash", "happ"}
 
 // LineProcessor — тип функции для обработки строк при загрузке файлов.
 type LineProcessor func(string) string
@@ -583,44 +586,27 @@ func serveFile(w http.ResponseWriter, r *http.Request, content []byte, sourceURL
 	w.Write(content)
 }
 
-// handler обрабатывает HTTP-запрос /filter?id=...
-func handler(w http.ResponseWriter, r *http.Request) {
-	clientIP, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		clientIP = r.RemoteAddr
+// isLocalIP проверяет, является ли IP-адрес локальным (loopback или private).
+// Используется для исключения из rate limiting.
+func isLocalIP(ipStr string) bool {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return true // недекодируемое — считаем локальным (консервативно)
 	}
-	limiter := getLimiter(clientIP)
-	if !limiter.Allow() {
-		http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
-		return
-	}
+	return ip.IsLoopback() || ip.IsPrivate()
+}
 
-	if !isValidUserAgent(r.Header.Get("User-Agent")) {
-		http.Error(w, "Forbidden: invalid User-Agent", http.StatusForbidden)
-		return
-	}
-
-	id := r.URL.Query().Get("id")
-	if id == "" || len(id) > maxIDLength || !validIDRe.MatchString(id) {
-		http.Error(w, "Invalid id", http.StatusBadRequest)
-		return
-	}
-
-	source, exists := sources[id]
-	if !exists {
-		http.Error(w, "Invalid id", http.StatusBadRequest)
-		return
-	}
-
+// processSource обрабатывает одну подписку и сохраняет результат в кэш.
+// Используется как в HTTP-обработчике, так и в CLI-режиме.
+// Использует fetchGroup для дедупликации параллельных фетчей одного источника.
+func processSource(id string, source *SafeSource) error {
 	parsedSource, err := url.Parse(source.URL)
 	if err != nil || parsedSource.Host == "" {
-		http.Error(w, "Invalid source URL", http.StatusBadRequest)
-		return
+		return fmt.Errorf("invalid source URL: %v", err)
 	}
 	host := parsedSource.Hostname()
 	if !isValidHost(host) {
-		http.Error(w, "Invalid source host", http.StatusBadRequest)
-		return
+		return fmt.Errorf("invalid source host: %s", host)
 	}
 
 	origCache := filepath.Join(cacheDir, "orig_"+id+".txt")
@@ -628,19 +614,14 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	rejectedCache := filepath.Join(cacheDir, "rejected_"+id+".txt")
 
 	if !isPathSafe(origCache, cacheDir) || !isPathSafe(modCache, cacheDir) || !isPathSafe(rejectedCache, cacheDir) {
-		http.Error(w, "Invalid id", http.StatusBadRequest)
-		return
+		return fmt.Errorf("unsafe cache path for id=%s", id)
 	}
 
-	// Возвращаем из кэша, если не устарел
+	// Если уже обработано и не устарело — ничего не делаем
 	if info, err := os.Stat(modCache); err == nil && time.Since(info.ModTime()) <= cacheTTL {
-		if content, err := os.ReadFile(modCache); err == nil {
-			serveFile(w, r, content, source.URL, id)
-			return
-		}
+		return nil
 	}
 
-	// Пытаемся загрузить исходную подписку из кэша
 	var origContent []byte
 	if info, err := os.Stat(origCache); err == nil && time.Since(info.ModTime()) <= cacheTTL {
 		if content, err := os.ReadFile(origCache); err == nil {
@@ -648,7 +629,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Если нет в кэше — фетчим
 	if origContent == nil {
 		_, portStr, _ := net.SplitHostPort(parsedSource.Host)
 		if portStr == "" {
@@ -670,10 +650,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 
+		// Используем fetchGroup для дедупликации фетчей
 		result, err, _ := fetchGroup.Do(id, func() (interface{}, error) {
 			req, err := http.NewRequest("GET", source.URL, nil)
 			if err != nil {
-				return nil, fmt.Errorf("invalid source URL: %w", err)
+				return nil, fmt.Errorf("create request: %w", err)
 			}
 			req.Header.Set("User-Agent", "go-filter/1.0")
 
@@ -692,21 +673,20 @@ func handler(w http.ResponseWriter, r *http.Request) {
 				return nil, fmt.Errorf("read failed: %w", err)
 			}
 
+			// Сохраняем исходную подписку в кэш
 			tmpFile := origCache + ".tmp"
 			if writeErr := os.WriteFile(tmpFile, content, 0o644); writeErr == nil {
 				os.Rename(tmpFile, origCache)
 			}
 			return content, nil
 		})
-
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to fetch source %s: %v", source.URL, err), http.StatusBadGateway)
-			return
+			return err
 		}
 		origContent = result.([]byte)
 	}
 
-	// Обрабатываем каждую строку подписки
+	// Обработка строк подписки
 	var out []string
 	var rejectedLines []string
 
@@ -724,36 +704,31 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 		lowerLine := strings.ToLower(originalLine)
 		var processedLine string
-		var reason string
 
 		switch {
 		case strings.HasPrefix(lowerLine, "vless://"):
 			processedLine = processVLESS(originalLine)
-			if processedLine == "" {
-				reason = "Invalid or unsafe VLESS link"
-			}
 		case strings.HasPrefix(lowerLine, "vmess://"):
 			processedLine = processVMess(originalLine)
-			if processedLine == "" {
-				reason = "Invalid or unsafe VMess link"
-			}
 		case strings.HasPrefix(lowerLine, "trojan://"):
 			processedLine = processTrojan(originalLine)
-			if processedLine == "" {
-				reason = "Invalid or unsafe Trojan link"
-			}
 		case strings.HasPrefix(lowerLine, "ss://"):
 			processedLine = processSS(originalLine)
-			if processedLine == "" {
-				reason = "Invalid or unsafe Shadowsocks link"
-			}
-		default:
-			reason = "Unsupported protocol"
 		}
 
 		if processedLine != "" {
 			out = append(out, processedLine)
 		} else {
+			reason := "Processing failed"
+			if strings.HasPrefix(lowerLine, "vless://") {
+				reason = "Invalid or unsafe VLESS link"
+			} else if strings.HasPrefix(lowerLine, "vmess://") {
+				reason = "Invalid or unsafe VMess link"
+			} else if strings.HasPrefix(lowerLine, "trojan://") {
+				reason = "Invalid or unsafe Trojan link"
+			} else if strings.HasPrefix(lowerLine, "ss://") {
+				reason = "Invalid or unsafe Shadowsocks link"
+			}
 			rejectedLines = append(rejectedLines, "# REASON: "+reason, originalLine)
 		}
 	}
@@ -794,55 +769,69 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		os.Rename(tmpFile, modCache)
 	}
 
-	serveFile(w, r, []byte(final), source.URL, id)
+	return nil
 }
 
-// main — точка входа программы.
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: %s <port> [cache_ttl_seconds] [sources_file] [bad_words_file] [uagent_file]\n", os.Args[0])
-		os.Exit(1)
+// handler обрабатывает HTTP-запрос /filter?id=...
+func handler(w http.ResponseWriter, r *http.Request) {
+	clientIP, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		clientIP = r.RemoteAddr
 	}
 
-	port := os.Args[1]
-	cacheTTLSeconds := 1800
-	if len(os.Args) >= 3 {
-		if sec, err := strconv.Atoi(os.Args[2]); err == nil && sec > 0 {
-			cacheTTLSeconds = sec
+	// Пропускаем лимитирование для локальных IP (127.0.0.1, ::1, 192.168.x.x, fd00::/8 и т.д.)
+	if !isLocalIP(clientIP) {
+		limiter := getLimiter(clientIP)
+		if !limiter.Allow() {
+			http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+			return
 		}
 	}
-	sourcesFile := defaultSourcesFile
-	if len(os.Args) >= 4 {
-		sourcesFile = os.Args[3]
-	}
-	badWordsFile := defaultBadWordsFile
-	if len(os.Args) >= 5 {
-		badWordsFile = os.Args[4]
-	}
-	uagentFile := defaultUAgentFile
-	if len(os.Args) >= 6 {
-		uagentFile = os.Args[5]
+
+	if !isValidUserAgent(r.Header.Get("User-Agent")) {
+		http.Error(w, "Forbidden: invalid User-Agent", http.StatusForbidden)
+		return
 	}
 
-	cacheTTL = time.Duration(cacheTTLSeconds) * time.Second
-	cacheDir = defaultCacheDir
-
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "Cannot create cache dir: %v\n", err)
-		os.Exit(1)
+	id := r.URL.Query().Get("id")
+	if id == "" || len(id) > maxIDLength || !validIDRe.MatchString(id) {
+		http.Error(w, "Invalid id", http.StatusBadRequest)
+		return
 	}
 
-	// Загружаем и валидируем источники
+	source, exists := sources[id]
+	if !exists {
+		http.Error(w, "Invalid id", http.StatusBadRequest)
+		return
+	}
+
+	err = processSource(id, source)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Processing error: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	content, err := os.ReadFile(filepath.Join(cacheDir, "mod_"+id+".txt"))
+	if err != nil {
+		http.Error(w, "Result not found", http.StatusNotFound)
+		return
+	}
+
+	serveFile(w, r, content, source.URL, id)
+}
+
+// loadSources загружает и валидирует источники подписок.
+// Возвращает SourceMap и ошибку.
+func loadSources(sourcesFile string) (SourceMap, error) {
 	lines, err := loadTextFile(sourcesFile, nil)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load sources: %v\n", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("failed to load sources: %w", err)
 	}
-	sources = make(SourceMap)
+	sources := make(SourceMap)
 	validIndex := 1
 	for _, line := range lines {
 		if !isValidSourceURL(line) {
-			fmt.Fprintf(os.Stderr, "⚠️  Skipping invalid or unsafe source URL: %s\n", line)
+			fmt.Fprintf(os.Stderr, "Skipping invalid or unsafe source URL: %s\n", line)
 			continue
 		}
 
@@ -855,7 +844,7 @@ func main() {
 
 		ips, err := net.LookupIP(host)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "⚠️  Failed to resolve host %s: %v\n", host, err)
+			fmt.Fprintf(os.Stderr, "Failed to resolve host %s: %v\n", host, err)
 			continue
 		}
 
@@ -867,7 +856,7 @@ func main() {
 			}
 		}
 		if allowedIP == nil {
-			fmt.Fprintf(os.Stderr, "⚠️  No allowed public IP for host %s\n", host)
+			fmt.Fprintf(os.Stderr, "No allowed public IP for host %s\n", host)
 			continue
 		}
 
@@ -878,41 +867,155 @@ func main() {
 		validIndex++
 	}
 	if len(sources) == 0 {
-		fmt.Fprintf(os.Stderr, "No valid sources loaded. Exiting.\n")
+		return nil, fmt.Errorf("no valid sources loaded")
+	}
+	return sources, nil
+}
+
+// main — точка входа программы с поддержкой двух режимов.
+func main() {
+	cliMode := flag.Bool("cli", false, "Run in CLI mode: process all sources once and exit")
+	flag.Parse()
+
+	if *cliMode {
+		// === CLI-режим: обработать все подписки один раз и выйти ===
+		cacheTTLSeconds := 1800
+		sourcesFile := defaultSourcesFile
+		badWordsFile := defaultBadWordsFile
+		uagentFile := defaultUAgentFile
+
+		args := flag.Args()
+		if len(args) >= 1 {
+			if sec, err := strconv.Atoi(args[0]); err == nil && sec > 0 {
+				cacheTTLSeconds = sec
+			}
+		}
+		if len(args) >= 2 {
+			sourcesFile = args[1]
+		}
+		if len(args) >= 3 {
+			badWordsFile = args[2]
+		}
+		if len(args) >= 4 {
+			uagentFile = args[3]
+		}
+
+		cacheTTL = time.Duration(cacheTTLSeconds) * time.Second
+		cacheDir = defaultCacheDir // Используем ту же директорию, что и в серверном режиме
+
+		if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "Cannot create cache dir: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Загрузка источников
+		var err error
+		sources, err = loadSources(sourcesFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v. Exiting.\n", err)
+			os.Exit(1)
+		}
+
+		badWords, err = loadTextFile(badWordsFile, strings.ToLower)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to load bad words: %v (using empty list)\n", err)
+			badWords = []string{}
+		}
+
+		allowedUA, err = loadTextFile(uagentFile, nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Note: using built-in User-Agent rules only (no %s or error: %v)\n", uagentFile, err)
+			allowedUA = []string{}
+		}
+
+		fmt.Printf("Processing %d sources to cache dir: %s\n", len(sources), cacheDir)
+		for id, source := range sources {
+			fmt.Printf("Processing source %s: %s\n", id, source.URL)
+			if err := processSource(id, source); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed source %s: %v\n", id, err)
+			} else {
+				fmt.Printf("Success: mod_%s.txt saved\n", id)
+			}
+		}
+		fmt.Println("Done.")
+		return
+	}
+
+	// === Серверный режим: запуск HTTP-сервера ===
+	if len(flag.Args()) < 1 {
+		fmt.Fprintf(os.Stderr, "Usage (server mode): %s <port> [cache_ttl_seconds] [sources_file] [bad_words_file] [uagent_file]\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage (CLI mode): %s --cli [cache_ttl_seconds] [sources_file] [bad_words_file] [uagent_file]\n", os.Args[0])
 		os.Exit(1)
 	}
 
-	// Загружаем bad words
+	port := flag.Args()[0]
+	cacheTTLSeconds := 1800
+	if len(flag.Args()) >= 2 {
+		if sec, err := strconv.Atoi(flag.Args()[1]); err == nil && sec > 0 {
+			cacheTTLSeconds = sec
+		}
+	}
+	sourcesFile := defaultSourcesFile
+	if len(flag.Args()) >= 3 {
+		sourcesFile = flag.Args()[2]
+	}
+	badWordsFile := defaultBadWordsFile
+	if len(flag.Args()) >= 4 {
+		badWordsFile = flag.Args()[3]
+	}
+	uagentFile := defaultUAgentFile
+	if len(flag.Args()) >= 5 {
+		uagentFile = flag.Args()[4]
+	}
+
+	cacheTTL = time.Duration(cacheTTLSeconds) * time.Second
+	cacheDir = defaultCacheDir
+
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "Cannot create cache dir: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Загрузка источников
+	var err error
+	sources, err = loadSources(sourcesFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v. Exiting.\n", err)
+		os.Exit(1)
+	}
+
 	badWords, err = loadTextFile(badWordsFile, strings.ToLower)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to load bad words: %v (using empty list)\n", err)
 		badWords = []string{}
 	}
 
-	// Загружаем разрешённые User-Agent
 	allowedUA, err = loadTextFile(uagentFile, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Note: using built-in User-Agent rules only (no %s or error: %v)\n", uagentFile, err)
 		allowedUA = []string{}
 	}
 
-	// Запускаем очистку лимитёров
 	cleanupLimiters()
-
-	// Регистрируем обработчик и стартуем сервер
 	http.HandleFunc("/filter", handler)
-	fmt.Printf("Server starting on :%s\n", port)
+
+	// IPv6-ready запуск сервера: слушает и IPv4, и IPv6
+	listener, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Cannot listen on port %s: %v\n", port, err)
+		os.Exit(1)
+	}
+	server := &http.Server{
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+	}
+	fmt.Printf("Server listening on :%s (IPv4/IPv6)\n", port)
 	fmt.Printf("Valid sources loaded: %d\n", len(sources))
 	fmt.Printf("Bad words: %s\n", badWordsFile)
 	fmt.Printf("User-Agent file: %s\n", uagentFile)
 	fmt.Printf("Cache TTL: %ds\n", cacheTTLSeconds)
 
-	server := &http.Server{
-		Addr:         ":" + port,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-	}
-	if err := server.ListenAndServe(); err != nil {
+	if err := server.Serve(listener); err != nil {
 		fmt.Fprintf(os.Stderr, "Server failed: %v\n", err)
 		os.Exit(1)
 	}
