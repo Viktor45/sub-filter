@@ -379,6 +379,15 @@ func processVLESS(s string) (string, string) {
 	}
 	// =================================================================
 
+	// === Проверка обязательного параметра sid для REALITY ===
+	if security == "reality" {
+		sid := q.Get("sid")
+		if sid == "" {
+			return "", "VLESS: missing or empty sid value for reality"
+		}
+	}
+	// ======================================================
+
 	// === Проверка параметра host (HTTP Host header) ===
 	if hostHeader := q.Get("host"); hostHeader != "" {
 		if !isValidHost(hostHeader) {
