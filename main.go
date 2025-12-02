@@ -367,9 +367,14 @@ func processVLESS(s string) (string, string) {
 		return "", fmt.Sprintf("VLESS: %s", reason)
 	}
 
+	// Обрабатываем ALPN: оставляем только первый, если указано несколько через запятую
 	q := u.Query()
-	if alpnList := q["alpn"]; len(alpnList) > 0 {
-		q["alpn"] = alpnList[:1] // Оставляем только первый ALPN
+	if alpnValues := q["alpn"]; len(alpnValues) > 0 {
+		firstAlpn := alpnValues[0]
+		if idx := strings.IndexByte(firstAlpn, ','); idx != -1 {
+			firstAlpn = firstAlpn[:idx]
+		}
+		q["alpn"] = []string{firstAlpn}
 	}
 
 	var buf strings.Builder
