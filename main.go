@@ -304,14 +304,11 @@ func parseHostPort(u *url.URL) (string, int, bool) {
 }
 
 // isSafeVLESSConfig проверяет безопасность конфигурации VLESS.
-// Блокирует: allowInsecure, security=none, reality без sni, flow без reality, gRPC без serviceName.
+// Блокирует: allowInsecure, reality без sni, flow без reality, gRPC без serviceName.
 // Возвращает причину ошибки или пустую строку, если всё в порядке.
 func isSafeVLESSConfig(q url.Values) string {
 	if q.Get("allowInsecure") == "true" {
 		return "allowInsecure=true is not allowed"
-	}
-	if q.Get("security") == "none" {
-		return "security=none is not allowed"
 	}
 	if q.Get("security") == "reality" && q.Get("sni") == "" {
 		return "reality requires SNI"
@@ -362,13 +359,23 @@ func processVLESS(s string) (string, string) {
 		return "", reason
 	}
 
-	// Проверка безопасности
-	if reason := isSafeVLESSConfig(u.Query()); reason != "" {
+	q := u.Query()
+
+	// === НОВАЯ ПРОВЕРКА: security должен быть явно задан (tls или reality) ===
+	security := q.Get("security")
+	if security == "" {
+		return "", "VLESS: security parameter is missing (insecure)"
+	}
+	if security == "none" {
+		return "", "VLESS: security=none is not allowed"
+	}
+	// =====================================================================
+
+	// Проверка остальных правил безопасности
+	if reason := isSafeVLESSConfig(q); reason != "" {
 		return "", fmt.Sprintf("VLESS: %s", reason)
 	}
 
-	// Обрабатываем ALPN: оставляем только первый, если указано несколько через запятую
-	q := u.Query()
 	// Обрабатываем ALPN: извлекаем первый валидный токен (h3, h2, http/1.1)
 	if alpnValues := q["alpn"]; len(alpnValues) > 0 {
 		rawAlpn := alpnValues[0]
