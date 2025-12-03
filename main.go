@@ -366,10 +366,10 @@ func validateVLESSParams(q url.Values) string {
 		}
 	}
 
-	// Проверка headerType (только для kcp и quic)
+	// Проверка headerType (только для kcp и quic, но разрешаем "none" для всех)
 	transportType := q.Get("type")
 	headerType := q.Get("headerType")
-	if headerType != "" && transportType != "kcp" && transportType != "quic" {
+	if headerType != "" && headerType != "none" && transportType != "kcp" && transportType != "quic" {
 		return fmt.Sprintf("headerType is only allowed with kcp or quic (got type=%s, headerType=%s)", transportType, headerType)
 	}
 
