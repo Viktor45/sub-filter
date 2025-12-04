@@ -94,19 +94,70 @@ var fetchGroup singleflight.Group
 // Встроенные разрешённые User-Agent-префиксы.
 var builtinAllowedPrefixes = []string{"clash", "happ"}
 
+// === Вспомогательные функции ===
+
+// isPrintableASCII проверяет, что байты содержат только печатаемые ASCII-символы.
+func isPrintableASCII(data []byte) bool {
+	for _, b := range data {
+		if b < 32 && b != '\n' && b != '\r' && b != '\t' {
+			return false
+		}
+	}
+	return true
+}
+
+// autoDecodeBase64 пытается декодировать весь входной буфер как base64.
+// Если успешно — возвращает декодированные байты, иначе — исходные.
+func autoDecodeBase64(data []byte) []byte {
+	// Удаляем все пробельные символы (включая \n, \r, пробелы)
+	trimmed := regexp.MustCompile(`\s+`).ReplaceAll(data, []byte{})
+
+	// Проверяем, что содержит только base64-символы
+	if !regexp.MustCompile(`^[A-Za-z0-9+/=]+$`).Match(trimmed) {
+		return data // не base64
+	}
+
+	// Пробуем декодировать
+	decoded, err := base64.StdEncoding.DecodeString(string(trimmed))
+	if err != nil {
+		// Пробуем Raw-кодировку (без padding)
+		decoded, err = base64.RawStdEncoding.DecodeString(string(trimmed))
+		if err != nil {
+			return data // не base64
+		}
+	}
+
+	// Проверяем, что декодированное содержимое — текст (а не бинарник)
+	if !isPrintableASCII(decoded) {
+		return data
+	}
+
+	return decoded
+}
+
 // LineProcessor — тип функции для обработки строк при загрузке файлов.
 type LineProcessor func(string) string
 
 // loadTextFile загружает текстовый файл, пропуская пустые строки и комментарии.
+// Автоматически раскодирует base64, если весь файл закодирован.
 // Применяет опциональный процессор к каждой строке.
 func loadTextFile(filename string, processor LineProcessor) ([]string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer file.Close() // Закрываем файл даже при ошибке
 
-	reader := bufio.NewReader(file)
+	// Читаем весь файл в буфер
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+
+	// Пытаемся автоматически раскодировать base64
+	data = autoDecodeBase64(data)
+
+	reader := bufio.NewReader(bytes.NewReader(data))
 	// Пропускаем BOM, если есть
 	if b, err := reader.Peek(3); err == nil && bytes.Equal(b, []byte{0xEF, 0xBB, 0xBF}) {
 		reader.Discard(3)
@@ -863,6 +914,7 @@ func processSource(id string, source *SafeSource) error {
 	}
 	profileName = regexp.MustCompile(`[^a-zA-Z0-9._-]`).ReplaceAllString(profileName, "_")
 
+	// Обеспечиваем updateInterval >= 1
 	updateInterval := int(cacheTTL.Seconds() / 3600)
 	if updateInterval < 1 {
 		updateInterval = 1
