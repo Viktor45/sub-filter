@@ -736,10 +736,8 @@ func processHysteria2(s string) (string, string) {
 
 	q := u.Query()
 
-	// Запрет insecure=1 — отключает проверку сертификата (небезопасно)
-	if insecure := q.Get("insecure"); insecure == "1" {
-		return "", "Hysteria2: insecure=1 is not allowed (certificate verification required)"
-	}
+	// === УДАЛЕНО: запрет insecure=1 ===
+	// Hysteria2 всегда шифрует трафик, поэтому insecure=1 допустим
 
 	// Проверка obfs — для публичных подписок обязателен obfs=salamander
 	obfs := q.Get("obfs")
