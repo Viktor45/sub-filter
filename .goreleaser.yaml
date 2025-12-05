@@ -1,51 +1,78 @@
 version: 2
+project_name: sub-filter
 
 before:
   hooks:
     - go mod tidy
-
-snapshot:
-  version_template: '{{ .Tag }}'
-checksum:
-  name_template: 'checksums.txt'
+    - sh -c 'git rev-parse --short HEAD > COMMIT'
 
 builds:
-  - id: build
-    binary: filter
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - linux
-      - windows
-      - darwin
+  # ---------------------------------------------------------------------------
+  # Linux Builds (Pure Go / Static)
+  # ---------------------------------------------------------------------------
+  # Can be built on any OS (macOS/Linux) since CGO is disabled.
+  - id: 'linux'
+    goos: [linux]
     goarch:
-      - arm64
+      - '386'
       - amd64
+      - arm
+      - arm64
+      - mips
+      - mipsle
+      - mips64
+      - mips64le
+      - riscv64
+    gomips: [softfloat]
+    env: ['CGO_ENABLED=0']
     ldflags:
-      - -s -w -extldflags "-static"
-      - -X main.version={{ .Tag }}
-      - -X main.commit={{.Commit}}
+      - -s -w
+      - -X "main.version={{ .Version }}"
+      - -X "main.commit={{ .ShortCommit }}"
+      - -X "main.build=goreleaser"
+    main: ./main
+    binary: '{{ .ProjectName }}'
+
+  # ---------------------------------------------------------------------------
+  # macOS Builds (CGO Enabled)
+  # ---------------------------------------------------------------------------
+  # Requires a macOS runner.
+  - id: 'darwin'
+    goos: [darwin]
+    goarch: [amd64, arm64]
+    env: ['CGO_ENABLED=1']
+    ldflags:
+      - -s -w
+      - -X "main.version={{ .Version }}"
+      - -X "main.commit={{ .ShortCommit }}"
+      - -X "main.build=goreleaser"
+    main: ./main
+    binary: '{{ .ProjectName }}'
+
+source:
+  enabled: true
+  prefix_template: '{{ .ProjectName }}-{{ .Version }}/'
+  files:
+    - COMMIT
 
 archives:
-  - id: filter
-    format: tar.gz
-    name_template: '{{ .ProjectName }}-v{{ .Version }}-{{ .Os }}-{{ .Arch }}'
-    format_overrides:
-      - goos: windows
-        format: zip
-    files:
-      - README.md
+  - id: default
+    name_template: >-
+      {{- .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- if eq .Arch "386" }}i386
+      {{- else if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "mips64" }}mips64_hardfloat
+      {{- else if eq .Arch "mips64le" }}mips64le_hardfloat
+      {{- else }}{{ .Arch }}{{ end -}}
+    formats: ['tar.gz']
+    # Explicitly list builds to include (optional but good for clarity)
+    ids: ['linux', 'darwin']
 
-release:
-  github:
-    owner: '{{ .Env.GITHUB_REPOSITORY_OWNER }}'
-    name: '{{ .Env.GITHUB_REPOSITORY_NAME }}'
-  name_template: 'v{{ .Version }}'
+# Generate Software Bill of Materials
+sboms:
+  - artifacts: archive
 
-changelog:
-  sort: asc
-  filters:
-    exclude:
-      - '^docs:'
-      - '^test:'
-      - '^ci:'
+checksum:
+  name_template: 'checksums.txt'
