@@ -30,23 +30,7 @@ builds:
       - -X "main.version={{ .Version }}"
       - -X "main.commit={{ .ShortCommit }}"
       - -X "main.build=goreleaser"
-    main: ./main
-    binary: '{{ .ProjectName }}'
-
-  # ---------------------------------------------------------------------------
-  # macOS Builds (CGO Enabled)
-  # ---------------------------------------------------------------------------
-  # Requires a macOS runner.
-  - id: 'darwin'
-    goos: [darwin]
-    goarch: [amd64, arm64]
-    env: ['CGO_ENABLED=1']
-    ldflags:
-      - -s -w
-      - -X "main.version={{ .Version }}"
-      - -X "main.commit={{ .ShortCommit }}"
-      - -X "main.build=goreleaser"
-    main: ./main
+    #main: ./main
     binary: '{{ .ProjectName }}'
 
 source:
