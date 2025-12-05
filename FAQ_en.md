@@ -37,7 +37,7 @@ Additionally, you can provide a list of "forbidden words," and the program will 
 
 Unencrypted servers are like sending a postcard — anyone who intercepts your traffic can see exactly what you’re doing online. This completely defeats the purpose of using proxy subscriptions, which are meant for privacy and security.
 
-Note: For the Trojan protocol, the `allowInsecure` option (skipping certificate validation) is allowed because the traffic itself is still encrypted. But in VLESS, `security=none` means no encryption at all — so such servers are removed.
+Note: For the Trojan and Hysteria2 protocol, the `insecure` option (skipping certificate validation) is allowed because the traffic itself is still encrypted. But in VLESS, `security=none` means no encryption at all — so such servers are removed.
 
 ## Why filter by description if the client can do it?
 

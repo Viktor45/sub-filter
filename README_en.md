@@ -27,7 +27,7 @@ This translation was made using AI.
 
 Simple subscription filter
 
-This program is a smart filter for proxy server links (VLESS, VMess, Trojan, Shadowsocks). It takes public subscriptions, checks each server for correctness and security (e.g., blocks unencrypted connections or names with forbidden words), removes anything suspicious, and outputs a clean, working list — ready to use in Clash, Sing-Box, routers, and other clients.
+This program is a smart filter for proxy server links (VLESS, VMess, Trojan, Shadowsocks, Hysteria2). It takes public subscriptions, checks each server for correctness and security (e.g., blocks unencrypted connections or names with forbidden words), removes anything suspicious, and outputs a clean, working list — ready to use in Clash, Sing-Box, routers, and other clients.
 
 If you have questions about the purpose of this program, please read the [FAQ](FAQ_en.md).
 
