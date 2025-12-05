@@ -544,9 +544,18 @@ func processVMess(s string) (string, string) {
 
 	ps, _ := vm["ps"].(string)
 	add, _ := vm["add"].(string)
-	port, ok := vm["port"].(float64)
-	if !ok {
-		return "", "missing port in VMess config"
+	var port float64
+	switch v := vm["port"].(type) {
+	case float64:
+		port = v
+	case string:
+		if p, err := strconv.ParseFloat(v, 64); err == nil {
+			port = p
+		} else {
+			return "", "invalid port in VMess config"
+		}
+	default:
+		return "", "missing or invalid port in VMess config"
 	}
 	id, _ := vm["id"].(string)
 
