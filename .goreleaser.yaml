@@ -19,7 +19,6 @@ builds:
       - windows
       - darwin
     goarch:
-      - arm
       - arm64
       - amd64
     ldflags:
