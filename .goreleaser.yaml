@@ -52,7 +52,7 @@ archives:
       {{- else }}{{ .Arch }}{{ end -}}
     formats: ['tar.gz']
     # Explicitly list builds to include (optional but good for clarity)
-    ids: ['linux', 'darwin']
+    ids: ['linux']
 
 checksum:
   name_template: 'checksums.txt'
