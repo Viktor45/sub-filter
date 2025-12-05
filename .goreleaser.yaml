@@ -54,9 +54,5 @@ archives:
     # Explicitly list builds to include (optional but good for clarity)
     ids: ['linux', 'darwin']
 
-# Generate Software Bill of Materials
-sboms:
-  - artifacts: archive
-
 checksum:
   name_template: 'checksums.txt'
