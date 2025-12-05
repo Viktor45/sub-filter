@@ -19,10 +19,11 @@ jobs:
       - name: Setup Go Environment
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: stable
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
+          distribution: goreleaser
           version: latest
           args: release --clean
         env:
