@@ -73,21 +73,35 @@ func (VLESSLink) Process(s string) (string, string) {
 
 	q := u.Query()
 
-	// Удаляем небезопасные флаги (повышаем безопасность)
-	if allowInsecure := q.Get("allowInsecure"); allowInsecure == "true" || allowInsecure == "1" {
-		q.Del("allowInsecure")
-	}
-	if insecure := q.Get("insecure"); insecure == "1" {
-		q.Del("insecure")
-	}
+	// === Удаляем insecure и allowInsecure независимо от значения ===
+	// Эти параметры избыточны (значения по умолчанию) или снижают безопасность.
+	// Полное удаление упрощает ссылку и гарантирует валидацию сертификата.
+	q.Del("insecure")
+	q.Del("allowInsecure")
+	// =================================================================
 
-	// Проверка обязательного параметра
-	encryption := q.Get("encryption")
-	if encryption == "" {
+	// === Проверка параметра encryption (защита от обхода вроде none%3D) ===
+	encryptionRaw := q.Get("encryption")
+	if encryptionRaw == "" {
 		return "", "VLESS: encryption parameter is missing (outdated format)"
 	}
 
-	// Валидация всех параметров
+	// Декодируем, если значение закодировано (например, none%3D → none=)
+	encryptionDecoded, err := url.QueryUnescape(encryptionRaw)
+	if err != nil {
+		// Если декодирование невозможно — используем как есть
+		encryptionDecoded = encryptionRaw
+	}
+
+	// Нормализуем: удаляем trailing = и пробелы, приводим к нижнему регистру
+	encryptionNormalized := strings.ToLower(strings.TrimRight(encryptionDecoded, " ="))
+
+	if encryptionNormalized == "none" {
+		return "", "VLESS: encryption=none is not allowed (insecure)"
+	}
+	// =================================================================
+
+	// Валидация всех остальных параметров
 	if err := validateVLESSParams(q); err != "" {
 		return "", "VLESS: " + err
 	}
