@@ -1,4 +1,4 @@
-# ghcr-image.yaml
+# .github/workflows/ghcr-image.yaml
 #
 # This GitHub Actions workflow will build and package sub-filter
 # for deployment using Docker.
@@ -11,9 +11,6 @@ on:
     tags:
       - "v*"
 
-env:
-  REGISTRY: ghcr.io
-  REGISTRY_IMAGE: ${{ lower(github.repository_owner) }}/sub-filter
 permissions:
   contents: read
   packages: write
@@ -30,16 +27,25 @@ jobs:
         architecture:
           - amd64
           - arm64
+    env:
+      REGISTRY: ghcr.io
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v4
+
+      - name: Normalize repository owner to lowercase
+        run: |
+          echo "REGISTRY_IMAGE=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/sub-filter" >> "$GITHUB_ENV"
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
           cache-dependency-path: "go.sum"
+
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
+
       - name: Build Sub Filter Binary
         run: go build -ldflags '-w -s -extldflags "-static"' -tags timetzdata -v -o build/filter ./
         working-directory: ./
@@ -47,19 +53,23 @@ jobs:
           CGO_ENABLED: 0
           GOOS: linux
           GOARCH: ${{ matrix.architecture }}
+
       - name: Verify binary was built
         run: test -f build/filter
+
       - name: Log into GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY}}
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Get Docker Metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.REGISTRY_IMAGE }}
+
       - name: Build Docker Container
         id: push
         uses: docker/build-push-action@v6
@@ -67,20 +77,23 @@ jobs:
           context: .
           file: Dockerfile.ghcr
           platforms: linux/${{ matrix.architecture }}
-          labels: ${{ steps.meta.outputs.labels}}
+          labels: ${{ steps.meta.outputs.labels }}
           tags: ${{ steps.meta.outputs.tags }}
           push: true
+
       - name: Generate Artifact Attestation
         uses: actions/attest-build-provenance@v2
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.REGISTRY_IMAGE }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+
       - name: Export digest
         run: |
           mkdir -p ${{ runner.temp }}/digests
           digest="${{ steps.push.outputs.digest }}"
           touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
@@ -93,21 +106,30 @@ jobs:
     name: Merge Platform Containers
     runs-on: ubuntu-latest
     needs: build_and_test
+    env:
+      REGISTRY: ghcr.io
     steps:
+      - name: Normalize repository owner to lowercase
+        run: |
+          echo "REGISTRY_IMAGE=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/sub-filter" >> "$GITHUB_ENV"
+
       - name: Download Digests
         uses: actions/download-artifact@v4
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*
           merge-multiple: true
+
       - name: Log into GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY}}
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
+
       - name: Get Docker Metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -118,11 +140,17 @@ jobs:
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+
+      - name: Export Docker metadata JSON
+        run: echo "DOCKER_METADATA_OUTPUT_JSON=${{ steps.meta.outputs.json }}" >> "$GITHUB_ENV"
+
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.REGISTRY }}/${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
+
       - name: Inspect Image
+        if: steps.meta.outputs.version != ''
         run: |
           docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
