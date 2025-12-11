@@ -148,18 +148,27 @@ jobs:
             exit 1
           fi
 
-          # Use full image references as-is (e.g. ghcr.io/...:latest)
+          # Build tag arguments from full image references (e.g. ghcr.io/...:latest)
           TAG_ARGS=""
           IFS=',' read -ra TAG_LIST <<< "$TAGS"
           for ref in "${TAG_LIST[@]}"; do
             TAG_ARGS="$TAG_ARGS -t $ref"
           done
 
-          # Platform image digests (files are named like 'sha256_hash')
+          # Only include valid SHA256 digests: 64 hex characters
           DIGEST_REFS=""
           for digest_hash in *; do
-            DIGEST_REFS="$DIGEST_REFS ${{ env.REGISTRY }}/${{ env.REGISTRY_IMAGE }}@sha256:$digest_hash"
+            if [[ "$digest_hash" =~ ^[0-9a-f]{64}$ ]]; then
+              DIGEST_REFS="$DIGEST_REFS ${{ env.REGISTRY }}/${{ env.REGISTRY_IMAGE }}@sha256:$digest_hash"
+            fi
           done
+
+          if [ -z "$DIGEST_REFS" ]; then
+            echo "::error::No valid SHA256 digests found in digests directory"
+            echo "Contents:"
+            ls -la
+            exit 1
+          fi
 
           docker buildx imagetools create $TAG_ARGS $DIGEST_REFS
 
