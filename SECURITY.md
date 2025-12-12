@@ -4,7 +4,7 @@
 
 If you think you’ve found a security problem in **sub-filter**, please let us know right away!  
 Use the official reporting page:  
-[https://github.com/viktor45/sub-filter/security/](https://github.com/Viktor45/sub-filter/security/)
+https://github.com/viktor45/sub-filter/issues/new?template=%F0%9F%90%9E-bug-report.md
 
 We’ll work with you to check if it’s a real issue and fix it as quickly as possible.
 
