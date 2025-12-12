@@ -165,7 +165,7 @@ Replace:
 
 ## Ready-to-use Docker image
 
-Available for Linux `amd64` and `arm64`, built according to the rules in `Dockerfile.ghcr`.
+Available for Linux `386`, `arm/v7`, `amd64` and `arm64`, built according to the rules in `Dockerfile.ghcr`.
 
 ```
 ghcr.io/viktor45/sub-filter:latest

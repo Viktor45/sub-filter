@@ -165,7 +165,7 @@ http://server:port/filter?id=number
 
 ## 预构建的 Docker 镜像
 
-适用于 Linux `amd64` 和 `arm64` 架构，按照 `Dockerfile.ghcr` 中的规则构建。
+适用于 Linux `386`，`arm/v7`，`amd64` 和 `arm64` 架构，按照 `Dockerfile.ghcr` 中的规则构建。
 
 ```
 ghcr.io/viktor45/sub-filter:latest

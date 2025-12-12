@@ -166,7 +166,7 @@ http://сервер:порт/filter?id=номер
 
 ## Готовый образ для Docker
 
-Доступен так для linux `amd64` и `arm64`, собирается по правилам `Dockerfile.ghcr`
+Доступен так для linux `386`, `arm/v7`, `amd64` и `arm64`, собирается по правилам `Dockerfile.ghcr`
 
 ```
 ghcr.io/viktor45/sub-filter:latest
