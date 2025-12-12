@@ -5,6 +5,8 @@ jobs:
   ghcr-cleanup-image:
     name: ghcr cleanup action
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
     steps:
       - uses: dataaxiom/ghcr-cleanup-action@v1
         with:
