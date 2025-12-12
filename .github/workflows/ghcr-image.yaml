@@ -6,9 +6,6 @@ name: sub-filter ghcr.io Image CI
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "v*"
 
 permissions:
   contents: read

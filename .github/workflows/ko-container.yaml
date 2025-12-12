@@ -1,0 +1,105 @@
+name: ghcr.io ko container ci
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+  actions: write
+  id-token: write
+
+env:
+  IMAGE_REGISTRY: ghcr.io
+  # Use repository name as image name (e.g. 'sub-filter')
+  IMAGE_NAME: ${{ github.event.repository.name }}
+
+jobs:
+  build:
+    name: Build and Push Container
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Normalize repository owner to lowercase
+        run: |
+          echo "REPO_OWNER_LOWER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine version and tags
+        id: version
+        run: |
+          REF="${{ github.ref }}"
+          if [[ "$REF" == refs/tags/v* ]]; then
+            VERSION="${REF#refs/tags/v}"
+            MAJOR="${VERSION%%.*}"
+            MINOR="${VERSION#*.}"
+            MINOR="${MINOR%%.*}"
+            TAGS="v${VERSION},latest,${MAJOR}.${MINOR},${MAJOR}"
+          else
+            VERSION="0.0.0-${GITHUB_SHA::8}"
+            TAGS="latest,sha-${GITHUB_SHA::8}"
+          fi
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "TAGS=${TAGS}" >> "$GITHUB_OUTPUT"
+          echo "Using version: ${VERSION}"
+          echo "Tags: ${TAGS}"
+
+      - name: Set up Git for reproducibility
+        run: git config --global core.autocrlf false
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ./go.mod
+
+      - name: Set up ko
+        uses: ko-build/setup-ko@v0.9
+
+      - name: Build and push image with ko
+        id: build
+        run: |
+          KO_DOCKER_REPO="${IMAGE_REGISTRY}/${REPO_OWNER_LOWER}/${IMAGE_NAME}"
+          IFS=',' read -ra TAG_ARRAY <<< "${{ steps.version.outputs.TAGS }}"
+          TAG_ARGS=""
+          for tag in "${TAG_ARRAY[@]}"; do
+            TAG_ARGS="$TAG_ARGS --tags=$tag"
+          done
+
+          ko build \
+            -v \
+            -B \
+            --sbom=spdx-json \
+            $TAG_ARGS \
+            --image-refs=.digest \
+            .
+
+          # Extract common digest (all lines have same sha256)
+          DIGEST=$(grep -o 'sha256:[a-f0-9]\{64\}' .digest | head -n1)
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+          # Extract canonical image name (e.g. ghcr.io/user/repo)
+          IMAGE=$(head -n1 .digest | cut -d'@' -f1 | cut -d':' -f1)
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+
+      - name: Show built image references
+        run: cat .digest
+
+  provenance:
+    name: Generate SLSA Provenance
+    needs: build
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v1.10.0
+    with:
+      image: ${{ needs.build.outputs.image }}
+      digest: ${{ needs.build.outputs.digest }}
+      registry-username: ${{ github.actor }}
+      compile-generator: true
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
