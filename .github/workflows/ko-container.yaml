@@ -14,8 +14,7 @@ permissions:
 
 env:
   IMAGE_REGISTRY: ghcr.io
-  # Use repository name as image name (e.g. 'sub-filter')
-  IMAGE_NAME: ${{ github.event.repository.name }}
+  # NOTE: IMAGE_NAME intentionally omitted — derived from go.mod
 
 jobs:
   build:
@@ -49,8 +48,6 @@ jobs:
           fi
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
           echo "TAGS=${TAGS}" >> "$GITHUB_OUTPUT"
-          echo "Using version: ${VERSION}"
-          echo "Tags: ${TAGS}"
 
       - name: Set up Git for reproducibility
         run: git config --global core.autocrlf false
@@ -61,12 +58,13 @@ jobs:
           go-version-file: ./go.mod
 
       - name: Set up ko
-        uses: ko-build/setup-ko@v0.9
+        uses: ko-build/setup-ko@v0.6
 
       - name: Build and push image with ko
         id: build
         run: |
-          KO_DOCKER_REPO="${IMAGE_REGISTRY}/${REPO_OWNER_LOWER}/${IMAGE_NAME}"
+          # ← Только владелец, без имени репозитория
+          KO_DOCKER_REPO="${IMAGE_REGISTRY}/${REPO_OWNER_LOWER}"
           IFS=',' read -ra TAG_ARRAY <<< "${{ steps.version.outputs.TAGS }}"
           TAG_ARGS=""
           for tag in "${TAG_ARRAY[@]}"; do
@@ -81,11 +79,9 @@ jobs:
             --image-refs=.digest \
             .
 
-          # Extract common digest (all lines have same sha256)
           DIGEST=$(grep -o 'sha256:[a-f0-9]\{64\}' .digest | head -n1)
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
-          # Extract canonical image name (e.g. ghcr.io/user/repo)
           IMAGE=$(head -n1 .digest | cut -d'@' -f1 | cut -d':' -f1)
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
 
