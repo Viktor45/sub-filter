@@ -47,7 +47,6 @@ jobs:
 
       - name: Build Sub Filter Binary
         run: go build -ldflags '-w -s -extldflags "-static"' -tags timetzdata -v -o build/filter ./
-        working-directory: ./
         env:
           CGO_ENABLED: 0
           GOOS: linux
@@ -117,7 +116,7 @@ jobs:
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*
-          merge-multiple: true
+          # IMPORTANT: Do NOT use merge-multiple: true
 
       - name: Log into GitHub Container Registry
         uses: docker/login-action@v3
@@ -140,7 +139,6 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
 
       - name: Create Manifest List and Push
-        working-directory: ${{ runner.temp }}/digests
         run: |
           TAGS="${{ steps.meta.outputs.tags }}"
           if [ -z "$TAGS" ]; then
@@ -155,18 +153,19 @@ jobs:
             TAG_ARGS="$TAG_ARGS -t $ref"
           done
 
-          # Only include valid SHA256 digests: 64 hex characters
+          # Recursively find all digest files and validate as SHA256
           DIGEST_REFS=""
-          for digest_hash in *; do
+          while IFS= read -r -d '' file; do
+            digest_hash=$(basename "$file")
             if [[ "$digest_hash" =~ ^[0-9a-f]{64}$ ]]; then
               DIGEST_REFS="$DIGEST_REFS ${{ env.REGISTRY }}/${{ env.REGISTRY_IMAGE }}@sha256:$digest_hash"
             fi
-          done
+          done < <(find ${{ runner.temp }}/digests -type f -name '[0-9a-f]*' -print0)
 
           if [ -z "$DIGEST_REFS" ]; then
-            echo "::error::No valid SHA256 digests found in digests directory"
-            echo "Contents:"
-            ls -la
+            echo "::error::No valid SHA256 digests found"
+            echo "Contents of digests directory:"
+            find ${{ runner.temp }}/digests -type f -exec ls -la {} \;
             exit 1
           fi
 
