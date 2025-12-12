@@ -17,7 +17,8 @@ This translation was made using AI.
     - [For server mode](#for-server-mode)
     - [For CLI mode](#for-cli-mode)
   - [How to use in a client?](#how-to-use-in-a-client)
-  - [How to build a Docker image?](#how-to-build-a-docker-image)
+  - [Ready-to-use Docker image](#ready-to-use-docker-image)
+  - [How to build the Docker image?](#how-to-build-the-docker-image)
   - [How to run in Docker?](#how-to-run-in-docker)
     - [With Docker](#with-docker)
     - [With Podman (Docker alternative)](#with-podman-docker-alternative)
@@ -162,11 +163,23 @@ Replace:
 
 ---
 
-## How to build a Docker image?
+## Ready-to-use Docker image
+
+Available for Linux `amd64` and `arm64`, built according to the rules in `Dockerfile.ghcr`.
+
+```
+ghcr.io/viktor45/sub-filter:latest
+```
+
+
+## How to build the Docker image?
+
+Built the usual way, using the standard `Dockerfile`.
 
 ```
 docker build -t sub-filter .
 ```
+
 
 ---
 

@@ -17,7 +17,8 @@
     - [伺服器模式](#伺服器模式)
     - [CLI 模式](#cli-模式)
   - [如何在客戶端中使用？](#如何在客戶端中使用)
-  - [如何建立 Docker 映像？](#如何建立-docker-映像)
+  - [预构建的 Docker 镜像](#预构建的-docker-镜像)
+  - [如何构建 Docker 镜像？](#如何构建-docker-镜像)
   - [如何在 Docker 中執行？](#如何在-docker-中執行)
     - [使用 Docker](#使用-docker)
     - [使用 Podman（Docker 替代方案）](#使用-podmandocker-替代方案)
@@ -162,13 +163,23 @@ http://server:port/filter?id=number
 
 ---
 
-## 如何建立 Docker 映像？
+## 预构建的 Docker 镜像
+
+适用于 Linux `amd64` 和 `arm64` 架构，按照 `Dockerfile.ghcr` 中的规则构建。
+
+```
+ghcr.io/viktor45/sub-filter:latest
+```
+
+
+## 如何构建 Docker 镜像？
+
+按照常规方式，使用标准的 `Dockerfile` 进行构建。
 
 ```
 docker build -t sub-filter .
 ```
 
----
 
 ## 如何在 Docker 中執行？
 
