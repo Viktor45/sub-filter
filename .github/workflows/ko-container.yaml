@@ -14,13 +14,13 @@ permissions:
 
 env:
   IMAGE_REGISTRY: ghcr.io
-  # NOTE: IMAGE_NAME intentionally omitted — derived from go.mod
+  # IMAGE_NAME intentionally omitted — derived from go.mod
 
 jobs:
   build:
-    name: Build and Push Container
+    name: Build and Push Multi-Platform Container
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20 # multi-platform takes longer
     outputs:
       image: ${{ steps.build.outputs.image }}
       digest: ${{ steps.build.outputs.digest }}
@@ -60,10 +60,9 @@ jobs:
       - name: Set up ko
         uses: ko-build/setup-ko@v0.6
 
-      - name: Build and push image with ko
+      - name: Build and push multi-platform image with ko
         id: build
         run: |
-          # ← Только владелец, без имени репозитория
           KO_DOCKER_REPO="${IMAGE_REGISTRY}/${REPO_OWNER_LOWER}"
           IFS=',' read -ra TAG_ARRAY <<< "${{ steps.version.outputs.TAGS }}"
           TAG_ARGS=""
@@ -71,9 +70,11 @@ jobs:
             TAG_ARGS="$TAG_ARGS --tags=$tag"
           done
 
+          # Build for multiple platforms
           ko build \
             -v \
             -B \
+            --platform=linux/amd64,linux/386,linux/arm64,linux/arm/v7 \
             --sbom=spdx-json \
             $TAG_ARGS \
             --image-refs=.digest \
