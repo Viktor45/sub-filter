@@ -1,5 +1,3 @@
-// Пакет vless — обработчик ссылок VLESS.
-// Проверяет безопасность конфигурации, валидирует параметры и фильтрует по bad-words.
 package vless
 
 import (
@@ -11,103 +9,77 @@ import (
 	"strings"
 )
 
-// Глобальные зависимости (инжектятся из main)
-var (
+type VLESSLink struct {
 	badWords       []string
 	isValidHost    func(string) bool
 	isValidPort    func(int) bool
 	checkBadWords  func(string) (bool, string)
-	hostRegex      = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]*[a-z0-9])?$|^xn--([a-z0-9-]+\.)+[a-z0-9-]+$`)
-	base64UrlRegex = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`) // 32-байтный ключ в base64url без padding
-)
+	hostRegex      *regexp.Regexp
+	base64UrlRegex *regexp.Regexp
+}
 
-// VLESSLink — реализация интерфейса ProxyLink для VLESS.
-type VLESSLink struct{}
-
-// SetGlobals внедряет зависимости (badWords, валидаторы и т.д.).
-func SetGlobals(
+func NewVLESSLink(
 	bw []string,
 	vh func(string) bool,
 	vp func(int) bool,
 	cb func(string) (bool, string),
-) {
-	badWords = bw
-	isValidHost = vh
-	isValidPort = vp
-	checkBadWords = cb
+) *VLESSLink {
+	return &VLESSLink{
+		badWords:       bw,
+		isValidHost:    vh,
+		isValidPort:    vp,
+		checkBadWords:  cb,
+		hostRegex:      regexp.MustCompile(`^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]*[a-z0-9])?$|^xn--([a-z0-9-]+\.)+[a-z0-9-]+$`),
+		base64UrlRegex: regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`),
+	}
 }
 
-// Matches проверяет, начинается ли строка с vless://.
-func (VLESSLink) Matches(s string) bool {
+func (v *VLESSLink) Matches(s string) bool {
 	return strings.HasPrefix(strings.ToLower(s), "vless://")
 }
 
-// Process обрабатывает VLESS-ссылку.
-// Возвращает обработанную строку или причину отклонения.
-func (VLESSLink) Process(s string) (string, string) {
+func (v *VLESSLink) Process(s string) (string, string) {
 	const maxURILength = 4096
 	const maxIDLength = 64
-
 	if len(s) > maxURILength {
 		return "", "line too long"
 	}
-
 	u, err := url.Parse(s)
 	if err != nil || u.Scheme != "vless" {
 		return "", "invalid VLESS URL format"
 	}
-
 	uuid := u.User.Username()
 	if uuid == "" || len(uuid) > maxIDLength {
 		return "", "missing or invalid UUID"
 	}
-
-	host, port, hostErr := validateVLESSHostPort(u)
+	host, port, hostErr := v.validateVLESSHostPort(u)
 	if hostErr != "" {
 		return "", "VLESS: " + hostErr
 	}
-
-	if hasBad, reason := checkBadWords(u.Fragment); hasBad {
+	if hasBad, reason := v.checkBadWords(u.Fragment); hasBad {
 		return "", reason
 	}
-
 	q := u.Query()
-
-	// === Удаляем insecure и allowInsecure независимо от значения ===
-	// Эти параметры избыточны или снижают безопасность.
 	q.Del("insecure")
 	q.Del("allowInsecure")
-	// =================================================================
 
-	// === Нормализация параметра encryption ===
-	// Цель: привести все варианты "none" к единому значению "none",
-	// чтобы последующая валидация могла его отклонить.
 	if encryptionRaw := q.Get("encryption"); encryptionRaw != "" {
-		// Декодируем URL-escape (none%3D → none=)
 		encryptionDecoded, err := url.QueryUnescape(encryptionRaw)
 		if err != nil {
-			encryptionDecoded = encryptionRaw // оставляем как есть при ошибке
+			encryptionDecoded = encryptionRaw
 		}
-		// Приводим к нижнему регистру и удаляем trailing whitespace и =
 		normalized := strings.ToLower(strings.TrimRight(encryptionDecoded, " ="))
-		// Если начинается с "none", заменяем полностью на "none"
 		if strings.HasPrefix(normalized, "none") {
 			q.Set("encryption", "none")
 		}
-		// Иначе оставляем исходное значение (после декодирования)
-		// Примечание: исходное значение может быть уже декодировано ранее,
-		// но это безопасно — q.Encode() корректно экранирует при выводе.
 	} else {
 		return "", "VLESS: encryption parameter is missing (outdated format)"
 	}
-	// =================================================================
 
-	// Валидация всех остальных параметров
-	if err := validateVLESSParams(q); err != "" {
+	if err := v.validateVLESSParams(q); err != "" {
 		return "", "VLESS: " + err
 	}
 
-	// Обработка ALPN: оставляем только первый валидный токен
 	if alpnValues := q["alpn"]; len(alpnValues) > 0 {
 		rawAlpn := alpnValues[0]
 		var firstValid string
@@ -131,7 +103,6 @@ func (VLESSLink) Process(s string) (string, string) {
 		}
 	}
 
-	// Сборка итоговой ссылки
 	var buf strings.Builder
 	buf.WriteString("vless://")
 	buf.WriteString(uuid)
@@ -151,8 +122,7 @@ func (VLESSLink) Process(s string) (string, string) {
 	return buf.String(), ""
 }
 
-// Валидация хоста и порта
-func validateVLESSHostPort(u *url.URL) (string, int, string) {
+func (v *VLESSLink) validateVLESSHostPort(u *url.URL) (string, int, string) {
 	host := u.Hostname()
 	portStr := u.Port()
 	if portStr == "" {
@@ -162,17 +132,16 @@ func validateVLESSHostPort(u *url.URL) (string, int, string) {
 	if err != nil {
 		return "", 0, "invalid port"
 	}
-	if !isValidPort(port) {
+	if !v.isValidPort(port) {
 		return "", 0, "port out of range"
 	}
-	if !isValidHost(host) {
+	if !v.isValidHost(host) {
 		return "", 0, "invalid host"
 	}
 	return host, port, ""
 }
 
-// Дополнительные проверки безопасности
-func isSafeVLESSConfig(q url.Values) string {
+func (v *VLESSLink) isSafeVLESSConfig(q url.Values) string {
 	flow := q.Get("flow")
 	if flow != "" && q.Get("security") != "reality" {
 		return "flow requires reality"
@@ -183,8 +152,7 @@ func isSafeVLESSConfig(q url.Values) string {
 	return ""
 }
 
-// Основная валидация параметров VLESS
-func validateVLESSParams(q url.Values) string {
+func (v *VLESSLink) validateVLESSParams(q url.Values) string {
 	security := q.Get("security")
 	if security == "" {
 		return "security parameter is missing (insecure)"
@@ -200,7 +168,7 @@ func validateVLESSParams(q url.Values) string {
 		if pbk == "" {
 			return "missing pbk (public key) for reality"
 		}
-		if !base64UrlRegex.MatchString(pbk) {
+		if !v.base64UrlRegex.MatchString(pbk) {
 			return "invalid pbk format (must be 43-char base64url)"
 		}
 		if q.Get("type") == "xhttp" {
@@ -218,7 +186,7 @@ func validateVLESSParams(q url.Values) string {
 	if (transportType == "ws" || transportType == "httpupgrade" || transportType == "xhttp") && q.Get("path") == "" {
 		return fmt.Sprintf("path is required when type=%s", transportType)
 	}
-	if reason := isSafeVLESSConfig(q); reason != "" {
+	if reason := v.isSafeVLESSConfig(q); reason != "" {
 		return reason
 	}
 	return ""

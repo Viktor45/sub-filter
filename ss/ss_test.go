@@ -1,0 +1,68 @@
+package ss
+
+import (
+	"encoding/base64"
+	"strings"
+	"testing"
+
+	"sub-filter/internal/utils"
+)
+
+func TestSSLink(t *testing.T) {
+	badWords := []string{"blocked"}
+	checkBadWords := func(fragment string) (bool, string) {
+		if fragment == "" {
+			return false, ""
+		}
+		decoded := utils.FullyDecode(fragment)
+		lower := strings.ToLower(decoded)
+		for _, word := range badWords {
+			if word != "" && strings.Contains(lower, word) {
+				return true, "bad word"
+			}
+		}
+		return false, ""
+	}
+
+	link := NewSSLink(badWords, utils.IsValidHost, checkBadWords)
+
+	// cipher:password = aes-256-gcm:test123
+	userinfo := base64.RawURLEncoding.EncodeToString([]byte("aes-256-gcm:test123"))
+
+	tests := []struct {
+		name   string
+		input  string
+		valid  bool
+		reason string
+	}{
+		{"valid", "ss://" + userinfo + "@example.com:8388#my-server", true, ""},
+		{"bad host", "ss://" + userinfo + "@localhost:8388", false, "invalid host"},
+		{"bad word", "ss://" + userinfo + "@example.com:8388#blocked", false, "bad word"},
+		{"invalid cipher", "ss://invalid@...", false, "invalid cipher"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, reason := link.Process(tt.input)
+			if tt.valid {
+				if got == "" {
+					t.Errorf("expected valid")
+				}
+			} else {
+				if got != "" {
+					t.Errorf("expected invalid")
+				}
+				if !strings.Contains(reason, tt.reason) {
+					t.Errorf("reason = %q, want contains %q", reason, tt.reason)
+				}
+			}
+		})
+	}
+}
+
+func TestSSLink_Matches(t *testing.T) {
+	link := SSLink{}
+	if !link.Matches("ss://...") {
+		t.Error("Matches() = false, want true")
+	}
+}

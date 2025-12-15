@@ -1,6 +1,3 @@
-// Пакет hysteria2 — обработчик ссылок Hysteria2.
-// Поддерживает оба префикса: hysteria2:// и hy2://.
-// Требует obfs=salamander и obfs-password для публичных подписок.
 package hysteria2
 
 import (
@@ -11,30 +8,26 @@ import (
 	"strings"
 )
 
-var (
+type Hysteria2Link struct {
 	badWords      []string
 	isValidHost   func(string) bool
 	checkBadWords func(string) (bool, string)
-)
-
-// Hysteria2Link — реализация интерфейса ProxyLink для Hysteria2.
-type Hysteria2Link struct{}
-
-// SetGlobals внедряет зависимости.
-func SetGlobals(bw []string, vh func(string) bool, cb func(string) (bool, string)) {
-	badWords = bw
-	isValidHost = vh
-	checkBadWords = cb
 }
 
-// Matches проверяет оба допустимых префикса.
-func (Hysteria2Link) Matches(s string) bool {
+func NewHysteria2Link(bw []string, vh func(string) bool, cb func(string) (bool, string)) *Hysteria2Link {
+	return &Hysteria2Link{
+		badWords:      bw,
+		isValidHost:   vh,
+		checkBadWords: cb,
+	}
+}
+
+func (h *Hysteria2Link) Matches(s string) bool {
 	lower := strings.ToLower(s)
 	return strings.HasPrefix(lower, "hysteria2://") || strings.HasPrefix(lower, "hy2://")
 }
 
-// Process обрабатывает Hysteria2-ссылку.
-func (Hysteria2Link) Process(s string) (string, string) {
+func (h *Hysteria2Link) Process(s string) (string, string) {
 	const maxURILength = 4096
 	if len(s) > maxURILength {
 		return "", "line too long"
@@ -50,11 +43,11 @@ func (Hysteria2Link) Process(s string) (string, string) {
 	if userinfo == "" {
 		return "", "missing auth info (UUID or username) in Hysteria2"
 	}
-	host, port, ok := parseHostPort(u)
+	host, port, ok := h.parseHostPort(u)
 	if !ok {
 		return "", "invalid host or port in Hysteria2"
 	}
-	if hasBad, reason := checkBadWords(u.Fragment); hasBad {
+	if hasBad, reason := h.checkBadWords(u.Fragment); hasBad {
 		return "", reason
 	}
 	q := u.Query()
@@ -86,15 +79,14 @@ func (Hysteria2Link) Process(s string) (string, string) {
 	return buf.String(), ""
 }
 
-// Парсинг хоста и порта.
-func parseHostPort(u *url.URL) (string, int, bool) {
+func (h *Hysteria2Link) parseHostPort(u *url.URL) (string, int, bool) {
 	host := u.Hostname()
 	portStr := u.Port()
 	if portStr == "" {
 		return "", 0, false
 	}
 	port, err := strconv.Atoi(portStr)
-	if err != nil || port <= 0 || port > 65535 || !isValidHost(host) {
+	if err != nil || port <= 0 || port > 65535 || !h.isValidHost(host) {
 		return "", 0, false
 	}
 	return host, port, true

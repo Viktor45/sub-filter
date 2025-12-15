@@ -4,165 +4,228 @@ This translation was made using AI.
 
 - [sub-filter](#sub-filter)
   - [What can it do?](#what-can-it-do)
-  - [How to build it?](#how-to-build-it)
-  - [How to run it?](#how-to-run-it)
-    - [Mode 1: HTTP server (live filtering)](#mode-1-http-server-live-filtering)
-      - [Full example](#full-example)
-      - [Minimal example](#minimal-example)
-    - [Mode 2: CLI mode (one-time processing)](#mode-2-cli-mode-one-time-processing)
-      - [Full example](#full-example-1)
-      - [Minimal example](#minimal-example-1)
+  - [How to build?](#how-to-build)
+  - [How to run?](#how-to-run)
+    - [Mode 1: HTTP Server (Dynamic filtering)](#mode-1-http-server-dynamic-filtering)
+      - [Full configuration example:](#full-configuration-example)
+      - [Minimal example:](#minimal-example)
+    - [Mode 2: CLI (One-time processing)](#mode-2-cli-one-time-processing)
+      - [New CLI features:](#new-cli-features)
+      - [Example: output to terminal](#example-output-to-terminal)
+      - [Example: using a config file](#example-using-a-config-file)
   - [What do the parameters mean?](#what-do-the-parameters-mean)
-  - [How to test it?](#how-to-test-it)
-    - [In server mode](#in-server-mode)
-    - [In CLI mode](#in-cli-mode)
-  - [How to use it in your proxy app?](#how-to-use-it-in-your-proxy-app)
+  - [New flags: `--config` and `--stdout`](#new-flags---config-and---stdout)
+    - [`--stdout` (CLI mode only)](#--stdout-cli-mode-only)
+    - [`--config`](#--config)
+      - [Example `config.yaml`:](#example-configyaml)
+  - [How to verify it works?](#how-to-verify-it-works)
+    - [For server mode:](#for-server-mode)
+    - [For CLI mode:](#for-cli-mode)
+  - [How to use in a client?](#how-to-use-in-a-client)
   - [Ready-to-use Docker image](#ready-to-use-docker-image)
   - [How to build the Docker image?](#how-to-build-the-docker-image)
-  - [How to run it in Docker?](#how-to-run-it-in-docker)
-    - [With Docker](#with-docker)
-    - [With Podman (a Docker alternative)](#with-podman-a-docker-alternative)
+  - [How to run in Docker?](#how-to-run-in-docker)
+    - [With Docker:](#with-docker)
+    - [With Podman (Docker alternative):](#with-podman-docker-alternative)
   - [CLI mode in Docker](#cli-mode-in-docker)
 
 # sub-filter
 
 A simple subscription filter
 
-This tool is a smart filter for proxy links (VLESS, VMess, Trojan, Shadowsocks, Hysteria2). It takes public subscription links, checks every server for correctness and safety (for example, blocks unencrypted connections or names with forbidden words), removes anything suspicious, and gives you a clean, working list ready to use in Clash, Sing-Box, routers, or any other proxy client.
+This program is an intelligent filter for proxy server URLs (VLESS, VMess, Trojan, Shadowsocks, Hysteria2). It fetches public subscriptions, validates each server for correctness and security (e.g., blocks unencrypted connections or names containing prohibited keywords), filters out anything suspicious, and outputs a clean, working list—ready for immediate use in Clash, Sing-Box, routers, and other clients.
 
-If you're wondering why you'd need this, check out our [FAQ](FAQ_en.md).
+If you're unsure why you'd need this, please read the [FAQ](FAQ.md).
 
- ⚠️ This tool does NOT check if proxies are actually working or fast. For that, use https://github.com/kutovoys/xray-checker
+⚠️ **Note**: This program does **not** test proxy **availability or latency**. For that, use [xray-checker](https://github.com/kutovoys/xray-checker).
 
 ---
 
 ## What can it do?
 
-✅ Checks proxy links for correctness and removes unsafe or broken ones  
-✅ Filters servers by a list of forbidden words (like suspicious domains)  
-✅ Blocks known "honeypots"—fake servers sometimes found in public subscriptions  
-✅ Caches results (30 minutes by default) so it doesn’t overload networks or servers  
-✅ Generates clean, well-formatted subscriptions with clear labels
+✅ Validates proxy links and removes unsafe or broken configurations  
+✅ Filters servers based on a list of forbidden keywords (e.g., suspicious domains)  
+✅ Blocks known honeypots that sometimes appear in public subscriptions  
+✅ Caches results (default: 30 minutes) to avoid overloading networks or upstream servers  
+✅ Generates subscriptions with clear descriptions and correct formatting  
+✅ Supports configuration via file  
+✅ Can output results directly to the terminal in CLI mode without saving files
 
 ---
 
-## How to build it?
+## How to build?
 
-If you have Go version 1.25 or newer installed, open a terminal and run:
+If you have Go (version 1.25 or newer) installed, run in your terminal:
 
-```
+```bash
 go build .
 ```
 
-After that, you’ll see a file called `sub-filter`—that’s your program!
+This produces a `sub-filter` executable—your ready-to-use program.
 
 ---
 
-## How to run it?
+## How to run?
 
-The program works in two modes: HTTP server or CLI (command line).
+The program supports two modes: **HTTP server** and **CLI (command-line)**.
 
-### Mode 1: HTTP server (live filtering)
+### Mode 1: HTTP Server (Dynamic filtering)
 
-Starts a web server on a port you choose. Subscriptions get filtered “on the fly” every time someone asks for them.
+Starts an HTTP server on a specified port. Subscriptions are filtered on-demand for each request.
 
-#### Full example
+#### Full configuration example:
 
-```
-./filter 8000 1800 ./config/sub.txt ./config/bad.txt ./config/uagent.txt
-```
-
-#### Minimal example
-
-```
-./filter 8000 1800
+```bash
+./sub-filter 8000 1800 ./config/sub.txt ./config/bad.txt ./config/uagent.txt
 ```
 
-(In this case, it looks for config files in `./config/` automatically.)
+#### Minimal example:
 
-### Mode 2: CLI mode (one-time processing)
-
-Processes all subscriptions once and saves the results to your system’s temporary folder (`sub-filter-cache`). Great for cron jobs, automation, or offline use.
-
-#### Full example
-
-```
-./filter --cli 1800 ./config/sub.txt ./config/bad.txt ./config/uagent.txt
+```bash
+./sub-filter 8000
 ```
 
-#### Minimal example
+In this case:
+- Cache TTL is 1800 seconds (30 minutes)  
+- The program looks for config files in `./config/`  
+- If any file is missing, it proceeds with empty lists (resulting in an empty subscription if no rules apply)
 
+### Mode 2: CLI (One-time processing)
+
+Processes all subscriptions once and saves results to the OS temp directory `sub-filter-cache`. The exact path is printed on startup. Ideal for automation, cron jobs, or offline use.
+
+#### New CLI features:
+
+- **`--stdout`**: Outputs everything directly to the terminal instead of saving files  
+- **`--config`**: Lets you define all parameters in a single config file
+
+#### Example: output to terminal
+
+```bash
+./sub-filter --cli --stdout
 ```
-./filter --cli
+
+You’ll immediately see the final subscription without file creation.
+
+#### Example: using a config file
+
+```bash
+./sub-filter --cli --config ./my-config.yaml
 ```
-
-(Uses default files from `./config/` and a 1800-second cache time.)
-
-> 💡 Results are saved as `sub-filter-cache/mod_1.txt`, `mod_2.txt`, etc.  
-> Rejected lines go into `sub-filter-cache/rejected_1.txt`, etc.
 
 ---
 
 ## What do the parameters mean?
 
-| Parameter    | Meaning                                                                    |
-| ------------ | -------------------------------------------------------------------------- |
-| `8000`       | Port for the HTTP server (server mode only)                                |
-| `1800`       | How long to keep cached results (1800 seconds = 30 minutes)                |
-| `sub.txt`    | List of subscription URLs (one per line)                                   |
-| `bad.txt`    | Forbidden words—any server name or domain containing these will be blocked |
-| `uagent.txt` | Allowed client names (User-Agent), like `Clash` or `Shadowrocket`          |
+| Parameter    | Description                                                       |
+| ------------ | ----------------------------------------------------------------- |
+| `8000`       | HTTP server port (server mode only)                               |
+| `1800`       | Cache time-to-live (TTL) in seconds (1800 = 30 minutes)           |
+| `sub.txt`    | List of subscription URLs (one per line)                          |
+| `bad.txt`    | Forbidden words (e.g., suspicious domains) to exclude from output |
+| `uagent.txt` | Allowed User-Agent strings (e.g., `Clash`, `Shadowrocket`)        |
 
-> 💡 If you don’t specify file paths, the program looks for them in `./config/`.
+> 💡 If file paths aren’t provided, the program looks in `./config/`.  
+> If a file is missing, the program continues but skips those rules (e.g., no word filtering if `bad.txt` is absent).
 
 ---
 
-## How to test it?
+## New flags: `--config` and `--stdout`
 
-### In server mode
+### `--stdout` (CLI mode only)
 
-Try getting a filtered subscription for the first URL in `sub.txt`:
+Instead of saving to `mod_1.txt`, `mod_2.txt`, etc., outputs everything directly to stdout. Useful for piping or copying the subscription instantly.
 
+Example:
+
+```bash
+./sub-filter --cli --stdout > my-sub.txt
 ```
+
+### `--config`
+
+Define **all settings in a single file** (supports **YAML, JSON, or TOML**).
+
+#### Example `config.yaml`:
+
+```yaml
+cache_ttl: 3600
+sources_file: "./my-subs.txt"
+bad_words_file: "./my-blocklist.txt"
+allowed_ua:
+  - "Clash"
+  - "happ"
+bad_words:
+  - "tracking"
+  - "fake"
+```
+
+If a field is omitted, the default value is used:
+
+| Field            | Default Value                   |
+| ---------------- | ------------------------------- |
+| `cache_ttl`      | `1800` (30 minutes)             |
+| `sources_file`   | `"./config/sub.txt"`            |
+| `bad_words_file` | `"./config/bad.txt"`            |
+| `uagent_file`    | `"./config/uagent.txt"`         |
+| `cache_dir`      | `/tmp/sub-filter-cache` (Linux) |
+
+> 💡 Config files are especially useful in Docker or systemd deployments.
+
+---
+
+## How to verify it works?
+
+### For server mode:
+
+Request the filtered subscription from the first URL in `sub.txt`:
+
+```bash
 curl -H "User-Agent: Clash" "http://localhost:8000/filter?id=1"
 ```
 
-If everything’s set up right, you’ll see a clean subscription.
+If configured correctly, you’ll see a clean, filtered subscription.
 
-> 💡 Tip: Make sure your client name (like `Clash`) is listed in `uagent.txt`—that’s how the tool knows it’s allowed.
+> 💡 Tip: Ensure your client’s name (e.g., `Clash`) is listed in `uagent.txt`—otherwise, access may be denied.
 
-### In CLI mode
+### For CLI mode:
 
-After running with `--cli`, check the `sub-filter-cache` folder:
+After running with `--cli`, check the `sub-filter-cache` directory:
 
+```bash
+./sub-filter --cli
 ```
-./filter --cli
-```
 
-You’ll find ready-to-use subscription files—no server needed!
+You’ll find ready-to-use subscription files—no server needed.
+
+Or output directly:
+
+```bash
+./sub-filter --cli --stdout
+```
 
 ---
 
-## How to use it in your proxy app?
+## How to use in a client?
 
-Add a subscription link like this in your client:
+Add a subscription URL like this in your client:
 
 ```
-http://your-server:port/filter?id=number
+http://server:port/filter?id=number
 ```
 
 Replace:
-- `your-server` → your Raspberry Pi, router, or server’s IP address  
-- `port` → the port you chose when starting (e.g., `8000`)  
-- `number` → the line number in `sub.txt` (first line = `id=1`)
+- `server` → IP of your router, Raspberry Pi, or server  
+- `port` → port specified at startup (e.g., `8000`)  
+- `number` → line number in `sub.txt` (first line = `id=1`)
 
-> 🔒 If your server is reachable from the internet, it’s safer to put it behind a reverse proxy with HTTPS (like Nginx, Caddy, or Cloudflare).
+> 🔒 **Security tip**: Run behind a reverse proxy with HTTPS (e.g., Nginx, Caddy, or Cloudflare), especially if exposed to the internet.
 
 ---
 
 ## Ready-to-use Docker image
 
-Available for Linux `amd64` and `arm64`, built using `ko`:
+Available for Linux `amd64` and `arm64`, built using [ko](.ko.yaml):
 
 ```
 ghcr.io/viktor45/sub-filter:latest
@@ -170,19 +233,19 @@ ghcr.io/viktor45/sub-filter:latest
 
 ## How to build the Docker image?
 
-Just build it normally using the included `Dockerfile`:
+Standard build via `Dockerfile`:
 
-```
+```bash
 docker build -t sub-filter .
 ```
 
-## How to run it in Docker?
+## How to run in Docker?
 
-Note: the cache folder is `/tmp/sub-filter-cache`—this matches the `distroless` setup in the `Dockerfile`.
+Note: `/tmp/sub-filter-cache` is used for caching in the `distroless` image.
 
-### With Docker
+### With Docker:
 
-```
+```bash
 docker run -d \
   --name sub-filter \
   -p 8000:8000 \
@@ -192,9 +255,9 @@ docker run -d \
   8000 1800
 ```
 
-### With Podman (a Docker alternative)
+### With Podman (Docker alternative):
 
-```
+```bash
 podman run -d --replace \
   --name sub-filter \
   -p 8000:8000 \
@@ -204,8 +267,8 @@ podman run -d --replace \
   8000 1800
 ```
 
-> 📁 Make sure the `./config` and `./cache` folders exist before running:
-> ```
+> 📁 Ensure directories exist before starting:
+> ```bash
 > mkdir -p ./config ./cache
 > ```
 
@@ -213,9 +276,9 @@ podman run -d --replace \
 
 ## CLI mode in Docker
 
-You can run a one-time filter job inside Docker:
+Run one-time processing inside Docker:
 
-```
+```bash
 docker run --rm \
   -v $(pwd)/config:/config:ro \
   -v $(pwd)/cache:/tmp/sub-filter-cache:rw \
@@ -223,4 +286,16 @@ docker run --rm \
   --cli 1800
 ```
 
-The results will appear in your local `./cache` folder.
+Results appear in your local `./cache` folder.
+
+Or output directly to terminal:
+
+```bash
+docker run --rm \
+  -v $(pwd)/config:/config:ro \
+  -v $(pwd)/cache:/tmp/sub-filter-cache:rw \
+  sub-filter \
+  --cli --stdout
+```
+
+

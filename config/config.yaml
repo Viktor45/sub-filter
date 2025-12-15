@@ -1,0 +1,5 @@
+cache_dir: "/tmp/sub-filter-cache"
+cache_ttl: 1800s
+sources_file: "./config/sub.txt"
+bad_words_file: "./config/bad.txt"
+uagent_file: "./config/uagent.txt"

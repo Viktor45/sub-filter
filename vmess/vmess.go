@@ -1,5 +1,3 @@
-// Пакет vmess — обработчик ссылок VMess (base64-encoded JSON).
-// Проверяет наличие TLS, валидность UUID, фильтрует по bad-words.
 package vmess
 
 import (
@@ -7,31 +5,29 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+
+	"sub-filter/internal/utils"
 )
 
-var (
+type VMessLink struct {
 	badWords      []string
 	isValidHost   func(string) bool
 	checkBadWords func(string) (bool, string)
-)
-
-// VMessLink — реализация интерфейса ProxyLink для VMess.
-type VMessLink struct{}
-
-// SetGlobals внедряет зависимости.
-func SetGlobals(bw []string, vh func(string) bool, cb func(string) (bool, string)) {
-	badWords = bw
-	isValidHost = vh
-	checkBadWords = cb
 }
 
-// Matches проверяет префикс vmess://.
-func (VMessLink) Matches(s string) bool {
+func NewVMessLink(bw []string, vh func(string) bool, cb func(string) (bool, string)) *VMessLink {
+	return &VMessLink{
+		badWords:      bw,
+		isValidHost:   vh,
+		checkBadWords: cb,
+	}
+}
+
+func (v *VMessLink) Matches(s string) bool {
 	return strings.HasPrefix(strings.ToLower(s), "vmess://")
 }
 
-// Process обрабатывает VMess-ссылку.
-func (VMessLink) Process(s string) (string, string) {
+func (v *VMessLink) Process(s string) (string, string) {
 	const maxURILength = 4096
 	if len(s) > maxURILength {
 		return "", "line too long"
@@ -43,7 +39,7 @@ func (VMessLink) Process(s string) (string, string) {
 	if b64 == "" {
 		return "", "empty VMess payload"
 	}
-	decoded, err := decodeUserInfo(b64)
+	decoded, err := utils.DecodeUserInfo(b64)
 	if err != nil {
 		return "", "invalid VMess base64 encoding"
 	}
@@ -73,11 +69,11 @@ func (VMessLink) Process(s string) (string, string) {
 	if int(port) <= 0 || int(port) > 65535 {
 		return "", "invalid port number"
 	}
-	if !isValidHost(add) {
+	if !v.isValidHost(add) {
 		return "", "invalid server host"
 	}
 	if ps != "" {
-		if hasBad, reason := checkBadWords(ps); hasBad {
+		if hasBad, reason := v.checkBadWords(ps); hasBad {
 			return "", reason
 		}
 	}
@@ -98,24 +94,4 @@ func (VMessLink) Process(s string) (string, string) {
 	}
 	finalB64 := base64.StdEncoding.EncodeToString(reencoded)
 	return "vmess://" + finalB64, ""
-}
-
-// Универсальный декодер base64 (STD/URL-safe, padded/raw).
-func decodeUserInfo(s string) ([]byte, error) {
-	isURLSafe := strings.ContainsAny(s, "-_")
-	isPadded := strings.HasSuffix(s, "=")
-	var enc *base64.Encoding
-	switch {
-	case isURLSafe && isPadded:
-		enc = base64.URLEncoding
-	case isURLSafe && !isPadded:
-		enc = base64.RawURLEncoding
-	case !isURLSafe && isPadded:
-		enc = base64.StdEncoding
-	case !isURLSafe && !isPadded:
-		enc = base64.RawStdEncoding
-	default:
-		enc = base64.RawURLEncoding
-	}
-	return enc.DecodeString(s)
 }
