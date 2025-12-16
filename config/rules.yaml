@@ -1,0 +1,52 @@
+# Конфигурация правил валидации прокси-подписок
+# Соответствует логике оригинальных обработчиков
+
+vless:
+  required_params:
+    - encryption
+    - sni
+  forbidden_values:
+    security: ["none"]
+  allowed_values:
+    security: ["tls", "reality"]
+    flow:
+      - "xtls-rprx-vision"
+      - "xtls-rprx-vision-udp443"
+      - "xtls-rprx-vision-direct"
+  conditional:
+    - when: { security: "reality" }
+      require: ["pbk"]
+    - when: { type: "grpc" }
+      require: ["serviceName"]
+    - when: { type: "ws" }
+      require: ["path"]
+    - when: { type: "httpupgrade" }
+      require: ["path"]
+    - when: { type: "xhttp" }
+      require: ["path"]
+    - when: { type: "xhttp", mode: "packet" }
+      require: []
+
+vmess:
+  required_params:
+    - tls
+  allowed_values:
+    tls: ["tls"]
+  conditional:
+    - when: { net: "grpc" }
+      require: ["serviceName"]
+
+hysteria2:
+  required_params:
+    - obfs
+    - obfs-password
+  allowed_values:
+    obfs: ["salamander"]
+
+trojan:
+  conditional:
+    - when: { type: "grpc" }
+      require: ["serviceName"]
+
+# Shadowsocks не использует query-параметры — политика пустая
+ss: {}

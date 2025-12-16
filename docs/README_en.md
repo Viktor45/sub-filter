@@ -149,9 +149,12 @@ Define **all settings in a single file** (supports **YAML, JSON, or TOML**).
 #### Example `config.yaml`:
 
 ```yaml
-cache_ttl: 3600
-sources_file: "./my-subs.txt"
-bad_words_file: "./my-blocklist.txt"
+sources_file: "./config/sub.txt"
+rules_file: "./config/rules.yaml"
+bad_words_file: "./config/bad.txt"
+uagent_file: "./config/uagent.txt"
+cache_dir: "/tmp/sub-filter-cache"
+cache_ttl: 1800s
 allowed_ua:
   - "Clash"
   - "happ"

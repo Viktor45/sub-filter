@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"sub-filter/internal/utils"
+	"sub-filter/internal/validator"
 )
 
 type SSLink struct {
@@ -16,14 +17,24 @@ type SSLink struct {
 	isValidHost   func(string) bool
 	checkBadWords func(string) (bool, string)
 	ssCipherRe    *regexp.Regexp
+	ruleValidator validator.Validator
 }
 
-func NewSSLink(bw []string, vh func(string) bool, cb func(string) (bool, string)) *SSLink {
+func NewSSLink(
+	bw []string,
+	vh func(string) bool,
+	cb func(string) (bool, string),
+	val validator.Validator,
+) *SSLink {
+	if val == nil {
+		val = &validator.EmptyValidator{}
+	}
 	return &SSLink{
 		badWords:      bw,
 		isValidHost:   vh,
 		checkBadWords: cb,
 		ssCipherRe:    regexp.MustCompile(`^[a-zA-Z0-9_+-]+$`),
+		ruleValidator: val,
 	}
 }
 
@@ -64,6 +75,12 @@ func (s *SSLink) Process(sLink string) (string, string) {
 	if hasBad, reason := s.checkBadWords(u.Fragment); hasBad {
 		return "", reason
 	}
+
+	// SS не имеет query-параметров → валидатор получает пустой map
+	if result := s.ruleValidator.Validate(map[string]string{}); !result.Valid {
+		return "", "SS: " + result.Reason
+	}
+
 	newUser := base64.RawURLEncoding.EncodeToString([]byte(cipher + ":" + password))
 	var buf strings.Builder
 	buf.WriteString("ss://")

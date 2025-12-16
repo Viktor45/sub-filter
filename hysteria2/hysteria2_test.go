@@ -1,11 +1,26 @@
 package hysteria2
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"sub-filter/internal/utils"
+	"sub-filter/internal/validator"
 )
+
+func loadRuleForTest(proto string) validator.Validator {
+	pwd, _ := filepath.Abs(".")
+	rulesPath := filepath.Join(pwd, "..", "config", "rules.yaml")
+	rules, err := validator.LoadRules(rulesPath)
+	if err != nil {
+		panic("Failed to load rules.yaml for tests: " + err.Error())
+	}
+	if v, ok := rules[proto]; ok {
+		return v
+	}
+	return &validator.GenericValidator{}
+}
 
 func TestHysteria2Link(t *testing.T) {
 	badWords := []string{"blocked"}
@@ -22,8 +37,7 @@ func TestHysteria2Link(t *testing.T) {
 		}
 		return false, ""
 	}
-
-	link := NewHysteria2Link(badWords, utils.IsValidHost, checkBadWords)
+	link := NewHysteria2Link(badWords, utils.IsValidHost, checkBadWords, loadRuleForTest("hysteria2"))
 
 	tests := []struct {
 		name   string
@@ -47,13 +61,13 @@ func TestHysteria2Link(t *testing.T) {
 			"missing obfs",
 			"hysteria2://UUID@example.com:443#my-server",
 			false,
-			"obfs parameter is missing",
+			"missing required parameter: obfs",
 		},
 		{
 			"bad obfs",
 			"hysteria2://UUID@example.com:443?obfs=plain&obfs-password=secret",
 			false,
-			"only 'salamander' allowed",
+			"invalid value for obfs",
 		},
 		{
 			"bad host",
@@ -68,7 +82,6 @@ func TestHysteria2Link(t *testing.T) {
 			"bad word",
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, reason := link.Process(tt.input)

@@ -1,12 +1,13 @@
 package vless
 
 import (
-	"fmt"
 	"net"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"sub-filter/internal/validator"
 )
 
 type VLESSLink struct {
@@ -14,6 +15,7 @@ type VLESSLink struct {
 	isValidHost    func(string) bool
 	isValidPort    func(int) bool
 	checkBadWords  func(string) (bool, string)
+	ruleValidator  validator.Validator
 	hostRegex      *regexp.Regexp
 	base64UrlRegex *regexp.Regexp
 }
@@ -23,12 +25,17 @@ func NewVLESSLink(
 	vh func(string) bool,
 	vp func(int) bool,
 	cb func(string) (bool, string),
+	val validator.Validator,
 ) *VLESSLink {
+	if val == nil {
+		val = &validator.GenericValidator{}
+	}
 	return &VLESSLink{
 		badWords:       bw,
 		isValidHost:    vh,
 		isValidPort:    vp,
 		checkBadWords:  cb,
+		ruleValidator:  val,
 		hostRegex:      regexp.MustCompile(`^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]*[a-z0-9])?$|^xn--([a-z0-9-]+\.)+[a-z0-9-]+$`),
 		base64UrlRegex: regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`),
 	}
@@ -59,27 +66,28 @@ func (v *VLESSLink) Process(s string) (string, string) {
 	if hasBad, reason := v.checkBadWords(u.Fragment); hasBad {
 		return "", reason
 	}
+
 	q := u.Query()
 	q.Del("insecure")
 	q.Del("allowInsecure")
 
-	if encryptionRaw := q.Get("encryption"); encryptionRaw != "" {
-		encryptionDecoded, err := url.QueryUnescape(encryptionRaw)
-		if err != nil {
-			encryptionDecoded = encryptionRaw
+	// 🔥 УДАЛЕНО: требование параметра `encryption`
+	// Теперь это регулируется политикой (если нужно)
+
+	// Собираем параметры для валидатора
+	params := make(map[string]string, len(q))
+	for k, vs := range q {
+		if len(vs) > 0 {
+			params[k] = vs[0]
 		}
-		normalized := strings.ToLower(strings.TrimRight(encryptionDecoded, " ="))
-		if strings.HasPrefix(normalized, "none") {
-			q.Set("encryption", "none")
-		}
-	} else {
-		return "", "VLESS: encryption parameter is missing (outdated format)"
 	}
 
-	if err := v.validateVLESSParams(q); err != "" {
-		return "", "VLESS: " + err
+	// Валидация теперь полностью делегирована политике
+	if result := v.ruleValidator.Validate(params); !result.Valid {
+		return "", "VLESS: " + result.Reason
 	}
 
+	// Обработка ALPN (остаётся как часть форматирования, а не валидации)
 	if alpnValues := q["alpn"]; len(alpnValues) > 0 {
 		rawAlpn := alpnValues[0]
 		var firstValid string
@@ -139,55 +147,4 @@ func (v *VLESSLink) validateVLESSHostPort(u *url.URL) (string, int, string) {
 		return "", 0, "invalid host"
 	}
 	return host, port, ""
-}
-
-func (v *VLESSLink) isSafeVLESSConfig(q url.Values) string {
-	flow := q.Get("flow")
-	if flow != "" && q.Get("security") != "reality" {
-		return "flow requires reality"
-	}
-	if q.Get("type") == "grpc" && q.Get("serviceName") == "" {
-		return "gRPC requires serviceName"
-	}
-	return ""
-}
-
-func (v *VLESSLink) validateVLESSParams(q url.Values) string {
-	security := q.Get("security")
-	if security == "" {
-		return "security parameter is missing (insecure)"
-	}
-	if security == "none" {
-		return "security=none is not allowed"
-	}
-	if (security == "tls" || security == "reality") && q.Get("sni") == "" {
-		return "sni is required for security=tls or reality"
-	}
-	if security == "reality" {
-		pbk := q.Get("pbk")
-		if pbk == "" {
-			return "missing pbk (public key) for reality"
-		}
-		if !v.base64UrlRegex.MatchString(pbk) {
-			return "invalid pbk format (must be 43-char base64url)"
-		}
-		if q.Get("type") == "xhttp" {
-			mode := q.Get("mode")
-			if mode != "" && mode != "packet" {
-				return "invalid mode for xhttp (must be empty or 'packet')"
-			}
-		}
-	}
-	transportType := q.Get("type")
-	headerType := q.Get("headerType")
-	if headerType != "" && headerType != "none" && transportType != "kcp" && transportType != "quic" {
-		return fmt.Sprintf("headerType is only allowed with kcp or quic (got type=%s, headerType=%s)", transportType, headerType)
-	}
-	if (transportType == "ws" || transportType == "httpupgrade" || transportType == "xhttp") && q.Get("path") == "" {
-		return fmt.Sprintf("path is required when type=%s", transportType)
-	}
-	if reason := v.isSafeVLESSConfig(q); reason != "" {
-		return reason
-	}
-	return ""
 }

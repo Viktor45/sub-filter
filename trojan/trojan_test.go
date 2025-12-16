@@ -1,11 +1,26 @@
 package trojan
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"sub-filter/internal/utils"
+	"sub-filter/internal/validator"
 )
+
+func loadRuleForTest(proto string) validator.Validator {
+	pwd, _ := filepath.Abs(".")
+	rulesPath := filepath.Join(pwd, "..", "config", "rules.yaml")
+	rules, err := validator.LoadRules(rulesPath)
+	if err != nil {
+		panic("Failed to load rules.yaml for tests: " + err.Error())
+	}
+	if v, ok := rules[proto]; ok {
+		return v
+	}
+	return &validator.GenericValidator{}
+}
 
 func TestTrojanLink(t *testing.T) {
 	badWords := []string{"blocked"}
@@ -22,8 +37,7 @@ func TestTrojanLink(t *testing.T) {
 		}
 		return false, ""
 	}
-
-	link := NewTrojanLink(badWords, utils.IsValidHost, checkBadWords)
+	link := NewTrojanLink(badWords, utils.IsValidHost, checkBadWords, loadRuleForTest("trojan"))
 
 	tests := []struct {
 		name   string
@@ -34,9 +48,8 @@ func TestTrojanLink(t *testing.T) {
 		{"valid", "trojan://password@example.com:443#my-server", true, ""},
 		{"bad host", "trojan://password@localhost:443", false, "invalid host"},
 		{"bad word", "trojan://password@example.com:443#blocked-server", false, "bad word"},
-		{"grpc no service", "trojan://password@example.com:443?type=grpc", false, "gRPC requires serviceName"},
+		{"grpc no service", "trojan://password@example.com:443?type=grpc", false, "missing required parameter serviceName"},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, reason := link.Process(tt.input)

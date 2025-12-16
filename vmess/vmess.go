@@ -1,3 +1,5 @@
+// Package vmess обрабатывает VMess-ссылки (vmess://).
+// Поддерживает только base64-encoded JSON payload.
 package vmess
 
 import (
@@ -7,26 +9,42 @@ import (
 	"strings"
 
 	"sub-filter/internal/utils"
+	"sub-filter/internal/validator"
 )
 
+// VMessLink реализует обработку VMess-ссылок.
 type VMessLink struct {
 	badWords      []string
 	isValidHost   func(string) bool
 	checkBadWords func(string) (bool, string)
+	ruleValidator validator.Validator
 }
 
-func NewVMessLink(bw []string, vh func(string) bool, cb func(string) (bool, string)) *VMessLink {
+// NewVMessLink создаёт новый обработчик VMess.
+// Принимает валидатор политик — если nil, используется пустой GenericValidator.
+func NewVMessLink(
+	bw []string,
+	vh func(string) bool,
+	cb func(string) (bool, string),
+	val validator.Validator,
+) *VMessLink {
+	if val == nil {
+		val = &validator.GenericValidator{}
+	}
 	return &VMessLink{
 		badWords:      bw,
 		isValidHost:   vh,
 		checkBadWords: cb,
+		ruleValidator: val,
 	}
 }
 
+// Matches проверяет, является ли строка VMess-ссылкой.
 func (v *VMessLink) Matches(s string) bool {
 	return strings.HasPrefix(strings.ToLower(s), "vmess://")
 }
 
+// Process парсит, валидирует и нормализует VMess-ссылку.
 func (v *VMessLink) Process(s string) (string, string) {
 	const maxURILength = 4096
 	if len(s) > maxURILength {
@@ -50,11 +68,11 @@ func (v *VMessLink) Process(s string) (string, string) {
 	ps, _ := vm["ps"].(string)
 	add, _ := vm["add"].(string)
 	var port float64
-	switch v := vm["port"].(type) {
+	switch vPort := vm["port"].(type) {
 	case float64:
-		port = v
+		port = vPort
 	case string:
-		if p, err := strconv.ParseFloat(v, 64); err == nil {
+		if p, err := strconv.ParseFloat(vPort, 64); err == nil {
 			port = p
 		} else {
 			return "", "invalid port in VMess config"
@@ -77,17 +95,22 @@ func (v *VMessLink) Process(s string) (string, string) {
 			return "", reason
 		}
 	}
-	netType, _ := vm["net"].(string)
-	if netType == "grpc" {
-		svc, _ := vm["serviceName"].(string)
-		if svc == "" {
-			return "", "VMess gRPC requires serviceName"
+
+	// Преобразуем всё в map[string]string, включая пустые строки
+	params := make(map[string]string)
+	for k, vi := range vm {
+		if s, ok := vi.(string); ok {
+			params[k] = s // ← даже если s == ""
+		} else if f, ok := vi.(float64); ok {
+			params[k] = strconv.FormatFloat(f, 'f', -1, 64)
 		}
 	}
-	tls, _ := vm["tls"].(string)
-	if netType != "grpc" && tls != "tls" {
-		return "", "VMess without TLS is not allowed"
+
+	// Делегируем валидацию политике
+	if result := v.ruleValidator.Validate(params); !result.Valid {
+		return "", "VMess: " + result.Reason
 	}
+
 	reencoded, err := json.Marshal(vm)
 	if err != nil {
 		return "", "failed to re-encode VMess config"

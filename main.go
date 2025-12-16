@@ -25,20 +25,20 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
 	_ "time/tzdata"
+
+	"sub-filter/hysteria2"
+	"sub-filter/internal/utils"
+	"sub-filter/internal/validator"
+	"sub-filter/ss"
+	"sub-filter/trojan"
+	"sub-filter/vless"
+	"sub-filter/vmess"
 
 	"github.com/spf13/viper"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/singleflight"
 	"golang.org/x/time/rate"
-
-	"sub-filter/hysteria2"
-	"sub-filter/internal/utils"
-	"sub-filter/ss"
-	"sub-filter/trojan"
-	"sub-filter/vless"
-	"sub-filter/vmess"
 )
 
 const (
@@ -66,9 +66,11 @@ type AppConfig struct {
 	SourcesFile  string
 	BadWordsFile string
 	UAgentFile   string
+	RulesFile    string
 	AllowedUA    []string
 	BadWords     []string
 	Sources      SourceMap
+	Rules        map[string]validator.Validator
 }
 
 func (cfg *AppConfig) Init() {
@@ -103,7 +105,7 @@ type ProxyLink interface {
 	Process(s string) (string, string)
 }
 
-func createProxyProcessors(badWords []string) []ProxyLink {
+func createProxyProcessors(badWords []string, rules map[string]validator.Validator) []ProxyLink {
 	checkBadWords := func(fragment string) (bool, string) {
 		if fragment == "" {
 			return false, ""
@@ -118,12 +120,19 @@ func createProxyProcessors(badWords []string) []ProxyLink {
 		return false, ""
 	}
 
+	getValidator := func(name string) validator.Validator {
+		if v, ok := rules[name]; ok {
+			return v
+		}
+		return &validator.GenericValidator{}
+	}
+
 	return []ProxyLink{
-		vless.NewVLESSLink(badWords, utils.IsValidHost, utils.IsValidPort, checkBadWords),
-		vmess.NewVMessLink(badWords, utils.IsValidHost, checkBadWords),
-		trojan.NewTrojanLink(badWords, utils.IsValidHost, checkBadWords),
-		ss.NewSSLink(badWords, utils.IsValidHost, checkBadWords),
-		hysteria2.NewHysteria2Link(badWords, utils.IsValidHost, checkBadWords),
+		vless.NewVLESSLink(badWords, utils.IsValidHost, utils.IsValidPort, checkBadWords, getValidator("vless")),
+		vmess.NewVMessLink(badWords, utils.IsValidHost, checkBadWords, getValidator("vmess")),
+		trojan.NewTrojanLink(badWords, utils.IsValidHost, checkBadWords, getValidator("trojan")),
+		ss.NewSSLink(badWords, utils.IsValidHost, checkBadWords, getValidator("ss")),
+		hysteria2.NewHysteria2Link(badWords, utils.IsValidHost, checkBadWords, getValidator("hysteria2")),
 	}
 }
 
@@ -286,24 +295,20 @@ func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessor
 	if !utils.IsValidHost(host) {
 		return "", fmt.Errorf("invalid source host: %s", host)
 	}
-
 	origCache := filepath.Join(cfg.CacheDir, "orig_"+id+".txt")
 	modCache := filepath.Join(cfg.CacheDir, "mod_"+id+".txt")
 	rejectedCache := filepath.Join(cfg.CacheDir, "rejected_"+id+".txt")
-
 	if !utils.IsPathSafe(origCache, cfg.CacheDir) ||
 		!utils.IsPathSafe(modCache, cfg.CacheDir) ||
 		!utils.IsPathSafe(rejectedCache, cfg.CacheDir) {
 		return "", fmt.Errorf("unsafe cache path for id=%s", id)
 	}
-
 	if !stdout {
 		if info, err := os.Stat(modCache); err == nil && time.Since(info.ModTime()) <= cfg.CacheTTL {
 			content, _ := os.ReadFile(modCache)
 			return string(content), nil
 		}
 	}
-
 	var origContent []byte
 	if !stdout {
 		if info, err := os.Stat(origCache); err == nil && time.Since(info.ModTime()) <= cfg.CacheTTL {
@@ -312,7 +317,6 @@ func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessor
 			}
 		}
 	}
-
 	if origContent == nil {
 		_, portStr, _ := net.SplitHostPort(parsedSource.Host)
 		if portStr == "" {
@@ -330,7 +334,6 @@ func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessor
 				IdleConnTimeout: 30 * time.Second,
 			},
 		}
-
 		result, err, _ := fetchGroup.Do(id, func() (interface{}, error) {
 			req, err := http.NewRequest("GET", source.URL, nil)
 			if err != nil {
@@ -362,14 +365,12 @@ func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessor
 		}
 		origContent = result.([]byte)
 	}
-
 	hasProxy := bytes.Contains(origContent, []byte("vless://")) ||
 		bytes.Contains(origContent, []byte("vmess://")) ||
 		bytes.Contains(origContent, []byte("trojan://")) ||
 		bytes.Contains(origContent, []byte("ss://")) ||
 		bytes.Contains(origContent, []byte("hysteria2://")) ||
 		bytes.Contains(origContent, []byte("hy2://"))
-
 	if !hasProxy {
 		decoded := utils.AutoDecodeBase64(origContent)
 		if bytes.Contains(decoded, []byte("vless://")) ||
@@ -381,9 +382,10 @@ func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessor
 			origContent = decoded
 		}
 	}
-
 	var out []string
 	var rejectedLines []string
+	rejectedLines = append(rejectedLines, "## Source: "+source.URL)
+
 	lines := bytes.Split(origContent, []byte("\n"))
 	for _, lineBytes := range lines {
 		originalLine := strings.TrimRight(string(lineBytes), "\r\n")
@@ -411,17 +413,14 @@ func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessor
 			rejectedLines = append(rejectedLines, "# REASON: "+reason, originalLine)
 		}
 	}
-
-	if !stdout && len(rejectedLines) > 0 {
+	// Записываем ВСЕГДА
+	if !stdout {
 		rejectedContent := strings.Join(rejectedLines, "\n")
 		tmpFile := rejectedCache + ".tmp"
 		if err := os.WriteFile(tmpFile, []byte(rejectedContent), 0o644); err == nil {
 			_ = os.Rename(tmpFile, rejectedCache)
 		}
-	} else if !stdout {
-		_ = os.Remove(rejectedCache)
 	}
-
 	profileName := "filtered_" + id
 	if u, err := url.Parse(source.URL); err == nil {
 		base := path.Base(u.Path)
@@ -439,7 +438,6 @@ func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessor
 	finalLines := []string{profileTitle, profileInterval, ""}
 	finalLines = append(finalLines, out...)
 	final := strings.Join(finalLines, "\n")
-
 	if !stdout {
 		tmpFile := modCache + ".tmp"
 		if err := os.WriteFile(tmpFile, []byte(final), 0o644); err != nil {
@@ -448,7 +446,6 @@ func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessor
 		}
 		_ = os.Rename(tmpFile, modCache)
 	}
-
 	return final, nil
 }
 
@@ -514,6 +511,12 @@ func loadConfigFromFile(configPath string) (*AppConfig, error) {
 		ua, _ := loadTextFile(cfg.UAgentFile, nil)
 		cfg.AllowedUA = ua
 	}
+	// Загружаем правила через validator
+	rules, err := validator.LoadRules(cfg.RulesFile)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Rules = rules
 	return &cfg, nil
 }
 
@@ -524,11 +527,9 @@ func main() {
 		config  = flag.String("config", "", "Path to config file (YAML/JSON/TOML)")
 	)
 	flag.Parse()
-
 	if *cliMode {
 		var cfg *AppConfig
 		var err error
-
 		if *config != "" {
 			cfg, err = loadConfigFromFile(*config)
 			if err != nil {
@@ -540,7 +541,7 @@ func main() {
 			sourcesFile := "./config/sub.txt"
 			badWordsFile := "./config/bad.txt"
 			uagentFile := "./config/uagent.txt"
-
+			rulesFile := "./config/rules.yaml"
 			args := flag.Args()
 			if len(args) >= 1 {
 				if sec, e := strconv.Atoi(args[0]); e == nil && sec > 0 {
@@ -556,12 +557,15 @@ func main() {
 			if len(args) >= 4 {
 				uagentFile = args[3]
 			}
-
+			if len(args) >= 5 {
+				rulesFile = args[4]
+			}
 			cfg = &AppConfig{
 				CacheTTL:     time.Duration(cacheTTLSeconds) * time.Second,
 				SourcesFile:  sourcesFile,
 				BadWordsFile: badWordsFile,
 				UAgentFile:   uagentFile,
+				RulesFile:    rulesFile,
 			}
 			cfg.Init()
 			cfg.Sources, err = loadSourcesFromFile(cfg.SourcesFile)
@@ -571,19 +575,24 @@ func main() {
 			}
 			cfg.BadWords, _ = loadTextFile(cfg.BadWordsFile, strings.ToLower)
 			cfg.AllowedUA, _ = loadTextFile(cfg.UAgentFile, nil)
+			rules, err := validator.LoadRules(rulesFile)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Load rules: %v\n", err)
+				os.Exit(1)
+			}
+			cfg.Rules = rules
 		}
-
 		if err := os.MkdirAll(cfg.CacheDir, 0o755); err != nil {
 			fmt.Fprintf(os.Stderr, "Create cache dir: %v\n", err)
 			os.Exit(1)
 		}
 
-		proxyProcessors := createProxyProcessors(cfg.BadWords)
+		fmt.Fprintf(os.Stderr, "Cache directory: %s\n", cfg.CacheDir)
 
+		proxyProcessors := createProxyProcessors(cfg.BadWords, cfg.Rules)
 		g, _ := errgroup.WithContext(context.Background())
 		var mu sync.Mutex
 		var outputs []string
-
 		for id, source := range cfg.Sources {
 			id, source := id, source
 			g.Go(func() error {
@@ -602,9 +611,7 @@ func main() {
 				return nil
 			})
 		}
-
 		_ = g.Wait()
-
 		if *stdout {
 			for _, out := range outputs {
 				fmt.Println(out)
@@ -612,18 +619,16 @@ func main() {
 		}
 		return
 	}
-
 	if len(flag.Args()) < 1 {
-		fmt.Fprintf(os.Stderr, "Usage: %s <port> [cache_ttl] [sources] [bad] [ua]\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s <port> [cache_ttl] [sources] [bad] [ua] [rules]\n", os.Args[0])
 		os.Exit(1)
 	}
-
 	port := flag.Args()[0]
 	cacheTTLSeconds := 1800
 	sourcesFile := "./config/sub.txt"
 	badWordsFile := "./config/bad.txt"
 	uagentFile := "./config/uagent.txt"
-
+	rulesFile := ""
 	if len(flag.Args()) >= 2 {
 		if sec, err := strconv.Atoi(flag.Args()[1]); err == nil && sec > 0 {
 			cacheTTLSeconds = sec
@@ -638,21 +643,22 @@ func main() {
 	if len(flag.Args()) >= 5 {
 		uagentFile = flag.Args()[4]
 	}
-
+	if len(flag.Args()) >= 6 {
+		rulesFile = flag.Args()[5]
+	}
 	cfg := &AppConfig{
 		CacheDir:     defaultCacheDir,
 		CacheTTL:     time.Duration(cacheTTLSeconds) * time.Second,
 		SourcesFile:  sourcesFile,
 		BadWordsFile: badWordsFile,
 		UAgentFile:   uagentFile,
+		RulesFile:    rulesFile,
 	}
 	cfg.Init()
-
 	if err := os.MkdirAll(cfg.CacheDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "Create cache dir: %v\n", err)
 		os.Exit(1)
 	}
-
 	var err error
 	cfg.Sources, err = loadSourcesFromFile(cfg.SourcesFile)
 	if err != nil {
@@ -661,13 +667,17 @@ func main() {
 	}
 	cfg.BadWords, _ = loadTextFile(cfg.BadWordsFile, strings.ToLower)
 	cfg.AllowedUA, _ = loadTextFile(cfg.UAgentFile, nil)
+	rules, err := validator.LoadRules(rulesFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Load rules: %v\n", err)
+		os.Exit(1)
+	}
+	cfg.Rules = rules
 
-	proxyProcessors := createProxyProcessors(cfg.BadWords)
-
+	proxyProcessors := createProxyProcessors(cfg.BadWords, cfg.Rules)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go cleanupLimiters(ctx)
-
 	http.HandleFunc("/filter", func(w http.ResponseWriter, r *http.Request) {
 		clientIP, _, _ := net.SplitHostPort(r.RemoteAddr)
 		if clientIP == "" {
@@ -705,27 +715,22 @@ func main() {
 		}
 		serveFile(w, r, content, source.URL, id)
 	})
-
 	listener, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Listen: %v\n", err)
 		os.Exit(1)
 	}
-
 	fmt.Printf("Proxy Filter Server Starting...\n")
 	fmt.Printf("Port: %s\n", port)
 	fmt.Printf("Cache TTL: %d sec\n", cacheTTLSeconds)
 	fmt.Printf("Cache dir: %s\n", cfg.CacheDir)
 	fmt.Printf("Sources: %d\n", len(cfg.Sources))
-
 	server := &http.Server{
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 	}
-
 	errChan := make(chan error, 1)
 	go func() { errChan <- server.Serve(listener) }()
-
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	select {

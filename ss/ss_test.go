@@ -2,11 +2,26 @@ package ss
 
 import (
 	"encoding/base64"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"sub-filter/internal/utils"
+	"sub-filter/internal/validator"
 )
+
+func loadRuleForTest(proto string) validator.Validator {
+	pwd, _ := filepath.Abs(".")
+	rulesPath := filepath.Join(pwd, "..", "config", "rules.yaml")
+	rules, err := validator.LoadRules(rulesPath)
+	if err != nil {
+		panic("Failed to load rules.yaml for tests: " + err.Error())
+	}
+	if v, ok := rules[proto]; ok {
+		return v
+	}
+	return &validator.EmptyValidator{}
+}
 
 func TestSSLink(t *testing.T) {
 	badWords := []string{"blocked"}
@@ -23,12 +38,9 @@ func TestSSLink(t *testing.T) {
 		}
 		return false, ""
 	}
+	link := NewSSLink(badWords, utils.IsValidHost, checkBadWords, loadRuleForTest("ss"))
 
-	link := NewSSLink(badWords, utils.IsValidHost, checkBadWords)
-
-	// cipher:password = aes-256-gcm:test123
 	userinfo := base64.RawURLEncoding.EncodeToString([]byte("aes-256-gcm:test123"))
-
 	tests := []struct {
 		name   string
 		input  string
@@ -40,7 +52,6 @@ func TestSSLink(t *testing.T) {
 		{"bad word", "ss://" + userinfo + "@example.com:8388#blocked", false, "bad word"},
 		{"invalid cipher", "ss://invalid@...", false, "invalid cipher"},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, reason := link.Process(tt.input)

@@ -1,24 +1,35 @@
 package trojan
 
 import (
-	"fmt"
 	"net"
 	"net/url"
 	"strconv"
 	"strings"
+
+	"sub-filter/internal/validator"
 )
 
 type TrojanLink struct {
 	badWords      []string
 	isValidHost   func(string) bool
 	checkBadWords func(string) (bool, string)
+	ruleValidator validator.Validator
 }
 
-func NewTrojanLink(bw []string, vh func(string) bool, cb func(string) (bool, string)) *TrojanLink {
+func NewTrojanLink(
+	bw []string,
+	vh func(string) bool,
+	cb func(string) (bool, string),
+	val validator.Validator,
+) *TrojanLink {
+	if val == nil {
+		val = &validator.GenericValidator{}
+	}
 	return &TrojanLink{
 		badWords:      bw,
 		isValidHost:   vh,
 		checkBadWords: cb,
+		ruleValidator: val,
 	}
 }
 
@@ -46,15 +57,24 @@ func (t *TrojanLink) Process(s string) (string, string) {
 	if hasBad, reason := t.checkBadWords(u.Fragment); hasBad {
 		return "", reason
 	}
-	if reason := t.isSafeTrojanConfig(u.Query()); reason != "" {
-		return "", fmt.Sprintf("Trojan: %s", reason)
+
+	q := u.Query()
+	params := make(map[string]string, len(q))
+	for k, vs := range q {
+		if len(vs) > 0 {
+			params[k] = vs[0]
+		}
 	}
+
+	if result := t.ruleValidator.Validate(params); !result.Valid {
+		return "", "Trojan: " + result.Reason
+	}
+
 	var buf strings.Builder
 	buf.WriteString("trojan://")
 	buf.WriteString(password)
 	buf.WriteString("@")
 	buf.WriteString(net.JoinHostPort(host, strconv.Itoa(port)))
-	q := u.Query()
 	if len(q) > 0 {
 		buf.WriteString("?")
 		buf.WriteString(q.Encode())
@@ -77,11 +97,4 @@ func (t *TrojanLink) parseHostPort(u *url.URL) (string, int, bool) {
 		return "", 0, false
 	}
 	return host, port, true
-}
-
-func (t *TrojanLink) isSafeTrojanConfig(q url.Values) string {
-	if q.Get("type") == "grpc" && q.Get("serviceName") == "" {
-		return "gRPC requires serviceName"
-	}
-	return ""
 }

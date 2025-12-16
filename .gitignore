@@ -36,3 +36,4 @@ filter
 .DS_Store
 lint.txt
 build/
+sub-filter

@@ -1,4 +1,4 @@
-# Security Policy
+# Security Rule
 
 ## How to Report a Security Issue
 

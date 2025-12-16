@@ -1,11 +1,26 @@
 package vless
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"sub-filter/internal/utils"
+	"sub-filter/internal/validator"
 )
+
+func loadTestValidator(proto string) validator.Validator {
+	pwd, _ := filepath.Abs(".")
+	rulesPath := filepath.Join(pwd, "..", "config", "rules.yaml")
+	rules, err := validator.LoadRules(rulesPath)
+	if err != nil {
+		panic("Failed to load rules.yaml for tests: " + err.Error())
+	}
+	if v, ok := rules[proto]; ok {
+		return v
+	}
+	return &validator.GenericValidator{}
+}
 
 func TestVLESSLink(t *testing.T) {
 	badWords := []string{"blocked"}
@@ -22,8 +37,7 @@ func TestVLESSLink(t *testing.T) {
 		}
 		return false, ""
 	}
-
-	link := NewVLESSLink(badWords, utils.IsValidHost, utils.IsValidPort, checkBadWords)
+	link := NewVLESSLink(badWords, utils.IsValidHost, utils.IsValidPort, checkBadWords, loadTestValidator("vless"))
 
 	tests := []struct {
 		name   string
@@ -33,13 +47,13 @@ func TestVLESSLink(t *testing.T) {
 	}{
 		{
 			"valid",
-			"vless://12345678-1234-1234-1234-123456789abc@example.com:443?security=tls&sni=example.com&encryption=aes-128-gcm#my-server",
+			"vless://12345678-1234-1234-1234-123456789abc@example.com:443?security=tls&sni=example.com&encryption=mlkem768x25519plus#my-server",
 			true,
 			"",
 		},
 		{
 			"valid with ws",
-			"vless://12345678-1234-1234-1234-123456789abc@example.com:443?security=tls&sni=example.com&encryption=aes-128-gcm&type=ws&path=%2Fwebsocket#my-server",
+			"vless://12345678-1234-1234-1234-123456789abc@example.com:443?security=tls&sni=example.com&encryption=mlkem768x25519plus&type=ws&path=%2Fwebsocket#my-server",
 			true,
 			"",
 		},
@@ -51,9 +65,15 @@ func TestVLESSLink(t *testing.T) {
 		},
 		{
 			"missing sni",
-			"vless://12345678-1234-1234-1234-123456789abc@example.com:443?security=tls&encryption=none",
+			"vless://12345678-1234-1234-1234-123456789abc@example.com:443?security=tls&encryption=mlkem768x25519plus",
 			false,
-			"sni is required",
+			"missing required parameter: sni",
+		},
+		{
+			"missing encryption",
+			"vless://12345678-1234-1234-1234-123456789abc@example.com:443?security=tls&sni=example.com",
+			false,
+			"missing required parameter: encryption",
 		},
 		{
 			"bad word in name",
@@ -65,10 +85,9 @@ func TestVLESSLink(t *testing.T) {
 			"security=none",
 			"vless://12345678-1234-1234-1234-123456789abc@example.com:443?security=none&sni=example.com&encryption=none",
 			false,
-			"security=none is not allowed",
+			"invalid value for security",
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, reason := link.Process(tt.input)

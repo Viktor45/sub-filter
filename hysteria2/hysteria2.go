@@ -1,24 +1,35 @@
 package hysteria2
 
 import (
-	"fmt"
 	"net"
 	"net/url"
 	"strconv"
 	"strings"
+
+	"sub-filter/internal/validator"
 )
 
 type Hysteria2Link struct {
 	badWords      []string
 	isValidHost   func(string) bool
 	checkBadWords func(string) (bool, string)
+	ruleValidator validator.Validator
 }
 
-func NewHysteria2Link(bw []string, vh func(string) bool, cb func(string) (bool, string)) *Hysteria2Link {
+func NewHysteria2Link(
+	bw []string,
+	vh func(string) bool,
+	cb func(string) (bool, string),
+	val validator.Validator,
+) *Hysteria2Link {
+	if val == nil {
+		val = &validator.GenericValidator{}
+	}
 	return &Hysteria2Link{
 		badWords:      bw,
 		isValidHost:   vh,
 		checkBadWords: cb,
+		ruleValidator: val,
 	}
 }
 
@@ -50,18 +61,19 @@ func (h *Hysteria2Link) Process(s string) (string, string) {
 	if hasBad, reason := h.checkBadWords(u.Fragment); hasBad {
 		return "", reason
 	}
+
 	q := u.Query()
-	obfs := q.Get("obfs")
-	if obfs == "" {
-		return "", "Hysteria2: obfs parameter is missing (required for public subscriptions)"
+	params := make(map[string]string, len(q))
+	for k, vs := range q {
+		if len(vs) > 0 {
+			params[k] = vs[0]
+		}
 	}
-	if obfs != "salamander" {
-		return "", fmt.Sprintf("Hysteria2: unsupported obfs method %q (only 'salamander' allowed)", obfs)
+
+	if result := h.ruleValidator.Validate(params); !result.Valid {
+		return "", "Hysteria2: " + result.Reason
 	}
-	obfsPassword := q.Get("obfs-password")
-	if obfsPassword == "" {
-		return "", "Hysteria2: obfs-password is missing (required when obfs is used)"
-	}
+
 	var buf strings.Builder
 	buf.WriteString(u.Scheme)
 	buf.WriteString("://")
