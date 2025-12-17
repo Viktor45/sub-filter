@@ -11,126 +11,50 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
 
-// CountryInfo представляет информацию о стране из countries.yaml.
+// CountryInfo — ПЛОСКАЯ структура, как в countries.yaml
 type CountryInfo struct {
-	CCA3       string                 `mapstructure:"cca3"`
-	Flag       string                 `mapstructure:"flag"`
-	Name       CountryNames           `mapstructure:"name"`
-	NativeName map[string]CountryName `mapstructure:"nativeName"`
+	CCA3   string `mapstructure:"cca3"`
+	Flag   string `mapstructure:"flag"`
+	Name   string `mapstructure:"name"`   // Common name only
+	Native string `mapstructure:"native"` // "A|B|C"
 }
 
-// CountryNames содержит официальное и обычное название страны.
-type CountryNames struct {
-	Common   string `mapstructure:"common"`
-	Official string `mapstructure:"official"`
-}
-
-type CountryName struct {
-	Common   string `mapstructure:"common"`
-	Official string `mapstructure:"official"`
-}
-
-type Name struct {
-	Common   string `json:"common"`
-	Official string `json:"official"`
-}
-
+// --- REST Countries API structs ---
 type Country struct {
-	Name       Name            `json:"name"`
-	NativeName map[string]Name `json:"nativeName"`
-	Cca2       string          `json:"cca2"`
-	Cca3       string          `json:"cca3"`
-	Flag       string          `json:"flag"`
+	Name struct {
+		Common     string `json:"common"`
+		Official   string `json:"official"`
+		NativeName map[string]struct {
+			Common   string `json:"common"`
+			Official string `json:"official"`
+		} `json:"nativeName"`
+	} `json:"name"`
+	Cca2 string `json:"cca2"`
+	Cca3 string `json:"cca3"`
+	Flag string `json:"flag"`
 }
 
 type CountryYAML struct {
-	CCA3       string          `yaml:"cca3"`
-	Flag       string          `yaml:"flag"`
-	Name       string          `yaml:"name"` // только common
-	NativeName map[string]Name `yaml:"nativeName,omitempty"`
+	CCA3   string `yaml:"cca3"`
+	Flag   string `yaml:"flag"`
+	Name   string `yaml:"name"`
+	Native string `yaml:"native,omitempty"`
 }
 
-// LoadCountries загружает информацию о странах из YAML-файла.
-func LoadCountries(filePath string) (map[string]CountryInfo, error) {
-	if filePath == "" {
-		return make(map[string]CountryInfo), nil // Пустая мапа, если файл не указан
-	}
-
-	viper.SetConfigFile(filePath)
-	ext := strings.ToLower(filepath.Ext(filePath))
-	if ext == ".yaml" || ext == ".yml" {
-		viper.SetConfigType("yaml")
-	}
-
-	if err := viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("failed to read countries file: %w", err)
-	}
-
-	var countries map[string]CountryInfo
-	if err := viper.Unmarshal(&countries); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal countries: %w", err)
-	}
-
-	return countries, nil
-}
-
-// GetCountryFilterStrings возвращает список строк (CCA3, Flag, Name), которые нужно искать
-// в фрагменте имени прокси-ссылки для заданного кода страны.
-// Возвращает пустой слайс, если код страны не найден.
-func GetCountryFilterStrings(countryCode string, countryMap map[string]CountryInfo) []string {
-	if countryCode == "" {
-		return []string{}
-	}
-	countryCode = strings.ToUpper(countryCode)
-	info, ok := countryMap[countryCode]
-	if !ok {
-		return []string{} // Код страны не найден, фильтровать нечем
-	}
-
-	var searchTerms []string
-	// Добавляем CCA3
-	searchTerms = append(searchTerms, info.CCA3)
-	// Добавляем Flag
-	searchTerms = append(searchTerms, info.Flag)
-	// Добавляем Common и Official из Name
-	searchTerms = append(searchTerms, info.Name.Common)
-	searchTerms = append(searchTerms, info.Name.Official)
-	// Добавляем Common и Official из NativeName
-	for _, nativeEntry := range info.NativeName {
-		searchTerms = append(searchTerms, nativeEntry.Common)
-		searchTerms = append(searchTerms, nativeEntry.Official)
-	}
-
-	// Удаляем дубликаты и пустые строки
+func dedupJoin(values []string) string {
 	seen := make(map[string]bool)
-	var uniqueSearchTerms []string
-	for _, term := range searchTerms {
-		if term != "" && !seen[term] {
-			seen[term] = true
-			uniqueSearchTerms = append(uniqueSearchTerms, term)
+	unique := []string{}
+	for _, v := range values {
+		if v == "" || seen[v] {
+			continue
 		}
+		seen[v] = true
+		unique = append(unique, v)
 	}
-
-	return uniqueSearchTerms
-}
-
-// IsFragmentMatchingCountry проверяет, содержит ли фрагмент (якорь #...) какие-либо из строк фильтрации страны.
-// Сравнение регистронезависимое.
-func IsFragmentMatchingCountry(fragment string, filterStrings []string) bool {
-	if len(filterStrings) == 0 {
-		return true // Если нет строк для фильтрации, всё подходит (режим "всё" или пустой код)
-	}
-	lowerFragment := strings.ToLower(FullyDecode(fragment))
-	for _, searchTerm := range filterStrings {
-		if strings.Contains(lowerFragment, strings.ToLower(searchTerm)) {
-			return true
-		}
-	}
-	return false
+	return strings.Join(unique, "|")
 }
 
 func GenerateCountries() {
@@ -139,49 +63,153 @@ func GenerateCountries() {
 		panic(err)
 	}
 	defer resp.Body.Close()
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		panic(err)
 	}
+
 	var countries []Country
 	if err := json.Unmarshal(body, &countries); err != nil {
 		panic(err)
 	}
-	countryMap := make(map[string]CountryYAML)
+
+	result := make(map[string]CountryYAML)
+
 	for _, c := range countries {
 		cca2 := strings.ToUpper(c.Cca2)
 		if cca2 == "" {
 			continue
 		}
-		countryMap[cca2] = CountryYAML{
-			CCA3:       strings.ToUpper(c.Cca3),
-			Flag:       c.Flag,
-			Name:       c.Name.Common,
-			NativeName: c.NativeName,
+
+		var nativeParts []string
+		for _, lang := range c.Name.NativeName {
+			nativeParts = append(nativeParts, lang.Common, lang.Official)
+		}
+
+		result[cca2] = CountryYAML{
+			CCA3:   strings.ToUpper(c.Cca3),
+			Flag:   c.Flag,
+			Name:   c.Name.Common,
+			Native: dedupJoin(nativeParts),
 		}
 	}
-	keys := make([]string, 0, len(countryMap))
-	for k := range countryMap {
+
+	keys := make([]string, 0, len(result))
+	for k := range result {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	sortedMap := make(map[string]CountryYAML)
+
+	sorted := make(map[string]CountryYAML)
 	for _, k := range keys {
-		sortedMap[k] = countryMap[k]
+		sorted[k] = result[k]
 	}
-	yamlData, err := yaml.Marshal(sortedMap)
+
+	out, err := yaml.Marshal(sorted)
 	if err != nil {
 		panic(err)
 	}
 
-	// 👇 ДОБАВЛЕНО: создание директории
 	configDir := "./config"
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
-		panic(fmt.Errorf("failed to create config dir: %w", err))
+		panic(fmt.Errorf("mkdir config: %w", err))
 	}
 
-	if err := os.WriteFile(filepath.Join(configDir, "countries.yaml"), yamlData, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(configDir, "countries.yaml"), out, 0o644); err != nil {
 		panic(err)
 	}
-	fmt.Println("countries.yaml created")
+
+	fmt.Println("✅ countries.yaml создан в требуемом формате")
+}
+
+func LoadCountries(filePath string) (map[string]CountryInfo, error) {
+	if filePath == "" {
+		return make(map[string]CountryInfo), nil
+	}
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read countries file: %w", err)
+	}
+
+	var countries map[string]CountryInfo
+	if err := yaml.Unmarshal(data, &countries); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal countries YAML: %w", err)
+	}
+
+	return countries, nil
+}
+
+func GetCountryFilterStrings(countryCode string, countryMap map[string]CountryInfo) []string {
+	if countryCode == "" {
+		return []string{}
+	}
+	countryCode = strings.ToUpper(countryCode)
+	info, ok := countryMap[countryCode]
+	if !ok {
+		return []string{}
+	}
+
+	var searchTerms []string
+
+	if info.CCA3 != "" {
+		searchTerms = append(searchTerms, info.CCA3)
+	}
+	if info.Flag != "" {
+		searchTerms = append(searchTerms, info.Flag)
+	}
+	if info.Name != "" {
+		searchTerms = append(searchTerms, info.Name)
+	}
+	if info.Native != "" {
+		parts := strings.Split(info.Native, "|")
+		for _, part := range parts {
+			if part != "" {
+				searchTerms = append(searchTerms, part)
+			}
+		}
+	}
+
+	seen := make(map[string]bool)
+	var unique []string
+	for _, term := range searchTerms {
+		lower := strings.ToLower(term)
+		if !seen[lower] {
+			seen[lower] = true
+			unique = append(unique, term)
+		}
+	}
+	return unique
+}
+
+func GetCountryFilterStringsForMultiple(codes []string, countryMap map[string]CountryInfo) []string {
+	if len(codes) == 0 {
+		return []string{}
+	}
+	var all []string
+	seen := make(map[string]bool)
+	for _, code := range codes {
+		terms := GetCountryFilterStrings(code, countryMap)
+		for _, t := range terms {
+			if t != "" && !seen[t] {
+				seen[t] = true
+				all = append(all, t)
+			}
+		}
+	}
+	return all
+}
+
+func IsFragmentMatchingCountry(fragment string, filterStrings []string) bool {
+	if len(filterStrings) == 0 {
+		return true
+	}
+	lowerFragment := strings.ToLower(FullyDecode(fragment))
+	for _, term := range filterStrings {
+		if strings.Contains(lowerFragment, strings.ToLower(term)) {
+			return true
+		}
+	}
+	return false
 }

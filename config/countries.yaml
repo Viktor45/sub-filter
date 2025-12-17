@@ -2,34 +2,42 @@ AD:
     cca3: AND
     flag: "\U0001F1E6\U0001F1E9"
     name: Andorra
+    native: Andorra|Principat d'Andorra
 AE:
     cca3: ARE
     flag: "\U0001F1E6\U0001F1EA"
     name: United Arab Emirates
+    native: دولة الإمارات العربية المتحدة|الإمارات العربية المتحدة
 AF:
     cca3: AFG
     flag: "\U0001F1E6\U0001F1EB"
     name: Afghanistan
+    native: افغانستان|جمهوری اسلامی افغانستان|د افغانستان اسلامي جمهوریت|Owganystan|Owganystan Yslam Respublikasy
 AG:
     cca3: ATG
     flag: "\U0001F1E6\U0001F1EC"
     name: Antigua and Barbuda
+    native: Antigua and Barbuda
 AI:
     cca3: AIA
     flag: "\U0001F1E6\U0001F1EE"
     name: Anguilla
+    native: Anguilla
 AL:
     cca3: ALB
     flag: "\U0001F1E6\U0001F1F1"
     name: Albania
+    native: Shqipëria|Republika e Shqipërisë
 AM:
     cca3: ARM
     flag: "\U0001F1E6\U0001F1F2"
     name: Armenia
+    native: Հայաստան|Հայաստանի Հանրապետություն
 AO:
     cca3: AGO
     flag: "\U0001F1E6\U0001F1F4"
     name: Angola
+    native: Angola|República de Angola
 AQ:
     cca3: ATA
     flag: "\U0001F1E6\U0001F1F6"
@@ -38,963 +46,1204 @@ AR:
     cca3: ARG
     flag: "\U0001F1E6\U0001F1F7"
     name: Argentina
+    native: Argentina|Argentine Republic|República Argentina
 AS:
     cca3: ASM
     flag: "\U0001F1E6\U0001F1F8"
     name: American Samoa
+    native: Sāmoa Amelika|American Samoa
 AT:
     cca3: AUT
     flag: "\U0001F1E6\U0001F1F9"
     name: Austria
+    native: Österreich|Republik Österreich
 AU:
     cca3: AUS
     flag: "\U0001F1E6\U0001F1FA"
     name: Australia
+    native: Australia|Commonwealth of Australia
 AW:
     cca3: ABW
     flag: "\U0001F1E6\U0001F1FC"
     name: Aruba
+    native: Aruba
 AX:
     cca3: ALA
     flag: "\U0001F1E6\U0001F1FD"
     name: Åland Islands
+    native: Åland|Landskapet Åland
 AZ:
     cca3: AZE
     flag: "\U0001F1E6\U0001F1FF"
     name: Azerbaijan
+    native: Azərbaycan|Azərbaycan Respublikası
 BA:
     cca3: BIH
     flag: "\U0001F1E7\U0001F1E6"
     name: Bosnia and Herzegovina
+    native: Bosna i Hercegovina|Босна и Херцеговина
 BB:
     cca3: BRB
     flag: "\U0001F1E7\U0001F1E7"
     name: Barbados
+    native: Barbados
 BD:
     cca3: BGD
     flag: "\U0001F1E7\U0001F1E9"
     name: Bangladesh
+    native: বাংলাদেশ|বাংলাদেশ গণপ্রজাতন্ত্রী
 BE:
     cca3: BEL
     flag: "\U0001F1E7\U0001F1EA"
     name: Belgium
+    native: Belgien|Königreich Belgien|Belgique|Royaume de Belgique|België|Koninkrijk België
 BF:
     cca3: BFA
     flag: "\U0001F1E7\U0001F1EB"
     name: Burkina Faso
+    native: Burkina Faso|République du Burkina
 BG:
     cca3: BGR
     flag: "\U0001F1E7\U0001F1EC"
     name: Bulgaria
+    native: България|Република България
 BH:
     cca3: BHR
     flag: "\U0001F1E7\U0001F1ED"
     name: Bahrain
+    native: ‏البحرين|مملكة البحرين
 BI:
     cca3: BDI
     flag: "\U0001F1E7\U0001F1EE"
     name: Burundi
+    native: 'Burundi|République du Burundi|Uburundi|Republika y''Uburundi '
 BJ:
     cca3: BEN
     flag: "\U0001F1E7\U0001F1EF"
     name: Benin
+    native: Bénin|République du Bénin
 BL:
     cca3: BLM
     flag: "\U0001F1E7\U0001F1F1"
     name: Saint Barthélemy
+    native: Saint-Barthélemy|Collectivité de Saint-Barthélemy
 BM:
     cca3: BMU
     flag: "\U0001F1E7\U0001F1F2"
     name: Bermuda
+    native: Bermuda
 BN:
     cca3: BRN
     flag: "\U0001F1E7\U0001F1F3"
     name: Brunei
+    native: Negara Brunei Darussalam|Nation of Brunei, Abode Damai
 BO:
     cca3: BOL
     flag: "\U0001F1E7\U0001F1F4"
     name: Bolivia
+    native: Wuliwya|Wuliwya Suyu|Volívia|Tetã Volívia|Buliwya|Buliwya Mamallaqta|Bolivia|Estado Plurinacional de Bolivia
 BQ:
     cca3: BES
     flag: "\U0001F1E7\U0001F1F6"
     name: Caribbean Netherlands
+    native: Caribisch Nederland|Bonaire, Sint Eustatius en Saba|Boneiru, Sint Eustatius y Saba
 BR:
     cca3: BRA
     flag: "\U0001F1E7\U0001F1F7"
     name: Brazil
+    native: Brasil|República Federativa do Brasil
 BS:
     cca3: BHS
     flag: "\U0001F1E7\U0001F1F8"
     name: Bahamas
+    native: Bahamas|Commonwealth of the Bahamas
 BT:
     cca3: BTN
     flag: "\U0001F1E7\U0001F1F9"
     name: Bhutan
+    native: འབྲུག་ཡུལ་|འབྲུག་རྒྱལ་ཁབ་
 BV:
     cca3: BVT
     flag: "\U0001F1E7\U0001F1FB"
     name: Bouvet Island
+    native: Bouvetøya
 BW:
     cca3: BWA
     flag: "\U0001F1E7\U0001F1FC"
     name: Botswana
+    native: Botswana|Republic of Botswana|Lefatshe la Botswana
 BY:
     cca3: BLR
     flag: "\U0001F1E7\U0001F1FE"
     name: Belarus
+    native: Беларусь|Республика Беларусь|Белару́сь|Рэспубліка Беларусь
 BZ:
     cca3: BLZ
     flag: "\U0001F1E7\U0001F1FF"
     name: Belize
+    native: Belize|Belice
 CA:
     cca3: CAN
     flag: "\U0001F1E8\U0001F1E6"
     name: Canada
+    native: Canada
 CC:
     cca3: CCK
     flag: "\U0001F1E8\U0001F1E8"
     name: Cocos (Keeling) Islands
+    native: Cocos (Keeling) Islands|Territory of the Cocos (Keeling) Islands
 CD:
     cca3: COD
     flag: "\U0001F1E8\U0001F1E9"
     name: DR Congo
+    native: RD Congo|République démocratique du Congo|Repubilika ya Kongo Demokratiki|Republiki ya Kongó Demokratiki|Ditunga dia Kongu wa Mungalaata|Jamhuri ya Kidemokrasia ya Kongo
 CF:
     cca3: CAF
     flag: "\U0001F1E8\U0001F1EB"
     name: Central African Republic
+    native: République centrafricaine|Bêafrîka|Ködörösêse tî Bêafrîka
 CG:
     cca3: COG
     flag: "\U0001F1E8\U0001F1EC"
     name: Republic of the Congo
+    native: Repubilika ya Kongo|Republíki ya Kongó|République du Congo
 CH:
     cca3: CHE
     flag: "\U0001F1E8\U0001F1ED"
     name: Switzerland
+    native: Suisse|Confédération suisse|Schweiz|Schweizerische Eidgenossenschaft|Svizzera|Confederazione Svizzera|Svizra|Confederaziun svizra
 CI:
     cca3: CIV
     flag: "\U0001F1E8\U0001F1EE"
     name: Ivory Coast
+    native: Côte d'Ivoire|République de Côte d'Ivoire
 CK:
     cca3: COK
     flag: "\U0001F1E8\U0001F1F0"
     name: Cook Islands
+    native: Cook Islands|Kūki 'Āirani
 CL:
     cca3: CHL
     flag: "\U0001F1E8\U0001F1F1"
     name: Chile
+    native: Chile|República de Chile
 CM:
     cca3: CMR
     flag: "\U0001F1E8\U0001F1F2"
     name: Cameroon
+    native: Cameroon|Republic of Cameroon|Cameroun|République du Cameroun
 CN:
     cca3: CHN
     flag: "\U0001F1E8\U0001F1F3"
     name: China
+    native: 中国|中华人民共和国
 CO:
     cca3: COL
     flag: "\U0001F1E8\U0001F1F4"
     name: Colombia
+    native: Colombia|República de Colombia
 CR:
     cca3: CRI
     flag: "\U0001F1E8\U0001F1F7"
     name: Costa Rica
+    native: Costa Rica|República de Costa Rica
 CU:
     cca3: CUB
     flag: "\U0001F1E8\U0001F1FA"
     name: Cuba
+    native: Cuba|República de Cuba
 CV:
     cca3: CPV
     flag: "\U0001F1E8\U0001F1FB"
     name: Cape Verde
+    native: Cabo Verde|República de Cabo Verde
 CW:
     cca3: CUW
     flag: "\U0001F1E8\U0001F1FC"
     name: Curaçao
+    native: Curaçao|Country of Curaçao|Land Curaçao|Pais Kòrsou
 CX:
     cca3: CXR
     flag: "\U0001F1E8\U0001F1FD"
     name: Christmas Island
+    native: Christmas Island|Territory of Christmas Island
 CY:
     cca3: CYP
     flag: "\U0001F1E8\U0001F1FE"
     name: Cyprus
+    native: Κύπρος|Δημοκρατία της Κύπρος|Kıbrıs|Kıbrıs Cumhuriyeti
 CZ:
     cca3: CZE
     flag: "\U0001F1E8\U0001F1FF"
     name: Czechia
+    native: Česko|Česká republika
 DE:
     cca3: DEU
     flag: "\U0001F1E9\U0001F1EA"
     name: Germany
+    native: Deutschland|Bundesrepublik Deutschland
 DJ:
     cca3: DJI
     flag: "\U0001F1E9\U0001F1EF"
     name: Djibouti
+    native: جيبوتي‎|جمهورية جيبوتي|Djibouti|République de Djibouti
 DK:
     cca3: DNK
     flag: "\U0001F1E9\U0001F1F0"
     name: Denmark
+    native: Danmark|Kongeriget Danmark
 DM:
     cca3: DMA
     flag: "\U0001F1E9\U0001F1F2"
     name: Dominica
+    native: Dominica|Commonwealth of Dominica
 DO:
     cca3: DOM
     flag: "\U0001F1E9\U0001F1F4"
     name: Dominican Republic
+    native: República Dominicana
 DZ:
     cca3: DZA
     flag: "\U0001F1E9\U0001F1FF"
     name: Algeria
+    native: الجزائر|الجمهورية الديمقراطية الشعبية الجزائرية
 EC:
     cca3: ECU
     flag: "\U0001F1EA\U0001F1E8"
     name: Ecuador
+    native: Ecuador|República del Ecuador
 EE:
     cca3: EST
     flag: "\U0001F1EA\U0001F1EA"
     name: Estonia
+    native: Eesti|Eesti Vabariik
 EG:
     cca3: EGY
     flag: "\U0001F1EA\U0001F1EC"
     name: Egypt
+    native: مصر|جمهورية مصر العربية
 EH:
     cca3: ESH
     flag: "\U0001F1EA\U0001F1ED"
     name: Western Sahara
+    native: Western Sahara|Sahrawi Arab Democratic Republic|الصحراء الغربية|الجمهورية العربية الصحراوية الديمقراطية|Sahara Occidental|República Árabe Saharaui Democrática
 ER:
     cca3: ERI
     flag: "\U0001F1EA\U0001F1F7"
     name: Eritrea
+    native: إرتريا‎|دولة إرتريا|Eritrea|State of Eritrea|ኤርትራ|ሃገረ ኤርትራ
 ES:
     cca3: ESP
     flag: "\U0001F1EA\U0001F1F8"
     name: Spain
+    native: España|Reino de España
 ET:
     cca3: ETH
     flag: "\U0001F1EA\U0001F1F9"
     name: Ethiopia
+    native: ኢትዮጵያ|የኢትዮጵያ ፌዴራላዊ ዲሞክራሲያዊ ሪፐብሊክ
 FI:
     cca3: FIN
     flag: "\U0001F1EB\U0001F1EE"
     name: Finland
+    native: Suomi|Suomen tasavalta|Finland|Republiken Finland
 FJ:
     cca3: FJI
     flag: "\U0001F1EB\U0001F1EF"
     name: Fiji
+    native: फिजी|रिपब्लिक ऑफ फीजी|Fiji|Republic of Fiji|Viti|Matanitu Tugalala o Viti
 FK:
     cca3: FLK
     flag: "\U0001F1EB\U0001F1F0"
     name: Falkland Islands
+    native: Falkland Islands
 FM:
     cca3: FSM
     flag: "\U0001F1EB\U0001F1F2"
     name: Micronesia
+    native: Micronesia|Federated States of Micronesia
 FO:
     cca3: FRO
     flag: "\U0001F1EB\U0001F1F4"
     name: Faroe Islands
+    native: Færøerne|Føroyar
 FR:
     cca3: FRA
     flag: "\U0001F1EB\U0001F1F7"
     name: France
+    native: France|République française
 GA:
     cca3: GAB
     flag: "\U0001F1EC\U0001F1E6"
     name: Gabon
+    native: Gabon|République gabonaise
 GB:
     cca3: GBR
     flag: "\U0001F1EC\U0001F1E7"
     name: United Kingdom
+    native: United Kingdom|United Kingdom of Great Britain and Northern Ireland
 GD:
     cca3: GRD
     flag: "\U0001F1EC\U0001F1E9"
     name: Grenada
+    native: Grenada
 GE:
     cca3: GEO
     flag: "\U0001F1EC\U0001F1EA"
     name: Georgia
+    native: საქართველო
 GF:
     cca3: GUF
     flag: "\U0001F1EC\U0001F1EB"
     name: French Guiana
+    native: Guyane française|Guyane
 GG:
     cca3: GGY
     flag: "\U0001F1EC\U0001F1EC"
     name: Guernsey
+    native: Guernsey|Bailiwick of Guernsey|Guernesey|Bailliage de Guernesey|Dgèrnésiais
 GH:
     cca3: GHA
     flag: "\U0001F1EC\U0001F1ED"
     name: Ghana
+    native: Ghana|Republic of Ghana
 GI:
     cca3: GIB
     flag: "\U0001F1EC\U0001F1EE"
     name: Gibraltar
+    native: Gibraltar
 GL:
     cca3: GRL
     flag: "\U0001F1EC\U0001F1F1"
     name: Greenland
+    native: Kalaallit Nunaat
 GM:
     cca3: GMB
     flag: "\U0001F1EC\U0001F1F2"
     name: Gambia
+    native: Gambia|Republic of the Gambia
 GN:
     cca3: GIN
     flag: "\U0001F1EC\U0001F1F3"
     name: Guinea
+    native: Guinée|République de Guinée
 GP:
     cca3: GLP
     flag: "\U0001F1EC\U0001F1F5"
     name: Guadeloupe
+    native: Guadeloupe
 GQ:
     cca3: GNQ
     flag: "\U0001F1EC\U0001F1F6"
     name: Equatorial Guinea
+    native: Guiné Equatorial|República da Guiné Equatorial|Guinea Ecuatorial|República de Guinea Ecuatorial|Guinée équatoriale|République de la Guinée Équatoriale
 GR:
     cca3: GRC
     flag: "\U0001F1EC\U0001F1F7"
     name: Greece
+    native: Ελλάδα|Ελληνική Δημοκρατία
 GS:
     cca3: SGS
     flag: "\U0001F1EC\U0001F1F8"
     name: South Georgia
+    native: South Georgia|South Georgia and the South Sandwich Islands
 GT:
     cca3: GTM
     flag: "\U0001F1EC\U0001F1F9"
     name: Guatemala
+    native: Guatemala|República de Guatemala
 GU:
     cca3: GUM
     flag: "\U0001F1EC\U0001F1FA"
     name: Guam
+    native: Guam|Guåhån
 GW:
     cca3: GNB
     flag: "\U0001F1EC\U0001F1FC"
     name: Guinea-Bissau
+    native: Guiné-Bissau|República da Guiné-Bissau
 GY:
     cca3: GUY
     flag: "\U0001F1EC\U0001F1FE"
     name: Guyana
+    native: Guyana|Co-operative Republic of Guyana
 HK:
     cca3: HKG
     flag: "\U0001F1ED\U0001F1F0"
     name: Hong Kong
+    native: 香港|中华人民共和国香港特别行政区|Hong Kong|Hong Kong Special Administrative Region of the People's Republic of China
 HM:
     cca3: HMD
     flag: "\U0001F1ED\U0001F1F2"
     name: Heard Island and McDonald Islands
+    native: Heard Island and McDonald Islands
 HN:
     cca3: HND
     flag: "\U0001F1ED\U0001F1F3"
     name: Honduras
+    native: Honduras|República de Honduras
 HR:
     cca3: HRV
     flag: "\U0001F1ED\U0001F1F7"
     name: Croatia
+    native: Hrvatska|Republika Hrvatska
 HT:
     cca3: HTI
     flag: "\U0001F1ED\U0001F1F9"
     name: Haiti
+    native: Haïti|République d'Haïti|Ayiti|Repiblik Ayiti
 HU:
     cca3: HUN
     flag: "\U0001F1ED\U0001F1FA"
     name: Hungary
+    native: Magyarország
 ID:
     cca3: IDN
     flag: "\U0001F1EE\U0001F1E9"
     name: Indonesia
+    native: Indonesia|Republik Indonesia
 IE:
     cca3: IRL
     flag: "\U0001F1EE\U0001F1EA"
     name: Ireland
+    native: Ireland|Republic of Ireland|Éire|Poblacht na hÉireann
 IL:
     cca3: ISR
     flag: "\U0001F1EE\U0001F1F1"
     name: Israel
+    native: إسرائيل|دولة إسرائيل|ישראל|מדינת ישראל
 IM:
     cca3: IMN
     flag: "\U0001F1EE\U0001F1F2"
     name: Isle of Man
+    native: Isle of Man|Mannin|Ellan Vannin or Mannin
 IN:
     cca3: IND
     flag: "\U0001F1EE\U0001F1F3"
     name: India
+    native: India|Republic of India|भारत|भारत गणराज्य|இந்தியா|இந்தியக் குடியரசு
 IO:
     cca3: IOT
     flag: "\U0001F1EE\U0001F1F4"
     name: British Indian Ocean Territory
+    native: British Indian Ocean Territory
 IQ:
     cca3: IRQ
     flag: "\U0001F1EE\U0001F1F6"
     name: Iraq
+    native: العراق|جمهورية العراق|ܩܘܼܛܢܵܐ|ܩܘܼܛܢܵܐ ܐܝܼܪܲܩ|کۆماری|کۆماری عێراق
 IR:
     cca3: IRN
     flag: "\U0001F1EE\U0001F1F7"
     name: Iran
+    native: ایران|جمهوری اسلامی ایران
 IS:
     cca3: ISL
     flag: "\U0001F1EE\U0001F1F8"
     name: Iceland
+    native: Ísland
 IT:
     cca3: ITA
     flag: "\U0001F1EE\U0001F1F9"
     name: Italy
+    native: Italia|Repubblica italiana
 JE:
     cca3: JEY
     flag: "\U0001F1EF\U0001F1EA"
     name: Jersey
+    native: Jersey|Bailiwick of Jersey|Bailliage de Jersey|Jèrri|Bailliage dé Jèrri
 JM:
     cca3: JAM
     flag: "\U0001F1EF\U0001F1F2"
     name: Jamaica
+    native: Jamaica
 JO:
     cca3: JOR
     flag: "\U0001F1EF\U0001F1F4"
     name: Jordan
+    native: الأردن|المملكة الأردنية الهاشمية
 JP:
     cca3: JPN
     flag: "\U0001F1EF\U0001F1F5"
     name: Japan
+    native: 日本
 KE:
     cca3: KEN
     flag: "\U0001F1F0\U0001F1EA"
     name: Kenya
+    native: Kenya|Republic of Kenya
 KG:
     cca3: KGZ
     flag: "\U0001F1F0\U0001F1EC"
     name: Kyrgyzstan
+    native: Кыргызстан|Кыргыз Республикасы|Киргизия|Кыргызская Республика
 KH:
     cca3: KHM
     flag: "\U0001F1F0\U0001F1ED"
     name: Cambodia
+    native: Kâmpŭchéa|ព្រះរាជាណាចក្រកម្ពុជា
 KI:
     cca3: KIR
     flag: "\U0001F1F0\U0001F1EE"
     name: Kiribati
+    native: Kiribati|Independent and Sovereign Republic of Kiribati|Ribaberiki Kiribati
 KM:
     cca3: COM
     flag: "\U0001F1F0\U0001F1F2"
     name: Comoros
+    native: القمر‎|الاتحاد القمري|Comores|Union des Comores|Komori|Udzima wa Komori
 KN:
     cca3: KNA
     flag: "\U0001F1F0\U0001F1F3"
     name: Saint Kitts and Nevis
+    native: Saint Kitts and Nevis|Federation of Saint Christopher and Nevis
 KP:
     cca3: PRK
     flag: "\U0001F1F0\U0001F1F5"
     name: North Korea
+    native: 조선|조선민주주의인민공화국
 KR:
     cca3: KOR
     flag: "\U0001F1F0\U0001F1F7"
     name: South Korea
+    native: 한국|대한민국
 KW:
     cca3: KWT
     flag: "\U0001F1F0\U0001F1FC"
     name: Kuwait
+    native: الكويت|دولة الكويت
 KY:
     cca3: CYM
     flag: "\U0001F1F0\U0001F1FE"
     name: Cayman Islands
+    native: Cayman Islands
 KZ:
     cca3: KAZ
     flag: "\U0001F1F0\U0001F1FF"
     name: Kazakhstan
+    native: Қазақстан|Қазақстан Республикасы|Казахстан|Республика Казахстан
 LA:
     cca3: LAO
     flag: "\U0001F1F1\U0001F1E6"
     name: Laos
+    native: ສປປລາວ|ສາທາລະນະ ຊາທິປະໄຕ ຄົນລາວ ຂອງ
 LB:
     cca3: LBN
     flag: "\U0001F1F1\U0001F1E7"
     name: Lebanon
+    native: لبنان|الجمهورية اللبنانية|Liban|République libanaise
 LC:
     cca3: LCA
     flag: "\U0001F1F1\U0001F1E8"
     name: Saint Lucia
+    native: Saint Lucia
 LI:
     cca3: LIE
     flag: "\U0001F1F1\U0001F1EE"
     name: Liechtenstein
+    native: Liechtenstein|Fürstentum Liechtenstein
 LK:
     cca3: LKA
     flag: "\U0001F1F1\U0001F1F0"
     name: Sri Lanka
+    native: ශ්‍රී ලංකාව|ශ්‍රී ලංකා ප්‍රජාතාන්ත්‍රික සමාජවාදී ජනරජය|இலங்கை|இலங்கை சனநாயக சோசலிசக் குடியரசு
 LR:
     cca3: LBR
     flag: "\U0001F1F1\U0001F1F7"
     name: Liberia
+    native: Liberia|Republic of Liberia
 LS:
     cca3: LSO
     flag: "\U0001F1F1\U0001F1F8"
     name: Lesotho
+    native: Lesotho|Kingdom of Lesotho
 LT:
     cca3: LTU
     flag: "\U0001F1F1\U0001F1F9"
     name: Lithuania
+    native: Lietuva|Lietuvos Respublikos
 LU:
     cca3: LUX
     flag: "\U0001F1F1\U0001F1FA"
     name: Luxembourg
+    native: Luxemburg|Großherzogtum Luxemburg|Luxembourg|Grand-Duché de Luxembourg|Lëtzebuerg|Groussherzogtum Lëtzebuerg
 LV:
     cca3: LVA
     flag: "\U0001F1F1\U0001F1FB"
     name: Latvia
+    native: Latvija|Latvijas Republikas
 LY:
     cca3: LBY
     flag: "\U0001F1F1\U0001F1FE"
     name: Libya
+    native: ‏ليبيا|الدولة ليبيا
 MA:
     cca3: MAR
     flag: "\U0001F1F2\U0001F1E6"
     name: Morocco
+    native: المغرب|المملكة المغربية|ⵍⵎⴰⵖⵔⵉⴱ|ⵜⴰⴳⵍⴷⵉⵜ ⵏ ⵍⵎⵖⵔⵉⴱ
 MC:
     cca3: MCO
     flag: "\U0001F1F2\U0001F1E8"
     name: Monaco
+    native: Monaco|Principauté de Monaco
 MD:
     cca3: MDA
     flag: "\U0001F1F2\U0001F1E9"
     name: Moldova
+    native: Moldova|Republica Moldova
 ME:
     cca3: MNE
     flag: "\U0001F1F2\U0001F1EA"
     name: Montenegro
+    native: Црна Гора
 MF:
     cca3: MAF
     flag: "\U0001F1F2\U0001F1EB"
     name: Saint Martin
+    native: Saint-Martin
 MG:
     cca3: MDG
     flag: "\U0001F1F2\U0001F1EC"
     name: Madagascar
+    native: Madagasikara|Repoblikan'i Madagasikara|Madagascar|République de Madagascar
 MH:
     cca3: MHL
     flag: "\U0001F1F2\U0001F1ED"
     name: Marshall Islands
+    native: Marshall Islands|Republic of the Marshall Islands|M̧ajeļ
 MK:
     cca3: MKD
     flag: "\U0001F1F2\U0001F1F0"
     name: North Macedonia
+    native: Македонија|Република Северна Македонија
 ML:
     cca3: MLI
     flag: "\U0001F1F2\U0001F1F1"
     name: Mali
+    native: Mali|République du Mali
 MM:
     cca3: MMR
     flag: "\U0001F1F2\U0001F1F2"
     name: Myanmar
+    native: မြန်မာ|ပြည်ထောင်စု သမ္မတ မြန်မာနိုင်ငံတော်
 MN:
     cca3: MNG
     flag: "\U0001F1F2\U0001F1F3"
     name: Mongolia
+    native: Монгол улс
 MO:
     cca3: MAC
     flag: "\U0001F1F2\U0001F1F4"
     name: Macau
+    native: Macau|Região Administrativa Especial de Macau da República Popular da China|澳门|中华人民共和国澳门特别行政区
 MP:
     cca3: MNP
     flag: "\U0001F1F2\U0001F1F5"
     name: Northern Mariana Islands
+    native: Northern Mariana Islands|Commonwealth of the Northern Mariana Islands|Na Islas Mariånas|Sankattan Siha Na Islas Mariånas
 MQ:
     cca3: MTQ
     flag: "\U0001F1F2\U0001F1F6"
     name: Martinique
+    native: Martinique
 MR:
     cca3: MRT
     flag: "\U0001F1F2\U0001F1F7"
     name: Mauritania
+    native: موريتانيا|الجمهورية الإسلامية الموريتانية
 MS:
     cca3: MSR
     flag: "\U0001F1F2\U0001F1F8"
     name: Montserrat
+    native: Montserrat
 MT:
     cca3: MLT
     flag: "\U0001F1F2\U0001F1F9"
     name: Malta
+    native: Malta|Republic of Malta|Repubblika ta ' Malta
 MU:
     cca3: MUS
     flag: "\U0001F1F2\U0001F1FA"
     name: Mauritius
+    native: Moris|Republik Moris|Mauritius|Republic of Mauritius|Maurice|République de Maurice
 MV:
     cca3: MDV
     flag: "\U0001F1F2\U0001F1FB"
     name: Maldives
+    native: ދިވެހިރާއްޖޭގެ|ދިވެހިރާއްޖޭގެ ޖުމްހޫރިއްޔާ
 MW:
     cca3: MWI
     flag: "\U0001F1F2\U0001F1FC"
     name: Malawi
+    native: Malawi|Republic of Malawi|Malaŵi|Chalo cha Malawi, Dziko la Malaŵi
 MX:
     cca3: MEX
     flag: "\U0001F1F2\U0001F1FD"
     name: Mexico
+    native: México|Estados Unidos Mexicanos
 MY:
     cca3: MYS
     flag: "\U0001F1F2\U0001F1FE"
     name: Malaysia
+    native: مليسيا|Malaysia
 MZ:
     cca3: MOZ
     flag: "\U0001F1F2\U0001F1FF"
     name: Mozambique
+    native: Moçambique|República de Moçambique
 NA:
     cca3: NAM
     flag: "\U0001F1F3\U0001F1E6"
     name: Namibia
+    native: Namibia|Republik Namibia|Republic of Namibia|Lefatshe la Namibia|Namibië|Republiek van Namibië
 NC:
     cca3: NCL
     flag: "\U0001F1F3\U0001F1E8"
     name: New Caledonia
+    native: Nouvelle-Calédonie
 NE:
     cca3: NER
     flag: "\U0001F1F3\U0001F1EA"
     name: Niger
+    native: Niger|République du Niger
 NF:
     cca3: NFK
     flag: "\U0001F1F3\U0001F1EB"
     name: Norfolk Island
+    native: Norfolk Island|Territory of Norfolk Island|Norf'k Ailen|Teratri of Norf'k Ailen
 NG:
     cca3: NGA
     flag: "\U0001F1F3\U0001F1EC"
     name: Nigeria
+    native: Nigeria|Federal Republic of Nigeria
 NI:
     cca3: NIC
     flag: "\U0001F1F3\U0001F1EE"
     name: Nicaragua
+    native: Nicaragua|República de Nicaragua
 NL:
     cca3: NLD
     flag: "\U0001F1F3\U0001F1F1"
     name: Netherlands
+    native: Nederland|Koninkrijk der Nederlanden
 "NO":
     cca3: NOR
     flag: "\U0001F1F3\U0001F1F4"
     name: Norway
+    native: Noreg|Kongeriket Noreg|Norge|Kongeriket Norge|Norgga|Norgga gonagasriika
 NP:
     cca3: NPL
     flag: "\U0001F1F3\U0001F1F5"
     name: Nepal
+    native: नेपाल|नेपाल संघीय लोकतान्त्रिक गणतन्त्र
 NR:
     cca3: NRU
     flag: "\U0001F1F3\U0001F1F7"
     name: Nauru
+    native: Nauru|Republic of Nauru
 NU:
     cca3: NIU
     flag: "\U0001F1F3\U0001F1FA"
     name: Niue
+    native: Niuē|Niue
 NZ:
     cca3: NZL
     flag: "\U0001F1F3\U0001F1FF"
     name: New Zealand
+    native: New Zealand|Aotearoa
 OM:
     cca3: OMN
     flag: "\U0001F1F4\U0001F1F2"
     name: Oman
+    native: عمان|سلطنة عمان
 PA:
     cca3: PAN
     flag: "\U0001F1F5\U0001F1E6"
     name: Panama
+    native: Panamá|República de Panamá
 PE:
     cca3: PER
     flag: "\U0001F1F5\U0001F1EA"
     name: Peru
+    native: Piruw|Piruw Ripuwlika|Perú|República del Perú|Piruw Suyu
 PF:
     cca3: PYF
     flag: "\U0001F1F5\U0001F1EB"
     name: French Polynesia
+    native: Polynésie française
 PG:
     cca3: PNG
     flag: "\U0001F1F5\U0001F1EC"
     name: Papua New Guinea
+    native: Papua New Guinea|Independent State of Papua New Guinea|Papua Niu Gini|Independen Stet bilong Papua Niugini|Papua Niugini
 PH:
     cca3: PHL
     flag: "\U0001F1F5\U0001F1ED"
     name: Philippines
+    native: Philippines|Republic of the Philippines|Pilipinas
 PK:
     cca3: PAK
     flag: "\U0001F1F5\U0001F1F0"
     name: Pakistan
+    native: پاكستان|اسلامی جمہوریۂ پاكستان|Pakistan|Islamic Republic of Pakistan
 PL:
     cca3: POL
     flag: "\U0001F1F5\U0001F1F1"
     name: Poland
+    native: Polska|Rzeczpospolita Polska
 PM:
     cca3: SPM
     flag: "\U0001F1F5\U0001F1F2"
     name: Saint Pierre and Miquelon
+    native: Saint-Pierre-et-Miquelon|Collectivité territoriale de Saint-Pierre-et-Miquelon
 PN:
     cca3: PCN
     flag: "\U0001F1F5\U0001F1F3"
     name: Pitcairn Islands
+    native: Pitcairn Islands|Pitcairn Group of Islands
 PR:
     cca3: PRI
     flag: "\U0001F1F5\U0001F1F7"
     name: Puerto Rico
+    native: Puerto Rico|Commonwealth of Puerto Rico|Estado Libre Asociado de Puerto Rico
 PS:
     cca3: PSE
     flag: "\U0001F1F5\U0001F1F8"
     name: Palestine
+    native: فلسطين|دولة فلسطين
 PT:
     cca3: PRT
     flag: "\U0001F1F5\U0001F1F9"
     name: Portugal
+    native: Portugal|República Portuguesa
 PW:
     cca3: PLW
     flag: "\U0001F1F5\U0001F1FC"
     name: Palau
+    native: Palau|Republic of Palau|Belau|Beluu er a Belau
 PY:
     cca3: PRY
     flag: "\U0001F1F5\U0001F1FE"
     name: Paraguay
+    native: Paraguái|Tetã Paraguái|Paraguay|República de Paraguay
 QA:
     cca3: QAT
     flag: "\U0001F1F6\U0001F1E6"
     name: Qatar
+    native: قطر|دولة قطر
 RE:
     cca3: REU
     flag: "\U0001F1F7\U0001F1EA"
     name: Réunion
+    native: La Réunion|Ile de la Réunion
 RO:
     cca3: ROU
     flag: "\U0001F1F7\U0001F1F4"
     name: Romania
+    native: România
 RS:
     cca3: SRB
     flag: "\U0001F1F7\U0001F1F8"
     name: Serbia
+    native: Србија|Република Србија
 RU:
     cca3: RUS
     flag: "\U0001F1F7\U0001F1FA"
     name: Russia
+    native: Россия|Российская Федерация
 RW:
     cca3: RWA
     flag: "\U0001F1F7\U0001F1FC"
     name: Rwanda
+    native: Rwanda|Republic of Rwanda|République rwandaise|Repubulika y'u Rwanda
 SA:
     cca3: SAU
     flag: "\U0001F1F8\U0001F1E6"
     name: Saudi Arabia
+    native: العربية السعودية|المملكة العربية السعودية
 SB:
     cca3: SLB
     flag: "\U0001F1F8\U0001F1E7"
     name: Solomon Islands
+    native: Solomon Islands
 SC:
     cca3: SYC
     flag: "\U0001F1F8\U0001F1E8"
     name: Seychelles
+    native: Sesel|Repiblik Sesel|Seychelles|Republic of Seychelles|République des Seychelles
 SD:
     cca3: SDN
     flag: "\U0001F1F8\U0001F1E9"
     name: Sudan
+    native: السودان|جمهورية السودان|Sudan|Republic of the Sudan
 SE:
     cca3: SWE
     flag: "\U0001F1F8\U0001F1EA"
     name: Sweden
+    native: Sverige|Konungariket Sverige
 SG:
     cca3: SGP
     flag: "\U0001F1F8\U0001F1EC"
     name: Singapore
+    native: Singapore|Republic of Singapore|新加坡|新加坡共和国|Singapura|Republik Singapura|சிங்கப்பூர்|சிங்கப்பூர் குடியரசு
 SH:
     cca3: SHN
     flag: "\U0001F1F8\U0001F1ED"
     name: Saint Helena, Ascension and Tristan da Cunha
+    native: Saint Helena, Ascension and Tristan da Cunha
 SI:
     cca3: SVN
     flag: "\U0001F1F8\U0001F1EE"
     name: Slovenia
+    native: Slovenija|Republika Slovenija
 SJ:
     cca3: SJM
     flag: "\U0001F1F8\U0001F1EF"
     name: Svalbard and Jan Mayen
+    native: Svalbard og Jan Mayen
 SK:
     cca3: SVK
     flag: "\U0001F1F8\U0001F1F0"
     name: Slovakia
+    native: Slovensko|Slovenská republika
 SL:
     cca3: SLE
     flag: "\U0001F1F8\U0001F1F1"
     name: Sierra Leone
+    native: Sierra Leone|Republic of Sierra Leone
 SM:
     cca3: SMR
     flag: "\U0001F1F8\U0001F1F2"
     name: San Marino
+    native: San Marino|Repubblica di San Marino
 SN:
     cca3: SEN
     flag: "\U0001F1F8\U0001F1F3"
     name: Senegal
+    native: Sénégal|République du Sénégal
 SO:
     cca3: SOM
     flag: "\U0001F1F8\U0001F1F4"
     name: Somalia
+    native: الصومال‎‎|جمهورية الصومال‎‎|Soomaaliya|Jamhuuriyadda Federaalka Soomaaliya
 SR:
     cca3: SUR
     flag: "\U0001F1F8\U0001F1F7"
     name: Suriname
+    native: Suriname|Republiek Suriname
 SS:
     cca3: SSD
     flag: "\U0001F1F8\U0001F1F8"
     name: South Sudan
+    native: South Sudan|Republic of South Sudan
 ST:
     cca3: STP
     flag: "\U0001F1F8\U0001F1F9"
     name: São Tomé and Príncipe
+    native: São Tomé e Príncipe|República Democrática do São Tomé e Príncipe
 SV:
     cca3: SLV
     flag: "\U0001F1F8\U0001F1FB"
     name: El Salvador
+    native: El Salvador|República de El Salvador
 SX:
     cca3: SXM
     flag: "\U0001F1F8\U0001F1FD"
     name: Sint Maarten
+    native: Sint Maarten|Saint-Martin
 SY:
     cca3: SYR
     flag: "\U0001F1F8\U0001F1FE"
     name: Syria
+    native: سوريا|الجمهورية العربية السورية
 SZ:
     cca3: SWZ
     flag: "\U0001F1F8\U0001F1FF"
     name: Eswatini
+    native: Eswatini|Kingdom of Eswatini|eSwatini|Umbuso weSwatini
 TC:
     cca3: TCA
     flag: "\U0001F1F9\U0001F1E8"
     name: Turks and Caicos Islands
+    native: Turks and Caicos Islands
 TD:
     cca3: TCD
     flag: "\U0001F1F9\U0001F1E9"
     name: Chad
+    native: تشاد‎|جمهورية تشاد|Tchad|République du Tchad
 TF:
     cca3: ATF
     flag: "\U0001F1F9\U0001F1EB"
     name: French Southern and Antarctic Lands
+    native: Terres australes et antarctiques françaises|Territoire des Terres australes et antarctiques françaises
 TG:
     cca3: TGO
     flag: "\U0001F1F9\U0001F1EC"
     name: Togo
+    native: Togo|République togolaise
 TH:
     cca3: THA
     flag: "\U0001F1F9\U0001F1ED"
     name: Thailand
+    native: ประเทศไทย|ราชอาณาจักรไทย
 TJ:
     cca3: TJK
     flag: "\U0001F1F9\U0001F1EF"
     name: Tajikistan
+    native: Таджикистан|Республика Таджикистан|Тоҷикистон|Ҷумҳурии Тоҷикистон
 TK:
     cca3: TKL
     flag: "\U0001F1F9\U0001F1F0"
     name: Tokelau
+    native: Tokelau
 TL:
     cca3: TLS
     flag: "\U0001F1F9\U0001F1F1"
     name: Timor-Leste
+    native: Timor-Leste|República Democrática de Timor-Leste|Timór-Leste|Repúblika Demokrátika Timór-Leste
 TM:
     cca3: TKM
     flag: "\U0001F1F9\U0001F1F2"
     name: Turkmenistan
+    native: Туркмения|Туркменистан|Türkmenistan
 TN:
     cca3: TUN
     flag: "\U0001F1F9\U0001F1F3"
     name: Tunisia
+    native: تونس|الجمهورية التونسية
 TO:
     cca3: TON
     flag: "\U0001F1F9\U0001F1F4"
     name: Tonga
+    native: Tonga|Kingdom of Tonga
 TR:
     cca3: TUR
     flag: "\U0001F1F9\U0001F1F7"
     name: Turkey
+    native: Türkiye|Türkiye Cumhuriyeti
 TT:
     cca3: TTO
     flag: "\U0001F1F9\U0001F1F9"
     name: Trinidad and Tobago
+    native: Trinidad and Tobago|Republic of Trinidad and Tobago
 TV:
     cca3: TUV
     flag: "\U0001F1F9\U0001F1FB"
     name: Tuvalu
+    native: Tuvalu
 TW:
     cca3: TWN
     flag: "\U0001F1F9\U0001F1FC"
     name: Taiwan
+    native: 台灣|中華民國
 TZ:
     cca3: TZA
     flag: "\U0001F1F9\U0001F1FF"
     name: Tanzania
+    native: Tanzania|United Republic of Tanzania|Jamhuri ya Muungano wa Tanzania
 UA:
     cca3: UKR
     flag: "\U0001F1FA\U0001F1E6"
     name: Ukraine
+    native: Україна
 UG:
     cca3: UGA
     flag: "\U0001F1FA\U0001F1EC"
     name: Uganda
+    native: Uganda|Republic of Uganda
 UM:
     cca3: UMI
     flag: "\U0001F1FA\U0001F1F2"
     name: United States Minor Outlying Islands
+    native: United States Minor Outlying Islands
 US:
     cca3: USA
     flag: "\U0001F1FA\U0001F1F8"
     name: United States
+    native: United States|United States of America
 UY:
     cca3: URY
     flag: "\U0001F1FA\U0001F1FE"
     name: Uruguay
+    native: Uruguay|República Oriental del Uruguay
 UZ:
     cca3: UZB
     flag: "\U0001F1FA\U0001F1FF"
     name: Uzbekistan
+    native: O‘zbekiston|O'zbekiston Respublikasi|Узбекистан|Республика Узбекистан
 VA:
     cca3: VAT
     flag: "\U0001F1FB\U0001F1E6"
     name: Vatican City
+    native: Vaticano|Stato della Città del Vaticano|Vaticanæ|Status Civitatis Vaticanæ
 VC:
     cca3: VCT
     flag: "\U0001F1FB\U0001F1E8"
     name: Saint Vincent and the Grenadines
+    native: Saint Vincent and the Grenadines
 VE:
     cca3: VEN
     flag: "\U0001F1FB\U0001F1EA"
     name: Venezuela
+    native: Venezuela|República Bolivariana de Venezuela
 VG:
     cca3: VGB
     flag: "\U0001F1FB\U0001F1EC"
     name: British Virgin Islands
+    native: British Virgin Islands|Virgin Islands
 VI:
     cca3: VIR
     flag: "\U0001F1FB\U0001F1EE"
     name: United States Virgin Islands
+    native: United States Virgin Islands|Virgin Islands of the United States
 VN:
     cca3: VNM
     flag: "\U0001F1FB\U0001F1F3"
     name: Vietnam
+    native: Việt Nam|Cộng hòa xã hội chủ nghĩa Việt Nam
 VU:
     cca3: VUT
     flag: "\U0001F1FB\U0001F1FA"
     name: Vanuatu
+    native: Vanuatu|Ripablik blong Vanuatu|Republic of Vanuatu|République de Vanuatu
 WF:
     cca3: WLF
     flag: "\U0001F1FC\U0001F1EB"
     name: Wallis and Futuna
+    native: Wallis et Futuna|Territoire des îles Wallis et Futuna
 WS:
     cca3: WSM
     flag: "\U0001F1FC\U0001F1F8"
     name: Samoa
+    native: Samoa|Independent State of Samoa|Sāmoa|Malo Saʻoloto Tutoʻatasi o Sāmoa
 XK:
     cca3: UNK
     flag: "\U0001F1FD\U0001F1F0"
     name: Kosovo
+    native: Kosova|Republika e Kosovës|Косово|Република Косово
 YE:
     cca3: YEM
     flag: "\U0001F1FE\U0001F1EA"
     name: Yemen
+    native: اليَمَن|الجمهورية اليمنية
 YT:
     cca3: MYT
     flag: "\U0001F1FE\U0001F1F9"
     name: Mayotte
+    native: Mayotte|Département de Mayotte
 ZA:
     cca3: ZAF
     flag: "\U0001F1FF\U0001F1E6"
     name: South Africa
+    native: South Africa|Republiek van Suid-Afrika|Sewula Afrika|IRiphabliki yeSewula Afrika|Afrika-Borwa|Rephaboliki ya Afrika-Borwa |Ningizimu Afrika|IRiphabhulikhi yeNingizimu Afrika|Aforika Borwa|Rephaboliki ya Aforika Borwa|Afrika Dzonga|Riphabliki ra Afrika Dzonga|Afurika Tshipembe|Riphabuḽiki ya Afurika Tshipembe|Republic of South Africa|Afrika Borwa|Rephaboliki ya Afrika Borwa|Mzantsi Afrika|IRiphabliki yaseMzantsi Afrika|IRiphabliki yaseNingizimu Afrika
 ZM:
     cca3: ZMB
     flag: "\U0001F1FF\U0001F1F2"
     name: Zambia
+    native: Zambia|Republic of Zambia
 ZW:
     cca3: ZWE
     flag: "\U0001F1FF\U0001F1FC"
     name: Zimbabwe
+    native: Zimbabwe|Republic of Zimbabwe

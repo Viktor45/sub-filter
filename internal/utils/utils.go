@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
-	"sort" // <-- Импортируем sort
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -33,8 +33,6 @@ func IsPrintableASCII(data []byte) bool {
 		if b >= 32 && b <= 126 {
 			continue
 		}
-		// Сравниваем байт напрямую с его числовым значением
-		// \n = 10, \r = 13, \t = 9
 		if b == 10 || b == 13 || b == 9 { // '\n' || '\r' || '\t'
 			continue
 		}
@@ -47,25 +45,18 @@ func IsPrintableASCII(data []byte) bool {
 // Если успешно и результат — печатаемый ASCII — возвращает декодированные байты.
 // Иначе — возвращает исходные данные.
 func AutoDecodeBase64(data []byte) []byte {
-	// Удаляем все пробельные символы
 	trimmed := regexp.MustCompile(`\s+`).ReplaceAll(data, []byte{})
-	// Дополняем padding до кратности 4
 	missingPadding := len(trimmed) % 4
 	if missingPadding != 0 {
 		trimmed = append(trimmed, bytes.Repeat([]byte{'='}, 4-missingPadding)...)
 	}
-	// Пробуем StdEncoding
 	decoded, err := base64.StdEncoding.DecodeString(string(trimmed))
 	if err != nil {
-		// Пробуем RawStdEncoding
 		decoded, err = base64.RawStdEncoding.DecodeString(string(trimmed))
 		if err != nil {
 			return data
 		}
 	}
-	//if !IsPrintableASCII(decoded) {
-	//	return data
-	//}
 	return decoded
 }
 
@@ -91,13 +82,13 @@ func DecodeUserInfo(s string) ([]byte, error) {
 }
 
 // IsValidHost проверяет, что хост — это либо валидный домен,
-// либо публичный IP-адрес.
+// либо IP-адрес.
 func IsValidHost(host string) bool {
 	if host == "" {
 		return false
 	}
 	if ip := net.ParseIP(host); ip != nil {
-		return true // IP всегда считается валидным здесь (фильтрация по типу — отдельно)
+		return true
 	}
 	return hostRegex.MatchString(strings.ToLower(host))
 }
@@ -107,7 +98,7 @@ func IsValidPort(port int) bool {
 	return port > 0 && port <= 65535
 }
 
-// FullyDecode рекурсивно декодирует URL-encoded строки (например, %D0%9F → П).
+// FullyDecode рекурсивно декодирует URL-encoded строки.
 func FullyDecode(s string) string {
 	for {
 		decoded, err := url.QueryUnescape(s)
@@ -119,7 +110,6 @@ func FullyDecode(s string) string {
 }
 
 // ParseHostPort извлекает и валидирует хост и порт из *url.URL.
-// Возвращает ошибку, если порт отсутствует, недействителен или хост невалиден.
 func ParseHostPort(u *url.URL) (string, int, error) {
 	host := u.Hostname()
 	portStr := u.Port()
@@ -139,7 +129,7 @@ func ParseHostPort(u *url.URL) (string, int, error) {
 	return host, port, nil
 }
 
-// IsPathSafe проверяет, что путь не выходит за пределы baseDir (защита от path traversal).
+// IsPathSafe проверяет, что путь не выходит за пределы baseDir.
 func IsPathSafe(p, baseDir string) bool {
 	cleanPath := filepath.Clean(p)
 	rel, err := filepath.Rel(baseDir, cleanPath)
@@ -149,18 +139,11 @@ func IsPathSafe(p, baseDir string) bool {
 	return !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".."
 }
 
-// --- НОВЫЕ ФУНКЦИИ ДЛЯ /merge ---
-
 // NormalizeLinkKey извлекает ключевые компоненты из URL-адреса прокси-ссылки для дедупликации.
 // Игнорирует фрагментную часть (#...).
-// Для протоколов, таких как VMess/SS, без значимых query-параметров, использует базовые компоненты.
-// Теперь проводит базовую валидацию, чтобы убедиться, что входная строка - это правильно сформированный URL с хостом.
-// ПАРАМЕТРЫ ЗАПРОСА СОРТИРУЮТСЯ ДЛЯ СТАБИЛЬНОГО КЛЮЧА.
-// ПУСТОЙ ПУТЬ ИЛИ "/" ТЕПЕРЬ СЧИТАЮТСЯ РАВНОЗНАЧНЫМИ ДЛЯ ЦЕЛЕЙ КЛЮЧА.
-// NormalizeLinkKey извлекает ключевые компоненты из URL-адреса прокси-ссылки для дедупликации.
-// Игнорирует фрагментную часть (#...).
-// ПУТИ "/" и "" считаются одинаковыми.
-// ПОРТЫ ПО УМОЛЧАНИЮ (80/443) НЕ ВКЛЮЧАЮТСЯ В КЛЮЧ.
+// Порты 80 и 443 ВСЕГДА включаются в ключ.
+// Пути "/" и "" считаются одинаковыми.
+// Query-параметры сортируются.
 func NormalizeLinkKey(line string) (string, error) {
 	u, err := url.Parse(line)
 	if err != nil {
@@ -176,76 +159,51 @@ func NormalizeLinkKey(line string) (string, error) {
 	scheme := strings.ToLower(u.Scheme)
 	host := strings.ToLower(u.Hostname())
 
-	// Определяем порт
 	portStr := u.Port()
 	if portStr == "" {
-		// Присваиваем порт по умолчанию, но не будем включать его в ключ, если он стандартный
 		if scheme == "https" {
 			portStr = "443"
 		} else if scheme == "http" {
 			portStr = "80"
 		}
-		// Для других схем (vless, trojan и т.д.) порт ОБЯЗАТЕЛЕН → оставляем как есть, но он уже пуст → ошибка позже в process
-		// Здесь же мы просто нормализуем ключ, поэтому если порт не указан — оставляем host без порта
-	} else {
-		// Порт указан явно → используем его
-	}
-
-	// Решаем, включать ли порт в ключ
-	includePort := true
-	if portStr != "" {
-		if (scheme == "http" && portStr == "80") || (scheme == "https" && portStr == "443") {
-			includePort = true
-		}
 	}
 
 	var hostWithPort string
-	if includePort && portStr != "" {
+	if portStr != "" {
 		hostWithPort = net.JoinHostPort(host, portStr)
 	} else {
 		hostWithPort = host
 	}
 
-	// Нормализуем путь
 	path := u.Path
 	if path == "/" {
 		path = ""
 	}
 
-	// Сортируем query-параметры
-	queryParams := make(map[string]string)
-	q := u.Query()
-	for k, vs := range q {
-		if len(vs) > 0 {
-			queryParams[k] = vs[0]
-		}
+	// Извлекаем параметры
+	params := u.Query()
+	keys := make([]string, 0, len(params))
+	for k := range params {
+		keys = append(keys, k)
 	}
-	var sortedKeys []string
-	for k := range queryParams {
-		sortedKeys = append(sortedKeys, k)
-	}
-	sort.Strings(sortedKeys)
-	var queryPart string
-	if len(sortedKeys) > 0 {
-		var parts []string
-		for _, k := range sortedKeys {
-			parts = append(parts, k+"="+queryParams[k])
-		}
-		queryPart = strings.Join(parts, "&")
-	}
+	sort.Strings(keys) // ← сортируем ключи
 
-	key := fmt.Sprintf("%s://%s%s?%s", scheme, hostWithPort, path, queryPart)
-	return key, nil
+	// Собираем отсортированные "key=value"
+	var queryParts []string
+	for _, k := range keys {
+		queryParts = append(queryParts, k+"="+params.Get(k))
+	}
+	queryStr := strings.Join(queryParts, "&")
+
+	return fmt.Sprintf("%s://%s%s?%s", scheme, hostWithPort, path, queryStr), nil
 }
 
-// CompareAndSelectBetter сравнивает две прокси-ссылки, которые считаются дубликатами по их ключу.
-// Возвращает ту, которая считается "лучшей", как правило, более полную.
-// Это простая эвристика: предпочитает ту, у которой больше query-параметров.
+// CompareAndSelectBetter выбирает "лучшую" из двух дублирующих ссылок.
+// Предпочитает ту, у которой больше query-параметров.
 func CompareAndSelectBetter(currentLine, existingLine string) string {
 	uCurrent, err1 := url.Parse(currentLine)
 	uExisting, err2 := url.Parse(existingLine)
 
-	// Если разбор не удался для одной, предпочитаем ту, что разобралась
 	if err1 != nil {
 		return existingLine
 	}
@@ -253,19 +211,14 @@ func CompareAndSelectBetter(currentLine, existingLine string) string {
 		return currentLine
 	}
 
-	// Подсчитываем query-параметры
 	currentParamCount := len(uCurrent.Query())
 	existingParamCount := len(uExisting.Query())
 
-	// Возвращаем ссылку с большим количеством параметров
 	if currentParamCount > existingParamCount {
 		return currentLine
 	}
 	if existingParamCount > currentParamCount {
 		return existingLine
 	}
-	// Если количество равно, возвращаем существующую, чтобы сохранить стабильность
-	return existingLine
+	return existingLine // стабильность: оставить старую
 }
-
-// --- КОНЕЦ НОВЫХ ФУНКЦИЙ ---
