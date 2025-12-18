@@ -208,7 +208,7 @@ curl -H "User-Agent: Clash" "http://localhost:8000/filter?id=1&c=AD"
 
 Добавьте подписку вида:
 ```
-http://ваш-сервер:8000/filter?id=1&c=RU,UA
+http://ваш-сервер:8000/filter?id=1&c=NL,RU
 ```
 
 > 🔒 Рекомендуется использовать за reverse proxy с HTTPS.

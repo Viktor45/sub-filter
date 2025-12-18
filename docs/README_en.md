@@ -211,7 +211,7 @@ Results are saved to `/tmp/sub-filter-cache` (or your configured directory).
 
 Add a dynamic subscription like:
 ```
-http://your-server:8000/filter?id=1&c=RU,UA
+http://your-server:8000/filter?id=1&c=NL,RU
 ```
 
 > 🔒 **Recommendation**: Always run behind an HTTPS reverse proxy (e.g., Nginx, Caddy, or Cloudflare).
