@@ -239,12 +239,14 @@ docker run --rm \
 # Вывод в терминал
 docker run --rm \
   -v $(pwd)/config:/config:ro \
+  -v $(pwd)/cache:/tmp/sub-filter-cache \
   ghcr.io/viktor45/sub-filter:latest \
   --cli --stdout
 
 # Генерация countries.yaml
 docker run --rm \
-  -v $(pwd)/config:/config \
+  -v $(pwd)/config:/config:ro \
+  -v $(pwd)/cache:/tmp/sub-filter-cache \
   ghcr.io/viktor45/sub-filter:latest \
   --cli --countries
 ```

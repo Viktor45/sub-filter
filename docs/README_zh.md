@@ -242,12 +242,14 @@ docker run --rm \
 # 输出到终端
 docker run --rm \
   -v $(pwd)/config:/config:ro \
+  -v $(pwd)/cache:/tmp/sub-filter-cache \
   ghcr.io/viktor45/sub-filter:latest \
   --cli --stdout
 
 # 生成国家文件
 docker run --rm \
-  -v $(pwd)/config:/config \
+  -v $(pwd)/config:/config:ro \
+  -v $(pwd)/cache:/tmp/sub-filter-cache \
   ghcr.io/viktor45/sub-filter:latest \
   --cli --countries
 ```

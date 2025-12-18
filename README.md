@@ -1,28 +1,78 @@
-[EN](docs/README_en.md) / [RU](docs/README.md)  / [ZH](docs/README_zh.md) 
+<div align="center">
 
-# sub-filter
+# 🧹 sub-filter
 
-A simple **sub**scription **filter**
+**Умная фильтрация прокси-подписок**  
+_VLESS · VMess · Trojan · Shadowsocks · Hysteria2_
 
-This tool is an intelligent filter for proxy server links (VLESS, VMess, Trojan, Shadowsocks, Hysteria2). It fetches public subscriptions, validates each server for correctness and security (e.g., blocks unencrypted connections or names containing forbidden keywords), filters out anything suspicious, and outputs a clean, working list—ready to use in Clash, Sing-Box, routers, and other clients.
+[![Go Version](https://img.shields.io/badge/Go-1.21%2B-blue?logo=go)](https://golang.org)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Docker Image](https://img.shields.io/badge/Docker-ghcr.io%2Fviktor45%2Fsub--filter-blue?logo=docker)](https://github.com/viktor45/sub-filter/pkgs/container/sub-filter)
+[![GitHub Actions](https://img.shields.io/badge/CI-passing-brightgreen)](/actions)
 
-⚠️ **Note**: This program **does not check proxy availability or latency**. For that, use [xray-checker](https://github.com/kutovoys/xray-checker).
+**Убирает мусор. Оставляет только рабочие серверы.**
 
-## FAQ
-
-[EN](docs/FAQ_en.md) / [RU](docs/FAQ.md) / [ZH](docs/FAQ_zh.md)
-
-## Configuration
-
-Example of a basic configuration file:  
-[config/config.yaml](config/config.yaml)
-
-## Validation Rules
-
-Example of default filtering rules:  
-[config/rules.yaml](config/rules.yaml)
-
-Detailed documentation on how proxy links inside subscriptions are validated:  
-[EN](docs/FILTER_RULES_en.md) / [RU](docs/FILTER_RULES.md) / [ZH](docs/FILTER_RULES_zh.md)
+</div>
 
 ---
+
+**sub-filter** — это умный фильтр для подписок на прокси-серверы (VLESS, VMess, Trojan, Shadowsocks, Hysteria2).  
+Он автоматически:
+
+- 🔒 **Удаляет небезопасные конфигурации** (например, VLESS без шифрования)
+- 🧪 **Проверяет корректность** (обязательные параметры, правильные значения)
+- 🚫 **Фильтрует по «запрещённым словам»** в названиях серверов
+- 🌍 **Отбирает серверы по странам** (флаг, название, код)
+- 🔁 **Объединяет и дедуплицирует** несколько подписок в одну чистую
+
+Результат — готовая подписка для **Clash, Sing-Box, роутеров и других клиентов**.
+
+> ⚠️ **Важно**: Программа **не проверяет живучесть** прокси (доступность/скорость).  
+> Для этого используйте [xray-checker](https://github.com/kutovoys/xray-checker).
+
+---
+
+## 📚 Документация
+
+| Тема                     | Ссылки                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------ |
+| **Основное руководство** | [EN](docs/README_en.md) · [RU](docs/README.md) · [ZH](docs/README_zh.md)                   |
+| **Частые вопросы (FAQ)** | [EN](docs/FAQ_en.md) · [RU](docs/FAQ.md) · [ZH](docs/FAQ_zh.md)                            |
+| **Правила валидации**    | [EN](docs/FILTER_RULES_en.md) · [RU](docs/FILTER_RULES.md) · [ZH](docs/FILTER_RULES_zh.md) |
+| **Конфигурация**         | [config/config.yaml](config/config.yaml)                                                   |
+| **Пример правил**        | [config/rules.yaml](config/rules.yaml)                                                     |
+
+---
+
+## 🚀 Быстрый старт
+
+```bash
+
+# Запустить сервер на порту 8000
+./sub-filter 8000
+
+# Или обработать подписки в CLI и вывести в терминал
+./sub-filter --cli --stdout --country=NL,RU
+```
+
+---
+
+## 🐳 Docker
+
+```bash
+docker run -d \
+  -p 8080:8080 \
+  -v $(pwd)/config:/config:ro \
+  -v $(pwd)/cache:/tmp/sub-filter-cache \
+  ghcr.io/viktor45/sub-filter:latest \
+  8080
+```
+
+---
+
+<div align="center">
+
+💡 **Совет**: Используйте `sub-filter` как «мидлвар» между публичной подпиской и вашим клиентом — и забудьте о кривых серверах!
+
+</div>
+```
