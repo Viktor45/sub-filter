@@ -3,300 +3,253 @@
 此翻译由神经网络完成，如有任何错误，敬请谅解。
 
 - [sub-filter](#sub-filter)
-  - [功能亮点](#功能亮点)
-  - [如何编译？](#如何编译)
-  - [如何运行？](#如何运行)
-    - [模式 1：HTTP 服务器（动态过滤）](#模式-1http-服务器动态过滤)
-      - [完整参数示例：](#完整参数示例)
-      - [最简示例：](#最简示例)
-    - [模式 2：CLI（一次性处理）](#模式-2cli一次性处理)
-      - [CLI 模式新增功能：](#cli-模式新增功能)
-      - [示例：输出到终端](#示例输出到终端)
-      - [示例：使用配置文件](#示例使用配置文件)
-  - [参数说明](#参数说明)
-  - [新增参数：`--config` 与 `--stdout`](#新增参数--config-与---stdout)
-    - [`--stdout`（仅 CLI 模式）](#--stdout仅-cli-模式)
-    - [`--config`](#--config)
-      - [示例 `config.yaml`：](#示例-configyaml)
-  - [如何验证是否正常工作？](#如何验证是否正常工作)
-    - [服务器模式：](#服务器模式)
-    - [CLI 模式：](#cli-模式)
-  - [如何在客户端中使用？](#如何在客户端中使用)
-  - [预构建 Docker 镜像](#预构建-docker-镜像)
-  - [如何构建 Docker 镜像？](#如何构建-docker-镜像)
-  - [如何在 Docker 中运行？](#如何在-docker-中运行)
-    - [使用 Docker：](#使用-docker)
-    - [使用 Podman（Docker 替代方案）：](#使用-podmandocker-替代方案)
-  - [在 Docker 中使用 CLI 模式](#在-docker-中使用-cli-模式)
+  - [✨ 功能特性](#-功能特性)
+  - [🛠️ 编译说明](#️-编译说明)
+  - [▶️ 使用方法](#️-使用方法)
+    - [1. HTTP 服务器模式（动态过滤）](#1-http-服务器模式动态过滤)
+      - [语法：](#语法)
+      - [示例：](#示例)
+      - [接口说明：](#接口说明)
+    - [2. CLI 模式（一次性处理）](#2-cli-模式一次性处理)
+      - [语法：](#语法-1)
+      - [参数：](#参数)
+      - [示例：](#示例-1)
+  - [🌍 国家过滤](#-国家过滤)
+    - [国家数据格式](#国家数据格式)
+  - [🔤 参数说明](#-参数说明)
+  - [🖥️ CLI 参数](#️-cli-参数)
+  - [✅ 快速测试](#-快速测试)
+    - [服务器模式](#服务器模式)
+    - [CLI 模式](#cli-模式)
+  - [📲 客户端集成](#-客户端集成)
+  - [🐳 Docker](#-docker)
+    - [启动服务器](#启动服务器)
+    - [CLI 模式（Docker）](#cli-模式docker)
 
 # sub-filter
 
-一个简单的订阅过滤器
+一款智能代理订阅过滤器，支持 **VLESS、VMess、Trojan、Shadowsocks 和 Hysteria2**。
 
-该程序是一个智能的代理服务器链接（VLESS、VMess、Trojan、Shadowsocks、Hysteria2）过滤器。它会获取公开订阅，逐个验证服务器的正确性与安全性（例如：阻止未加密的连接，或名称中包含禁用关键词的服务器），剔除所有可疑内容，最终输出一份干净、可用的列表——可直接用于 Clash、Sing-Box、路由器及其他客户端。
+本工具会逐条验证订阅中的代理链接，确保：
+- **安全性**（例如：阻止 VLESS 中的 `security=none`），
+- **配置正确性**（例如：当 `security=reality` 时，必须包含 `pbk`），
+- **服务器名称不含禁止关键词**，
+- **按国家、国旗或本地名称过滤**。
 
-如果您不清楚为何需要此工具，请阅读 [FAQ](FAQ.md)。
+最终输出一份干净、安全、可直接用于 Clash、Sing-Box、路由器等客户端的订阅。
 
-⚠️ **注意**：本程序 **不检测代理的可用性或延迟**。如需此功能，请使用 [xray-checker](https://github.com/kutovoys/xray-checker)。
-
----
-
-## 功能亮点
-
-✅ 验证代理链接，移除不安全或损坏的配置  
-✅ 根据关键词黑名单（如可疑域名）过滤服务器  
-✅ 阻止公共订阅中偶尔出现的蜜罐（honeypot）  
-✅ 缓存结果（默认 30 分钟），避免频繁请求造成网络或服务器压力  
-✅ 生成格式正确、描述清晰的订阅内容  
-✅ 支持通过配置文件启动  
-✅ CLI 模式可直接在终端输出结果，无需保存文件
+> ⚠️ **注意**：本工具 **不检测代理可用性（存活）**。如需此功能，请使用 [xray-checker](https://github.com/kutovoys/xray-checker)。
 
 ---
 
-## 如何编译？
+## ✨ 功能特性
 
-若您已安装 Go（版本 1.25 或更高），在终端执行：
+✅ 通过 `rules.yaml` 中的[灵活规则](./FILTER_RULES_zh.md) 进行验证  
+✅ 支持 **单国或多国过滤**（最多 20 个）及关键词屏蔽  
+✅ 自动去重，并保留最完整的链接版本  
+✅ 内置缓存（默认 30 分钟）  
+✅ 支持命令行（CLI）模式，可直接输出到终端  
+
+---
+
+## 🛠️ 编译说明
+
+需要 **Go 1.21+**。
 
 ```bash
-go build .
+go build -o sub-filter .
 ```
 
-将生成 `sub-filter` 可执行文件——即您的程序。
-
 ---
 
-## 如何运行？
+## ▶️ 使用方法
 
-程序支持两种模式：**HTTP 服务器模式** 和 **CLI（命令行）模式**。
+本程序支持两种模式：**HTTP 服务器** 和 **命令行（CLI）**。
 
-### 模式 1：HTTP 服务器（动态过滤）
+### 1. HTTP 服务器模式（动态过滤）
 
-启动后监听指定端口，每次收到请求时实时过滤订阅。
+启动一个服务器，实时按需过滤订阅。
 
-#### 完整参数示例：
-
+#### 语法：
 ```bash
-./sub-filter 8000 1800 ./config/sub.txt ./config/bad.txt ./config/uagent.txt
+./sub-filter <端口> [缓存时间] [订阅列表] [屏蔽词] [用户代理] [规则文件]
 ```
 
-#### 最简示例：
-
+#### 示例：
 ```bash
+# 最简启动（使用 ./config/ 下的默认文件）
 ./sub-filter 8000
+
+# 完整配置
+./sub-filter 8000 1800 ./config/sub.txt ./config/bad.txt ./config/uagent.txt ./config/rules.yaml
 ```
 
-此时：
-- 缓存有效期为 1800 秒（30 分钟）  
-- 程序自动在 `./config/` 目录下查找配置文件  
-- 若文件缺失，程序仍会运行，但对应规则为空（如 `bad.txt` 不存在则不进行关键词过滤）
+#### 接口说明：
+| 接口      | 说明               |
+| --------- | ------------------ |
+| `/filter` | 过滤单个订阅       |
+| `/merge`  | 合并并过滤多个订阅 |
 
-### 模式 2：CLI（一次性处理）
+**参数：**
+- `id` — `sources_file` 中的行号（用于 `/filter`）
+- `ids` — 以逗号分隔的行号（最多 20 个，用于 `/merge`）
+- `c` — [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes) 国家代码（最多 20 个）
 
-一次性处理所有订阅，并将结果保存到系统临时目录 `sub-filter-cache`（启动时会打印具体路径）。适用于自动化、定时任务（cron）或离线使用。
+**示例：**
+- `/filter?id=1` → 过滤第一个订阅  
+- `/filter?id=1&c=DE` → 仅保留德国服务器  
+- `/merge?ids=1,2,3&c=US,CA` → 合并三个订阅，仅保留美加服务器  
 
-#### CLI 模式新增功能：
+---
 
-- **`--stdout`**：不保存文件，直接输出到终端  
-- **`--config`**：通过单个配置文件定义所有参数
+### 2. CLI 模式（一次性处理）
 
-#### 示例：输出到终端
+一次性处理所有订阅，并将结果保存到磁盘。
 
+#### 语法：
 ```bash
+./sub-filter --cli [--stdout] [--config 配置文件.yaml] [--country AD,DE]
+```
+
+#### 参数：
+| 参数        | 说明                                 |
+| ----------- | ------------------------------------ |
+| `--cli`     | 启用 CLI 模式                        |
+| `--stdout`  | 直接输出到终端                       |
+| `--config`  | 使用外部配置文件                     |
+| `--country` | 按国家过滤（例如 `--country=NL,RU`） |
+
+#### 示例：
+```bash
+# 处理所有订阅并保存结果
+./sub-filter --cli
+
+# 直接输出到终端
 ./sub-filter --cli --stdout
-```
 
-立即看到最终订阅内容，无需生成文件。
+# 按国家过滤
+./sub-filter --cli --country=NL,RU
 
-#### 示例：使用配置文件
-
-```bash
+# 使用自定义配置
 ./sub-filter --cli --config ./my-config.yaml
 ```
 
 ---
 
-## 参数说明
+## 🌍 国家过滤
 
-| 参数         | 说明                                                      |
-| ------------ | --------------------------------------------------------- |
-| `8000`       | HTTP 服务器监听端口（仅服务器模式）                       |
-| `1800`       | 缓存有效期（秒），1800 = 30 分钟                          |
-| `sub.txt`    | 订阅链接列表（每行一个 URL）                              |
-| `bad.txt`    | 禁止出现的关键词（如可疑域名）                            |
-| `uagent.txt` | 允许访问的客户端 User-Agent（如 `Clash`、`Shadowrocket`） |
+### 国家数据格式
 
-> 💡 若未指定文件路径，程序默认在 `./config/` 目录下查找。  
-> 若某文件不存在，程序仍会继续运行，但跳过相关规则（如无 `bad.txt` 则不进行关键词过滤）。
-
----
-
-## 新增参数：`--config` 与 `--stdout`
-
-### `--stdout`（仅 CLI 模式）
-
-不生成 `mod_1.txt`、`mod_2.txt` 等文件，而是直接输出到终端。适合快速复制或传递给其他程序。
-
-示例：
-
-```bash
-./sub-filter --cli --stdout > my-sub.txt
-```
-
-### `--config`
-
-支持通过 **单个配置文件** 定义所有参数（支持 **YAML、JSON 或 TOML 格式**）。
-
-#### 示例 `config.yaml`：
+国家信息以 **扁平结构** 存储在 `./config/countries.yaml` 中：
 
 ```yaml
-sources_file: "./config/sub.txt"
-rules_file: "./config/rules.yaml"
-bad_words_file: "./config/bad.txt"
-uagent_file: "./config/uagent.txt"
-cache_dir: "/tmp/sub-filter-cache"
-cache_ttl: 1800s
-allowed_ua:
-  - "Clash"
-  - "happ"
-bad_words:
-  - "tracking"
-  - "fake"
+CN:
+  cca3: CHN
+  flag: "🇨🇳"
+  name: China
+  native: "中国|中华人民共和国"
 ```
 
-若某字段未设置，则使用默认值：
+**生成国家文件：**
+```bash
+./sub-filter --cli --countries
+```
 
-| 字段             | 默认值                             |
-| ---------------- | ---------------------------------- |
-| `cache_ttl`      | `1800`（30 分钟）                  |
-| `sources_file`   | `"./config/sub.txt"`               |
-| `bad_words_file` | `"./config/bad.txt"`               |
-| `uagent_file`    | `"./config/uagent.txt"`            |
-| `cache_dir`      | Linux 下为 `/tmp/sub-filter-cache` |
+工具会在每条链接的 **片段部分**（`#...`）中搜索：
+- **两位国家代码**（ISO 3166-1 alpha-2）：`CN`
+- **三位国家代码**（ISO 3166-1 alpha-3）：`CHN`
+- **国旗 emoji**：`🇨🇳`
+- **英文名称**：`China`
+- **本地名称**：`中国`、`中华人民共和国`
 
-> 💡 配置文件特别适合 Docker 或 systemd 部署场景。
+匹配 **不区分大小写**，并支持 **URL 解码**。
 
 ---
 
-## 如何验证是否正常工作？
+## 🔤 参数说明
 
-### 服务器模式：
-
-请求 `sub.txt` 中第一行对应的过滤后订阅：
-
-```bash
-curl -H "User-Agent: Clash" "http://localhost:8000/filter?id=1"
-```
-
-若配置正确，将返回干净的订阅内容。
-
-> 💡 提示：请确保客户端名称（如 `Clash`）已列入 `uagent.txt`，否则可能无法获取订阅。
-
-### CLI 模式：
-
-运行后检查 `sub-filter-cache` 目录：
-
-```bash
-./sub-filter --cli
-```
-
-您将看到已处理好的订阅文件，无需启动服务器。
-
-或直接输出：
-
-```bash
-./sub-filter --cli --stdout
-```
+| 参数             | 说明                                 |
+| ---------------- | ------------------------------------ |
+| `<端口>`         | HTTP 服务器端口（服务器模式必需）    |
+| `cache_ttl`      | 缓存时间（秒，默认 1800）            |
+| `sources_file`   | 订阅 URL 列表（每行一个）            |
+| `bad_words_file` | 服务器名称中的屏蔽词列表             |
+| `uagent_file`    | 允许的 User-Agent 列表（如 `Clash`） |
+| `rules_file`     | 验证规则文件（`rules.yaml`）         |
 
 ---
 
-## 如何在客户端中使用？
+## 🖥️ CLI 参数
 
-在客户端中添加如下格式的订阅链接：
-
-```
-http://服务器IP:端口/filter?id=编号
-```
-
-替换说明：
-- `服务器IP` → 您的路由器、树莓派或服务器的 IP 地址  
-- `端口` → 启动时指定的端口（如 `8000`）  
-- `编号` → `sub.txt` 中的行号（第一行为 `id=1`）
-
-> 🔒 **安全建议**：若服务暴露在公网，请务必通过反向代理（如 Nginx、Caddy 或 Cloudflare）启用 HTTPS。
+| 参数          | 说明                  |
+| ------------- | --------------------- |
+| `--cli`       | 启用 CLI 模式         |
+| `--stdout`    | 输出到标准输出        |
+| `--config`    | 配置文件路径          |
+| `--country`   | 按国家过滤（仅 CLI）  |
+| `--countries` | 生成 `countries.yaml` |
 
 ---
 
-## 预构建 Docker 镜像
+## ✅ 快速测试
 
-已为 Linux `amd64` 和 `arm64` 架构提供镜像，使用 [ko](.ko.yaml) 构建：
-
-```
-ghcr.io/viktor45/sub-filter:latest
-```
-
-## 如何构建 Docker 镜像？
-
-标准方式，基于 `Dockerfile`：
-
+### 服务器模式
 ```bash
-docker build -t sub-filter .
+curl -H "User-Agent: Clash" "http://localhost:8000/filter?id=1&c=AD"
 ```
 
-## 如何在 Docker 中运行？
+### CLI 模式
+```bash
+./sub-filter --cli --country=US --stdout
+```
 
-注意：`distroless` 镜像使用 `/tmp/sub-filter-cache` 作为缓存目录。
+结果默认保存在 `/tmp/sub-filter-cache`（或您指定的目录）。
 
-### 使用 Docker：
+---
 
+## 📲 客户端集成
+
+在客户端中添加动态订阅链接，例如：
+```
+http://your-server:8000/filter?id=1&c=CN,JP
+```
+
+> 🔒 **建议**：始终通过 HTTPS 反向代理（如 Nginx、Caddy 或 Cloudflare）提供服务。
+
+---
+
+## 🐳 Docker
+
+### 启动服务器
 ```bash
 docker run -d \
-  --name sub-filter \
-  -p 8000:8000 \
+  -p 8080:8080 \
   -v $(pwd)/config:/config:ro \
-  -v $(pwd)/cache:/tmp/sub-filter-cache:rw \
-  sub-filter \
+  -v $(pwd)/cache:/tmp/sub-filter-cache \
+  ghcr.io/viktor45/sub-filter:latest \
   8000 1800
 ```
 
-### 使用 Podman（Docker 替代方案）：
-
+### CLI 模式（Docker）
 ```bash
-podman run -d --replace \
-  --name sub-filter \
-  -p 8000:8000 \
-  -v $(pwd)/config:/config:ro,z \
-  -v $(pwd)/cache:/tmp/sub-filter-cache:rw,z \
-  sub-filter \
-  8000 1800
-```
-
-> 📁 启动前请确保目录存在：
-> ```bash
-> mkdir -p ./config ./cache
-> ```
-
----
-
-## 在 Docker 中使用 CLI 模式
-
-可执行一次性处理：
-
-```bash
+# 处理订阅
 docker run --rm \
   -v $(pwd)/config:/config:ro \
-  -v $(pwd)/cache:/tmp/sub-filter-cache:rw \
-  sub-filter \
-  --cli 1800
-```
+  -v $(pwd)/cache:/tmp/sub-filter-cache \
+  ghcr.io/viktor45/sub-filter:latest \
+  --cli --country=DE
 
-结果将出现在本地 `./cache` 目录中。
-
-或直接输出到终端：
-
-```bash
+# 输出到终端
 docker run --rm \
   -v $(pwd)/config:/config:ro \
-  -v $(pwd)/cache:/tmp/sub-filter-cache:rw \
-  sub-filter \
+  ghcr.io/viktor45/sub-filter:latest \
   --cli --stdout
+
+# 生成国家文件
+docker run --rm \
+  -v $(pwd)/config:/config \
+  ghcr.io/viktor45/sub-filter:latest \
+  --cli --countries
 ```
+
+> 💡 运行前请确保 `./config` 和 `./cache` 目录已存在。

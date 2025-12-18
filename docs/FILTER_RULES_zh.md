@@ -2,45 +2,113 @@
 
 此翻译由神经网络完成，如有任何错误，敬请谅解。
 
-# `rules.yaml` 文档
+- [`rules.yaml` 配置文档](#rulesyaml-配置文档)
+    - [文件结构](#文件结构)
+    - [1. `required_params` — 必需参数](#1-required_params--必需参数)
+    - [2. `allowed_values` — 允许的值](#2-allowed_values--允许的值)
+    - [3. `forbidden_values` — 禁止的值](#3-forbidden_values--禁止的值)
+    - [4. `conditional` — 条件规则](#4-conditional--条件规则)
+    - [VLESS 完整示例](#vless-完整示例)
+    - [验证细节](#验证细节)
 
-`rules.yaml` 文件就像给 `sub-filter` 程序的 **规则列表**。这些规则帮助程序判断哪些代理链接是 **好的**（需要保留），哪些是 **坏的**（需要删除）。
 
-可以想象 `sub-filter` 就像一个 **水过滤器**，但它过滤的不是水，而是 **代理订阅列表**。`rules.yaml` 就是这个 **过滤器的说明书**，告诉它 “干净的水”（好的代理链接）应该具备什么样的特征。
+# `rules.yaml` 配置文档
+
+`rules.yaml` 文件是 `sub-filter` 程序的**验证规则集**。它定义了哪些代理链接是**有效且安全的**，哪些是**无效的**并应被移除。
+
+可以将 `sub-filter` 想象成一个**智能净水器**，而 `rules.yaml` 就是它的**使用说明书**：哪些杂质需要过滤掉，哪些干净的水可以放行。
+
+---
 
 ### 文件结构
 
-`rules.yaml` 文件被分成几个 **部分**。每一部分负责 **一种类型的代理**。主要类型有：
+文件按**协议类型**划分为多个部分。支持的协议包括：
 
-*   `vless`
-*   `vmess`
-*   `trojan`
-*   `hysteria2`
-*   `ss` (Shadowsocks)
+- `vless`
+- `vmess`
+- `trojan`
+- `hysteria2`
+- `ss`（Shadowsocks）
 
-在每个部分里，可能有 **四种规则**：
+每个协议部分可包含**四种规则类型**：
 
-1.  **`required_params`** (必需参数)
-    *   这是一个 **参数列表**，这种类型的链接 **必须** 包含这些参数。
-    *   如果缺少任何一个必需参数，该链接就被认为是 **坏的**，会被删除。
-    *   例如：对于 `vless` 链接，通常 `encryption` 和 `sni` 是必需的。
-2.  **`allowed_values`** (允许的值)
-    *   这是 **特定参数** 的 **允许值** 列表。
-    *   如果某个参数的值 **不在允许列表中**，该链接就被认为是 **坏的**，会被删除。
-    *   例如：对于 `vless` 中的 `security` 参数，只允许 `tls` 和 `reality`。任何其他值，比如 `none`，都是不允许的。
-3.  **`forbidden_values`** (禁止的值)
-    *   这是 **特定参数** 的 **禁止值** 列表。
-    *   如果某个参数的值 **在禁止列表中**，该链接就被认为是 **坏的**，会被删除。
-    *   例如：以前 `security: ["none"]` 意味着 `security` 不能是 `none`。现在这个规则可能是 `conditional` 的一部分。
-4.  **`conditional`** (条件规则)
-    *   这些是 **复杂规则**，只有在满足某些 **特定条件** 时才会生效。
-    *   它们有一个 `when` 部分（“当……时候”）。如果 `when` 里的 **所有条件** 都满足了，那么规则的其余部分才会被应用。
-    *   例如：
-        *   `when: { security: "reality" } require: ["pbk"]` — **当** `security` 是 `reality` 时，**要求** 链接里必须有 `pbk` 参数。
-        *   `when: { type: "grpc" } require: ["serviceName"]` — **当** `type` (连接类型) 是 `grpc` 时，**要求** 链接里必须有 `serviceName` 参数。
-        *   `when: { type: { not: "ws" } } forbidden_values: { security: ["none"] }` — **当** `type` **不等于** `ws` 时，**禁止** `security` 是 `none`。(这个新规则只允许 `type=ws` 时使用 `security=none`)。
+---
 
-### 文件中的示例
+### 1. `required_params` — 必需参数
+
+指定链接中**必须存在的参数**列表。
+
+- 如果**缺少任一必需参数**，该链接将被拒绝。
+- **VLESS 示例：**
+  ```yaml
+  required_params: [encryption, sni]
+  ```
+
+---
+
+### 2. `allowed_values` — 允许的值
+
+指定某个参数的**合法取值范围**。
+
+- 如果参数值**不在该列表中**，链接将被拒绝。
+- **示例：**
+  ```yaml
+  allowed_values:
+    security: [tls, reality]
+    flow:
+      - "xtls-rprx-vision"
+      - "xtls-rprx-vision-udp443"
+  ```
+
+> ⚠️ 此规则**仅在参数存在时生效**。缺失参数的检查由 `required_params` 负责。
+
+---
+
+### 3. `forbidden_values` — 禁止的值
+
+指定某个参数的**非法取值列表**。
+
+- 如果参数值**在此列表中**，链接将被拒绝。
+- **优先级高于 `allowed_values`**。
+- **示例：**
+  ```yaml
+  forbidden_values:
+    security: [none]
+  ```
+
+> ⚠️ 此规则**全局禁止** `security=none`。  
+> 若要**仅允许 `type=ws` 时使用 `security=none`**，请使用**条件规则**。
+
+---
+
+### 4. `conditional` — 条件规则
+
+**仅在特定条件下**生效的规则。
+
+结构说明：
+- `when` — 触发条件（所有条件必须同时满足）
+- `require` — 条件满足时的必需参数
+- `forbidden_values` — 条件满足时的禁止值
+
+**示例：**
+```yaml
+conditional:
+  # 当 security=reality 时，必须包含 pbk
+  - when: { security: "reality" }
+    require: [pbk]
+
+  # 当 type=grpc 时，必须包含 serviceName
+  - when: { type: "grpc" }
+    require: [serviceName]
+
+  # 当 type 不是 ws 时，禁止 security=none
+  - when: { type: { not: "ws" } }
+    forbidden_values: { security: ["none"] }
+```
+
+---
+
+### VLESS 完整示例
 
 ```yaml
 vless:
@@ -61,13 +129,20 @@ vless:
       forbidden_values: { security: ["none"] }
 ```
 
-**解释:**
+**规则说明：**
+1. **所有 VLESS 链接** 必须包含 `encryption` 和 `sni`。
+2. `security` 参数**只能是** `tls` 或 `reality`。
+3. 若 `security=reality`，**必须提供** `pbk`。
+4. 若 `type=grpc`，**必须提供** `serviceName`。
+5. **仅当 `type=ws` 时**，允许省略 `security`（程序会将其视为 `security=none`）。  
+   其他所有连接类型**禁止使用 `security=none`**。
 
-1.  **对于所有 `vless` 链接:**
-    *   必须包含 `encryption` 和 `sni` 参数。
-    *   `security` 参数只能是 `tls` 或 `reality`。
-    *   `flow` 参数只能是 `xtls-rprx-vision` 或 `xtls-rprx-vision-udp443`。
-2.  **另外:**
-    *   如果 `security` 是 `reality`，那么 **必须** 有 `pbk` 参数。
-    *   如果 `type` 是 `grpc`，那么 **必须** 有 `serviceName` 参数。
-    *   **如果 `type` 不是 `ws`**，那么 `security` **不能** 是 `none`。
+---
+
+### 验证细节
+
+- 在 VLESS 中，如果**未指定 `security` 参数**，程序会**自动将其视为 `none`**。
+- 规则**仅对存在的参数生效**。
+- 验证顺序：  
+  `forbidden_values` → `allowed_values` → `conditional`
+- 所有值的比较均为**区分大小写**（请使用协议规范中的精确值）。
