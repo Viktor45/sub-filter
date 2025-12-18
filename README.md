@@ -9,8 +9,12 @@ _VLESS · VMess · Trojan · Shadowsocks · Hysteria2_
 [![License](https://img.shields.io/badge/License-AGPLv3-green.svg)](LICENSE)
 [![Docker Image](https://img.shields.io/badge/Docker-ghcr.io%2Fviktor45%2Fsub--filter-blue?logo=docker)](https://github.com/viktor45/sub-filter/pkgs/container/sub-filter)
 [![GitHub Actions](https://img.shields.io/badge/CI-passing-brightgreen)](/actions)
+[![en](https://img.shields.io/badge/lang-en-blue)](https://github.com/Viktor45/sub-filter/blob/main/docs/README_en.md)
+[![ru](https://img.shields.io/badge/lang-ru-red)](https://github.com/Viktor45/sub-filter/blob/main/docs/README.md)
+[![zh](https://img.shields.io/badge/lang-zh-blue)](https://github.com/Viktor45/sub-filter/blob/main/docs/README_zh.md)
 
-**Removes junk. Keeps only working servers.**
+
+**Removes junk. Keeps only secure servers.**
 
 </div>
 
