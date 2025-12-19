@@ -31,9 +31,11 @@ jobs:
         with:
           go-version-file: ./go.mod
 
-      - name: Install linters
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $GOPATH/bin v1.58.0
+      - name: Install golangci-lint action
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: v1.58.0
+          install: true
 
       - name: Run gofmt checks
         run: |
@@ -44,7 +46,10 @@ jobs:
           fi
 
       - name: Run golangci-lint
-        run: golangci-lint run ./...
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: v1.58.0
+          args: run ./...
 
       - name: Run go vet
         run: go vet ./...
