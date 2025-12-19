@@ -29,6 +29,7 @@ import (
 	"time"
 	_ "time/tzdata"
 
+	"hash/fnv"
 	"sub-filter/hysteria2"
 	"sub-filter/internal/utils"
 	"sub-filter/internal/validator"
@@ -51,7 +52,6 @@ const (
 	limiterEvery    = 100 * time.Millisecond
 	cleanupInterval = 2 * time.Minute
 	inactiveTimeout = 30 * time.Minute
-	maxCountryCodes = 20 // ← ограничение на число стран
 )
 
 var defaultCacheDir = filepath.Join(os.TempDir(), "sub-filter-cache")
@@ -76,6 +76,9 @@ type AppConfig struct {
 	Sources       SourceMap
 	Rules         map[string]validator.Validator
 	Countries     map[string]utils.CountryInfo
+	MaxCountryCodes int `mapstructure:"max_country_codes"`
+	MaxMergeIDs     int `mapstructure:"max_merge_ids"`
+	MergeBuckets    int `mapstructure:"merge_buckets"`
 }
 
 func (cfg *AppConfig) Init() {
@@ -99,6 +102,15 @@ func (cfg *AppConfig) Init() {
 	}
 	if cfg.CountriesFile == "" {
 		cfg.CountriesFile = "./config/countries.yaml"
+	}
+	if cfg.MaxCountryCodes == 0 {
+		cfg.MaxCountryCodes = 20
+	}
+	if cfg.MaxMergeIDs == 0 {
+		cfg.MaxMergeIDs = 20
+	}
+	if cfg.MergeBuckets == 0 {
+		cfg.MergeBuckets = 256
 	}
 }
 
@@ -296,13 +308,15 @@ func isLocalIP(ipStr string) bool {
 }
 
 // parseCountryCodes парсит и валидирует список кодов стран из строки вида "AD,DE,FR".
-func parseCountryCodes(cParam string, countryMap map[string]utils.CountryInfo) ([]string, error) {
+// parseCountryCodes парсит и валидирует список кодов стран из строки вида "AD,DE,FR".
+// Параметр maxCodes задаёт максимальное число кодов, берётся из конфигурации приложения.
+func parseCountryCodes(cParam string, countryMap map[string]utils.CountryInfo, maxCodes int) ([]string, error) {
 	if cParam == "" {
 		return nil, nil
 	}
 	rawCodes := strings.Split(cParam, ",")
-	if len(rawCodes) > maxCountryCodes {
-		return nil, fmt.Errorf("too many country codes (max %d)", maxCountryCodes)
+	if maxCodes > 0 && len(rawCodes) > maxCodes {
+		return nil, fmt.Errorf("too many country codes (max %d)", maxCodes)
 	}
 
 	seen := make(map[string]bool)
@@ -353,7 +367,7 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 		http.Error(w, "Missing 'ids' parameter", http.StatusBadRequest)
 		return
 	}
-	if len(idList) > 20 {
+	if cfg.MaxMergeIDs > 0 && len(idList) > cfg.MaxMergeIDs {
 		http.Error(w, "Too many IDs requested", http.StatusBadRequest)
 		return
 	}
@@ -373,7 +387,7 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 	sort.Strings(sortedIDs)
 
 	// ← НОВОЕ: несколько кодов стран
-	countryCodes, err := parseCountryCodes(r.URL.Query().Get("c"), cfg.Countries)
+	countryCodes, err := parseCountryCodes(r.URL.Query().Get("c"), cfg.Countries, cfg.MaxCountryCodes)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid country codes: %v", err), http.StatusBadRequest)
 		return
@@ -392,12 +406,37 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 		return
 	}
 
-	g, ctx := errgroup.WithContext(context.Background())
-	results := make([]string, len(idList))
-	var mu sync.Mutex
-	for i, id := range idList {
-		i, id := i, id
-		g.Go(func() error {
+	// Streaming merge: шардируем все обработанные ссылки по bucket'ам на диск,
+	// затем обрабатываем каждый bucket отдельно в памяти для дедупликации.
+	nBuckets := cfg.MergeBuckets
+	if nBuckets <= 0 {
+		nBuckets = 256
+	}
+	tmpDir := filepath.Join(cfg.CacheDir, "merge_tmp_"+mergeCacheKey)
+	if err := os.MkdirAll(tmpDir, 0o755); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create temp dir: %v", err), http.StatusInternalServerError)
+		return
+	}
+	// Open bucket files and writers
+	bucketFiles := make([]*os.File, nBuckets)
+	bucketWriters := make([]*bufio.Writer, nBuckets)
+	bucketLocks := make([]sync.Mutex, nBuckets)
+	for i := 0; i < nBuckets; i++ {
+		p := filepath.Join(tmpDir, fmt.Sprintf("bucket_%d.txt", i))
+		f, err := os.Create(p)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to create bucket file: %v", err), http.StatusInternalServerError)
+			return
+		}
+		bucketFiles[i] = f
+		bucketWriters[i] = bufio.NewWriter(f)
+	}
+
+	// process sources concurrently, writing processed lines to bucket files
+	eg, ctx := errgroup.WithContext(context.Background())
+	for _, id := range idList {
+		id := id
+		eg.Go(func() error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -407,46 +446,63 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 			if !exists {
 				return fmt.Errorf("source not found for id: %s", id)
 			}
-			result, err := processSource(id, source, cfg, proxyProcessors, false, countryCodes)
-			if err != nil {
+			// Process and write to buckets
+			if err := processSourceToBuckets(id, source, cfg, proxyProcessors, countryCodes, nBuckets, bucketWriters, &bucketLocks); err != nil {
 				return fmt.Errorf("error processing source id '%s': %w", id, err)
 			}
-			mu.Lock()
-			results[i] = result
-			mu.Unlock()
 			return nil
 		})
 	}
-	if err := g.Wait(); err != nil {
+	if err := eg.Wait(); err != nil {
 		http.Error(w, fmt.Sprintf("Processing error during merge: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	uniqueLinks := make(map[string]string)
-	for _, result := range results {
-		lines := strings.Split(result, "\n")
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			key, err := utils.NormalizeLinkKey(line)
-			if err != nil {
-				continue
-			}
-			if existingLine, ok := uniqueLinks[key]; ok {
-				betterLine := utils.CompareAndSelectBetter(line, existingLine)
-				uniqueLinks[key] = betterLine
-			} else {
-				uniqueLinks[key] = line
-			}
-		}
+	// flush and close bucket files
+	for i := 0; i < nBuckets; i++ {
+		_ = bucketWriters[i].Flush()
+		_ = bucketFiles[i].Close()
 	}
 
-	finalLines := make([]string, 0, len(uniqueLinks))
-	for _, line := range uniqueLinks {
-		finalLines = append(finalLines, line)
+	// Iterate buckets, dedupe per-bucket and collect final lines
+	finalLines := make([]string, 0)
+	for i := 0; i < nBuckets; i++ {
+		p := filepath.Join(tmpDir, fmt.Sprintf("bucket_%d.txt", i))
+		f, err := os.Open(p)
+		if err != nil {
+			// skip empty/missing buckets
+			continue
+		}
+		scanner := bufio.NewScanner(f)
+		// allow long lines
+		buf := make([]byte, 0, 64*1024)
+		scanner.Buffer(buf, 4*1024*1024)
+		bucketMap := make(map[string]string)
+		for scanner.Scan() {
+			line := scanner.Text()
+			// format: key\tfull_line
+			idx := strings.IndexByte(line, '\t')
+			if idx <= 0 {
+				continue
+			}
+			key := line[:idx]
+			full := line[idx+1:]
+			if existing, ok := bucketMap[key]; ok {
+				better := utils.CompareAndSelectBetter(full, existing)
+				bucketMap[key] = better
+			} else {
+				bucketMap[key] = full
+			}
+		}
+		f.Close()
+		for _, v := range bucketMap {
+			finalLines = append(finalLines, v)
+		}
+		// remove bucket file to save space
+		_ = os.Remove(p)
 	}
+	// remove temp dir
+	_ = os.Remove(tmpDir)
 	sort.Strings(finalLines)
 
 	profileName := "merged_" + strings.Join(sortedIDs, "_")
@@ -653,6 +709,166 @@ func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessor
 		_ = os.Rename(tmpFile, modCache)
 	}
 	return final, nil
+}
+
+// processSourceToBuckets обрабатывает источник подписки и записывает каждую
+// валидную обработанную ссылку в соответствующий bucket writer в формате
+// "key\tfull_line\n". Это позволяет затем выполнять дедупликацию по частям,
+// уменьшая пиковое использование памяти.
+func processSourceToBuckets(id string, source *SafeSource, cfg *AppConfig, proxyProcessors []ProxyLink, countryCodes []string, nBuckets int, bucketWriters []*bufio.Writer, bucketLocks *[]sync.Mutex) error {
+	parsedSource, err := url.Parse(source.URL)
+	if err != nil || parsedSource.Host == "" {
+		return fmt.Errorf("invalid source URL")
+	}
+	host := parsedSource.Hostname()
+	if !utils.IsValidHost(host) {
+		return fmt.Errorf("invalid source host: %s", host)
+	}
+
+	cacheSuffix := ""
+	if len(countryCodes) > 0 {
+		cacheSuffix = "_c_" + strings.Join(countryCodes, "_")
+	}
+
+	origCache := filepath.Join(cfg.CacheDir, "orig_"+id+cacheSuffix+".txt")
+	rejectedCache := filepath.Join(cfg.CacheDir, "rejected_"+id+cacheSuffix+".txt")
+
+	if !utils.IsPathSafe(origCache, cfg.CacheDir) || !utils.IsPathSafe(rejectedCache, cfg.CacheDir) {
+		return fmt.Errorf("unsafe cache path for id=%s", id)
+	}
+
+	var origContent []byte
+	if info, err := os.Stat(origCache); err == nil && time.Since(info.ModTime()) <= cfg.CacheTTL {
+		if content, err := os.ReadFile(origCache); err == nil {
+			origContent = content
+		}
+	}
+
+	if origContent == nil {
+		_, portStr, _ := net.SplitHostPort(parsedSource.Host)
+		if portStr == "" {
+			portStr = getDefaultPort(parsedSource.Scheme)
+		}
+		client := &http.Client{
+			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					dialer := &net.Dialer{Timeout: 5 * time.Second}
+					return dialer.DialContext(ctx, network, net.JoinHostPort(source.IP.String(), portStr))
+				},
+				TLSClientConfig: &tls.Config{ServerName: host},
+				MaxIdleConns:    10,
+				IdleConnTimeout: 30 * time.Second,
+			},
+		}
+		result, err, _ := fetchGroup.Do(id, func() (interface{}, error) {
+			req, err := http.NewRequest("GET", source.URL, nil)
+			if err != nil {
+				return nil, fmt.Errorf("create request: %w", err)
+			}
+			req.Header.Set("User-Agent", "go-filter/1.0")
+			resp, err := client.Do(req)
+			if err != nil {
+				return nil, fmt.Errorf("fetch failed: %w", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode >= 400 {
+				return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+			}
+			content, err := io.ReadAll(io.LimitReader(resp.Body, maxSourceBytes))
+			if err != nil {
+				return nil, fmt.Errorf("read failed: %w", err)
+			}
+			tmpFile := origCache + ".tmp"
+			if err := os.WriteFile(tmpFile, content, 0o644); err == nil {
+				_ = os.Rename(tmpFile, origCache)
+			}
+			return content, nil
+		})
+		if err != nil {
+			return err
+		}
+		origContent = result.([]byte)
+	}
+
+	hasProxy := bytes.Contains(origContent, []byte("vless://")) ||
+		bytes.Contains(origContent, []byte("vmess://")) ||
+		bytes.Contains(origContent, []byte("trojan://")) ||
+		bytes.Contains(origContent, []byte("ss://")) ||
+		bytes.Contains(origContent, []byte("hysteria2://")) ||
+		bytes.Contains(origContent, []byte("hy2://"))
+	if !hasProxy {
+		decoded := utils.AutoDecodeBase64(origContent)
+		if bytes.Contains(decoded, []byte("vless://")) ||
+			bytes.Contains(decoded, []byte("vmess://")) ||
+			bytes.Contains(decoded, []byte("trojan://")) ||
+			bytes.Contains(decoded, []byte("ss://")) ||
+			bytes.Contains(decoded, []byte("hysteria2://")) ||
+			bytes.Contains(decoded, []byte("hy2://")) {
+			origContent = decoded
+		}
+	}
+
+	var rejectedLines []string
+	rejectedLines = append(rejectedLines, "## Source: "+source.URL)
+	lines := bytes.Split(origContent, []byte("\n"))
+	for _, lineBytes := range lines {
+		originalLine := strings.TrimRight(string(lineBytes), "\r\n")
+		if originalLine == "" || strings.HasPrefix(originalLine, "#") {
+			continue
+		}
+		var processedLine, reason string
+		handled := false
+		for _, p := range proxyProcessors {
+			if p.Matches(originalLine) {
+				processedLine, reason = p.Process(originalLine)
+				handled = true
+				break
+			}
+		}
+		if !handled {
+			reason = "unsupported protocol"
+		}
+		if processedLine != "" {
+			if len(countryCodes) > 0 {
+				parsedProcessed, parseErr := url.Parse(processedLine)
+				if parseErr == nil && parsedProcessed.Fragment != "" {
+					allFilterStrings := utils.GetCountryFilterStringsForMultiple(countryCodes, cfg.Countries)
+					if !utils.IsFragmentMatchingCountry(parsedProcessed.Fragment, allFilterStrings) {
+						continue
+					}
+				} else {
+					continue
+				}
+			}
+			// Normalize key and write to bucket
+			key, err := utils.NormalizeLinkKey(processedLine)
+			if err != nil {
+				continue
+			}
+			// compute bucket
+			h := fnv.New32a()
+			_, _ = h.Write([]byte(key))
+			b := int(h.Sum32() % uint32(nBuckets))
+			// write as: key\tfull_line\n
+			(*bucketLocks)[b].Lock()
+			_, _ = bucketWriters[b].WriteString(key + "\t" + processedLine + "\n")
+			(*bucketLocks)[b].Unlock()
+		} else {
+			if reason == "" {
+				reason = "processing failed"
+			}
+			rejectedLines = append(rejectedLines, "# REASON: "+reason, originalLine)
+		}
+	}
+
+	// write rejected cache
+	rejectedContent := strings.Join(rejectedLines, "\n")
+	tmpFile := rejectedCache + ".tmp"
+	if err := os.WriteFile(tmpFile, []byte(rejectedContent), 0o644); err == nil {
+		_ = os.Rename(tmpFile, rejectedCache)
+	}
+	return nil
 }
 
 // остальные функции (loadSourcesFromFile, loadConfigFromFile, loadCountriesFromFile, loadConfigFromArgsOrFile, printRulesInfo, loadRulesOrDefault, main) — без изменений, кроме:
@@ -887,7 +1103,7 @@ func main() {
 		var parsedCountryCodes []string
 		if *countryCodesCLI != "" {
 			var err error
-			parsedCountryCodes, err = parseCountryCodes(*countryCodesCLI, cfg.Countries)
+			parsedCountryCodes, err = parseCountryCodes(*countryCodesCLI, cfg.Countries, cfg.MaxCountryCodes)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Invalid country codes: %v\n", err)
 				os.Exit(1)
@@ -904,8 +1120,7 @@ func main() {
 				// ← ПЕРЕДАЁМ parsedCountryCodes вместо ""
 				result, err := processSource(id, source, cfg, proxyProcessors, *stdout, parsedCountryCodes)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "Process failed %s: %v\n", id, err)
-					return nil
+					return fmt.Errorf("process failed %s: %w", id, err)
 				}
 				if *stdout {
 					mu.Lock()
@@ -917,7 +1132,10 @@ func main() {
 				return nil
 			})
 		}
-		_ = g.Wait()
+		if err := g.Wait(); err != nil {
+			fmt.Fprintf(os.Stderr, "Processing error(s): %v\n", err)
+			os.Exit(1)
+		}
 		if *stdout {
 			for _, out := range outputs {
 				fmt.Println(out)
@@ -964,7 +1182,7 @@ func main() {
 			return
 		}
 		id := r.URL.Query().Get("id")
-		countryCodes, err := parseCountryCodes(r.URL.Query().Get("c"), cfg.Countries)
+		countryCodes, err := parseCountryCodes(r.URL.Query().Get("c"), cfg.Countries, cfg.MaxCountryCodes)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Invalid country codes: %v", err), http.StatusBadRequest)
 			return

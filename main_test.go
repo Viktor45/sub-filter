@@ -212,7 +212,7 @@ func TestParseCountryCodes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			codes, err := parseCountryCodes(tt.input, countries)
+			codes, err := parseCountryCodes(tt.input, countries, 20)
 			if tt.expectErr {
 				if err == nil {
 					t.Error("Expected error, got nil")

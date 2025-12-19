@@ -131,8 +131,17 @@ func ParseHostPort(u *url.URL) (string, int, error) {
 
 // IsPathSafe проверяет, что путь не выходит за пределы baseDir.
 func IsPathSafe(p, baseDir string) bool {
-	cleanPath := filepath.Clean(p)
-	rel, err := filepath.Rel(baseDir, cleanPath)
+	// Resolve symlinks for both baseDir and path to avoid escaping via symlink tricks
+	resolvedBase, err := filepath.EvalSymlinks(baseDir)
+	if err != nil {
+		resolvedBase = baseDir
+	}
+	resolvedPath, err := filepath.EvalSymlinks(p)
+	if err != nil {
+		resolvedPath = p
+	}
+	cleanPath := filepath.Clean(resolvedPath)
+	rel, err := filepath.Rel(resolvedBase, cleanPath)
 	if err != nil {
 		return false
 	}
@@ -194,7 +203,9 @@ func NormalizeLinkKey(line string) (string, error) {
 		queryParts = append(queryParts, k+"="+params.Get(k))
 	}
 	queryStr := strings.Join(queryParts, "&")
-
+	if queryStr == "" {
+		return fmt.Sprintf("%s://%s%s", scheme, hostWithPort, path), nil
+	}
 	return fmt.Sprintf("%s://%s%s?%s", scheme, hostWithPort, path, queryStr), nil
 }
 
@@ -211,13 +222,23 @@ func CompareAndSelectBetter(currentLine, existingLine string) string {
 		return currentLine
 	}
 
-	currentParamCount := len(uCurrent.Query())
-	existingParamCount := len(uExisting.Query())
+	score := func(u *url.URL) int {
+		s := 0
+		q := u.Query()
+		if sec := strings.ToLower(q.Get("security")); sec != "" && sec != "none" {
+			s += 50
+		}
+		if q.Get("tls") != "" {
+			s += 10
+		}
+		s += len(q)
+		return s
+	}
 
-	if currentParamCount > existingParamCount {
+	if score(uCurrent) > score(uExisting) {
 		return currentLine
 	}
-	if existingParamCount > currentParamCount {
+	if score(uExisting) > score(uCurrent) {
 		return existingLine
 	}
 	return existingLine // стабильность: оставить старую

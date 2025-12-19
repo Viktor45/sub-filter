@@ -246,7 +246,7 @@ func TestNormalizeLinkKey(t *testing.T) {
 		{
 			name:  "trojan basic",
 			input: "trojan://password@example.com:443",
-			want:  "trojan://example.com:443?",
+			want:  "trojan://example.com:443",
 		},
 		{
 			name:  "trojan with grpc",
@@ -261,7 +261,7 @@ func TestNormalizeLinkKey(t *testing.T) {
 		{
 			name:  "ss basic",
 			input: "ss://YWVzLTI1Ni1nY206dGVzdA==@example.com:8388",
-			want:  "ss://example.com:8388?",
+			want:  "ss://example.com:8388",
 		},
 		{
 			name:        "invalid url",
@@ -271,22 +271,22 @@ func TestNormalizeLinkKey(t *testing.T) {
 		{
 			name:  "https root (with default port 443)",
 			input: "https://example.com",
-			want:  "https://example.com:443?",
+			want:  "https://example.com:443",
 		},
 		{
 			name:  "https with path",
 			input: "https://example.com/somepath",
-			want:  "https://example.com:443/somepath?",
+			want:  "https://example.com:443/somepath",
 		},
 		{
 			name:  "http root (with default port 80)",
 			input: "http://example.com",
-			want:  "http://example.com:80?",
+			want:  "http://example.com:80",
 		},
 		{
 			name:  "https with explicit port",
 			input: "https://example.com:8443/api",
-			want:  "https://example.com:8443/api?",
+			want:  "https://example.com:8443/api",
 		},
 		{
 			name:  "https with query",

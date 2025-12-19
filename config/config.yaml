@@ -4,3 +4,12 @@ bad_words_file: "./config/bad.txt"
 uagent_file: "./config/uagent.txt"
 cache_dir: "/tmp/sub-filter-cache"
 cache_ttl: 1800s
+
+# Максимальное количество кодов стран, допускаемых в параметре `c` (merge/filter)
+max_country_codes: 20
+
+# Максимальное количество подписок, которые можно объединять через /merge
+max_merge_ids: 10
+
+# Число шард (bucket) для streaming-merge на диске. Больше — меньше пиковая память, но больше файлов.
+merge_buckets: 256

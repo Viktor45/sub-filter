@@ -5,6 +5,7 @@ package vmess
 import (
 	"encoding/base64"
 	"encoding/json"
+	"math"
 	"strconv"
 	"strings"
 
@@ -102,7 +103,12 @@ func (v *VMessLink) Process(s string) (string, string) {
 		if s, ok := vi.(string); ok {
 			params[k] = s // ← даже если s == ""
 		} else if f, ok := vi.(float64); ok {
-			params[k] = strconv.FormatFloat(f, 'f', -1, 64)
+			// port and similar numeric fields should be integer when possible
+			if math.Trunc(f) == f {
+				params[k] = strconv.Itoa(int(f))
+			} else {
+				params[k] = strconv.FormatFloat(f, 'f', -1, 64)
+			}
 		}
 	}
 
