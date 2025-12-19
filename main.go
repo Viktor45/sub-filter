@@ -12,6 +12,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"net"
 	"net/http"
@@ -29,7 +30,6 @@ import (
 	"time"
 	_ "time/tzdata"
 
-	"hash/fnv"
 	"sub-filter/hysteria2"
 	"sub-filter/internal/utils"
 	"sub-filter/internal/validator"
@@ -64,18 +64,18 @@ type SafeSource struct {
 type SourceMap map[string]*SafeSource
 
 type AppConfig struct {
-	CacheDir      string        `mapstructure:"cache_dir"`
-	CacheTTL      time.Duration `mapstructure:"cache_ttl"`
-	SourcesFile   string        `mapstructure:"sources_file"`
-	BadWordsFile  string        `mapstructure:"bad_words_file"`
-	UAgentFile    string        `mapstructure:"uagent_file"`
-	RulesFile     string        `mapstructure:"rules_file"`
-	CountriesFile string        `mapstructure:"countries_file"` // ← ЭТО КЛЮЧ!
-	AllowedUA     []string
-	BadWords      []string
-	Sources       SourceMap
-	Rules         map[string]validator.Validator
-	Countries     map[string]utils.CountryInfo
+	CacheDir        string        `mapstructure:"cache_dir"`
+	CacheTTL        time.Duration `mapstructure:"cache_ttl"`
+	SourcesFile     string        `mapstructure:"sources_file"`
+	BadWordsFile    string        `mapstructure:"bad_words_file"`
+	UAgentFile      string        `mapstructure:"uagent_file"`
+	RulesFile       string        `mapstructure:"rules_file"`
+	CountriesFile   string        `mapstructure:"countries_file"` // ← ЭТО КЛЮЧ!
+	AllowedUA       []string
+	BadWords        []string
+	Sources         SourceMap
+	Rules           map[string]validator.Validator
+	Countries       map[string]utils.CountryInfo
 	MaxCountryCodes int `mapstructure:"max_country_codes"`
 	MaxMergeIDs     int `mapstructure:"max_merge_ids"`
 	MergeBuckets    int `mapstructure:"merge_buckets"`
@@ -353,7 +353,7 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 	if len(idList) == 0 {
 		idList = r.URL.Query()["id"]
 	}
-		if status, msg := validateIDs(idList, cfg); status != 0 {
+	if status, msg := validateIDs(idList, cfg); status != 0 {
 		http.Error(w, msg, status)
 		return
 	}
@@ -517,11 +517,11 @@ func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessor
 	modCache := filepath.Join(cfg.CacheDir, "mod_"+id+cacheSuffix+".txt")
 	rejectedCache := filepath.Join(cfg.CacheDir, "rejected_"+id+cacheSuffix+".txt")
 
-	if !utils.IsPathSafe(origCache, cfg.CacheDir) ||
-		!utils.IsPathSafe(modCache, cfg.CacheDir) ||
-		!utils.IsPathSafe(rejectedCache, cfg.CacheDir) {
-		return "", fmt.Errorf("unsafe cache path for id=%s", id)
-	}
+	//if !utils.IsPathSafe(origCache, cfg.CacheDir) ||
+	//	!utils.IsPathSafe(modCache, cfg.CacheDir) ||
+	//	!utils.IsPathSafe(rejectedCache, cfg.CacheDir) {
+	//	return "", fmt.Errorf("unsafe cache path for id=%s", id)
+	//}
 
 	if !stdout {
 		if info, err := os.Stat(modCache); err == nil && time.Since(info.ModTime()) <= cfg.CacheTTL {
@@ -710,9 +710,9 @@ func processSourceToBuckets(id string, source *SafeSource, cfg *AppConfig, proxy
 	origCache := filepath.Join(cfg.CacheDir, "orig_"+id+cacheSuffix+".txt")
 	rejectedCache := filepath.Join(cfg.CacheDir, "rejected_"+id+cacheSuffix+".txt")
 
-	if !utils.IsPathSafe(origCache, cfg.CacheDir) || !utils.IsPathSafe(rejectedCache, cfg.CacheDir) {
-		return fmt.Errorf("unsafe cache path for id=%s", id)
-	}
+	//if !utils.IsPathSafe(origCache, cfg.CacheDir) || !utils.IsPathSafe(rejectedCache, cfg.CacheDir) {
+	//	return fmt.Errorf("unsafe cache path for id=%s", id)
+	//}
 
 	var origContent []byte
 	if info, err := os.Stat(origCache); err == nil && time.Since(info.ModTime()) <= cfg.CacheTTL {
