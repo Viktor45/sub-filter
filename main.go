@@ -398,6 +398,24 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 	bucketFiles := make([]*os.File, nBuckets)
 	bucketWriters := make([]*bufio.Writer, nBuckets)
 	bucketLocks := make([]sync.Mutex, nBuckets)
+
+	// Ensure partial resources are cleaned up on early return
+	success := false
+	defer func() {
+		if !success {
+			for i := 0; i < nBuckets; i++ {
+				if bucketWriters[i] != nil {
+					_ = bucketWriters[i].Flush()
+				}
+				if bucketFiles[i] != nil {
+					_ = bucketFiles[i].Close()
+				}
+				_ = os.Remove(filepath.Join(tmpDir, fmt.Sprintf("bucket_%d.txt", i)))
+			}
+			_ = os.RemoveAll(tmpDir)
+		}
+	}()
+
 	for i := 0; i < nBuckets; i++ {
 		p := filepath.Join(tmpDir, fmt.Sprintf("bucket_%d.txt", i))
 		f, err := os.Create(p)
@@ -494,6 +512,8 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 	if err := os.WriteFile(tmpFile, []byte(finalContent), 0o644); err == nil {
 		_ = os.Rename(tmpFile, cacheFilePath)
 	}
+	// mark successful completion to avoid deferred cleanup
+	success = true
 	serveFile(w, r, []byte(finalContent), "merged_sources", mergeCacheKey)
 }
 
@@ -502,6 +522,9 @@ func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessor
 	parsedSource, err := url.Parse(source.URL)
 	if err != nil || parsedSource.Host == "" {
 		return "", fmt.Errorf("invalid source URL")
+	}
+	if source == nil || source.IP == nil {
+		return "", fmt.Errorf("missing resolved IP for source id=%s", id)
 	}
 	host := parsedSource.Hostname()
 	if !utils.IsValidHost(host) {
@@ -585,7 +608,11 @@ func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessor
 		if err != nil {
 			return "", err
 		}
-		origContent = result.([]byte)
+		resBytes, ok := result.([]byte)
+		if !ok {
+			return "", fmt.Errorf("fetch returned unexpected type for id=%s", id)
+		}
+		origContent = resBytes
 	}
 
 	hasProxy := bytes.Contains(origContent, []byte("vless://")) ||
@@ -697,6 +724,9 @@ func processSourceToBuckets(id string, source *SafeSource, cfg *AppConfig, proxy
 	if err != nil || parsedSource.Host == "" {
 		return fmt.Errorf("invalid source URL")
 	}
+	if source == nil || source.IP == nil {
+		return fmt.Errorf("missing resolved IP for source id=%s", id)
+	}
 	host := parsedSource.Hostname()
 	if !utils.IsValidHost(host) {
 		return fmt.Errorf("invalid source host: %s", host)
@@ -765,7 +795,11 @@ func processSourceToBuckets(id string, source *SafeSource, cfg *AppConfig, proxy
 		if err != nil {
 			return err
 		}
-		origContent = result.([]byte)
+		resBytes, ok := result.([]byte)
+		if !ok {
+			return fmt.Errorf("fetch returned unexpected type for id=%s", id)
+		}
+		origContent = resBytes
 	}
 
 	hasProxy := bytes.Contains(origContent, []byte("vless://")) ||
@@ -991,6 +1025,33 @@ func loadConfigFromFile(configPath string) (*AppConfig, error) {
 		cfg.Countries = make(map[string]utils.CountryInfo)
 	} else {
 		cfg.Countries = countries
+	}
+
+	// Ensure sources have resolved IPs when provided via config file
+	for id, s := range cfg.Sources {
+		if s == nil {
+			return nil, fmt.Errorf("source entry %s is nil", id)
+		}
+		if s.IP == nil {
+			u, err := url.Parse(s.URL)
+			if err != nil || u.Hostname() == "" {
+				return nil, fmt.Errorf("invalid source URL for id=%s", id)
+			}
+			ips, err := net.LookupIP(u.Hostname())
+			if err != nil || len(ips) == 0 {
+				return nil, fmt.Errorf("failed to resolve host for source id=%s: %v", id, err)
+			}
+			for _, ip := range ips {
+				if isIPAllowed(ip) {
+					s.IP = ip
+					break
+				}
+			}
+			if s.IP == nil {
+				return nil, fmt.Errorf("no allowed IP found for source id=%s", id)
+			}
+			cfg.Sources[id] = s
+		}
 	}
 	return cfg, nil
 }
