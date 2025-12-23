@@ -1,4 +1,7 @@
-// internal/utils/countries.go
+// Package utils предоставляет вспомогательные функции для работы со
+// списками стран и формирования фильтров по странам.
+//
+//nolint:revive
 package utils
 
 import (
@@ -14,7 +17,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// CountryInfo — ПЛОСКАЯ структура, как в countries.yaml
+// CountryInfo описывает минимальную информацию о стране, используемую
+// в конфигурационных файлах (config/countries.yaml).
 type CountryInfo struct {
 	CCA3   string `mapstructure:"cca3"`
 	Flag   string `mapstructure:"flag"`
@@ -37,6 +41,7 @@ type Country struct {
 	Flag string `json:"flag"`
 }
 
+// CountryYAML служит для сериализации/десериализации данных стран в YAML.
 type CountryYAML struct {
 	CCA3   string `yaml:"cca3"`
 	Flag   string `yaml:"flag"`
@@ -57,12 +62,17 @@ func dedupJoin(values []string) string {
 	return strings.Join(unique, "|")
 }
 
+// GenerateCountries получает список стран из REST API и сохраняет
+// их в файл ./config/countries.yaml в формате, ожидаемом приложением.
+// Используется в режиме CLI для генерации обновлённого списка стран.
 func GenerateCountries() {
 	resp, err := http.Get("https://restcountries.com/v3.1/all?fields=cca2,cca3,flag,name,nativeName")
 	if err != nil {
 		panic(err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -123,6 +133,7 @@ func GenerateCountries() {
 	fmt.Println("✅ countries.yaml создан в требуемом формате")
 }
 
+// LoadCountries загружает файл стран YAML и возвращает карту код->CountryInfo.
 func LoadCountries(filePath string) (map[string]CountryInfo, error) {
 	if filePath == "" {
 		return make(map[string]CountryInfo), nil
@@ -141,6 +152,9 @@ func LoadCountries(filePath string) (map[string]CountryInfo, error) {
 	return countries, nil
 }
 
+// GetCountryFilterStrings возвращает набор строк для поиска/фильтрации
+// для указанного кода страны (CCA2). Результат включает CCA3, флаг,
+// название и native-имена.
 func GetCountryFilterStrings(countryCode string, countryMap map[string]CountryInfo) []string {
 	if countryCode == "" {
 		return []string{}
@@ -183,6 +197,7 @@ func GetCountryFilterStrings(countryCode string, countryMap map[string]CountryIn
 	return unique
 }
 
+// GetCountryFilterStringsForMultiple объединяет фильтры для нескольких кодов стран.
 func GetCountryFilterStringsForMultiple(codes []string, countryMap map[string]CountryInfo) []string {
 	if len(codes) == 0 {
 		return []string{}
@@ -201,6 +216,7 @@ func GetCountryFilterStringsForMultiple(codes []string, countryMap map[string]Co
 	return all
 }
 
+// IsFragmentMatchingCountry проверяет, содержит ли фрагмент одну из строк фильтра.
 func IsFragmentMatchingCountry(fragment string, filterStrings []string) bool {
 	if len(filterStrings) == 0 {
 		return true

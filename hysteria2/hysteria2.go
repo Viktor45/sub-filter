@@ -1,3 +1,5 @@
+// Package hysteria2 обрабатывает ссылки формата hysteria2:// и hy2://
+// и предоставляет парсер/нормализатор для Hysteria2 конфигураций.
 package hysteria2
 
 import (
@@ -10,6 +12,9 @@ import (
 	"sub-filter/internal/validator"
 )
 
+// Hysteria2Link обрабатывает Hysteria2-URI (hysteria2://, hy2://).
+//
+//nolint:revive
 type Hysteria2Link struct {
 	badWords      []string
 	isValidHost   func(string) bool
@@ -17,6 +22,7 @@ type Hysteria2Link struct {
 	ruleValidator validator.Validator
 }
 
+// NewHysteria2Link создаёт новый обработчик Hysteria2.
 func NewHysteria2Link(
 	bw []string,
 	vh func(string) bool,
@@ -34,11 +40,14 @@ func NewHysteria2Link(
 	}
 }
 
+// Matches сообщает, соответствует ли строка формату Hysteria2 (hysteria2:// или hy2://).
 func (h *Hysteria2Link) Matches(s string) bool {
 	lower := strings.ToLower(s)
 	return strings.HasPrefix(lower, "hysteria2://") || strings.HasPrefix(lower, "hy2://")
 }
 
+// Process парсит и нормализует Hysteria2 URI, возвращая нормализованную
+// строку или причину отклонения.
 func (h *Hysteria2Link) Process(s string) (string, string) {
 	const maxURILength = 4096
 	if len(s) > maxURILength {

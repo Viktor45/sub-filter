@@ -1,3 +1,4 @@
+// Package ss обрабатывает Shadowsocks URI (ss://).
 package ss
 
 import (
@@ -11,6 +12,9 @@ import (
 	"sub-filter/internal/validator"
 )
 
+// SSLink обрабатывает Shadowsocks-URI (ss://).
+//
+//nolint:revive
 type SSLink struct {
 	badWords      []string
 	isValidHost   func(string) bool
@@ -19,6 +23,7 @@ type SSLink struct {
 	ruleValidator validator.Validator
 }
 
+// NewSSLink создаёт новый обработчик Shadowsocks.
 func NewSSLink(
 	bw []string,
 	vh func(string) bool,
@@ -37,14 +42,18 @@ func NewSSLink(
 	}
 }
 
+// Matches возвращает true для строк, начинающихся с "ss://".
+// Matches сообщает, является ли строка Shadowsocks-ссылкой.
 func (s *SSLink) Matches(sLink string) bool {
 	return strings.HasPrefix(strings.ToLower(sLink), "ss://")
 }
 
+// Process парсит и нормализует Shadowsocks URI, возвращая нормализованную
+// ссылку или причину отклонения.
 func (s *SSLink) Process(sLink string) (string, string) {
 	const maxURILength = 4096
 	const maxUserinfoLength = 1024
-	const maxSSPasswordBytes = 256 // ← новая константа
+	const maxSSPasswordBytes = 256 // maxSSPasswordBytes ограничивает длину пароля в байтах
 	if len(sLink) > maxURILength {
 		return "", "line too long"
 	}

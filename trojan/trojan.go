@@ -1,3 +1,4 @@
+// Package trojan содержит парсер и нормализатор для trojan:// ссылок.
 package trojan
 
 import (
@@ -10,6 +11,9 @@ import (
 	"sub-filter/internal/validator"
 )
 
+// TrojanLink обрабатывает Trojan-URI (trojan://).
+//
+//nolint:revive
 type TrojanLink struct {
 	badWords      []string
 	isValidHost   func(string) bool
@@ -17,6 +21,7 @@ type TrojanLink struct {
 	ruleValidator validator.Validator
 }
 
+// NewTrojanLink создаёт новый обработчик Trojan.
 func NewTrojanLink(
 	bw []string,
 	vh func(string) bool,
@@ -34,10 +39,13 @@ func NewTrojanLink(
 	}
 }
 
+// Matches сообщает, что строка соответствует формату Trojan URI (trojan://).
 func (t *TrojanLink) Matches(s string) bool {
 	return strings.HasPrefix(strings.ToLower(s), "trojan://")
 }
 
+// Process парсит и нормализует Trojan URI, возвращая нормализованную
+// строку или причину отклонения.
 func (t *TrojanLink) Process(s string) (string, string) {
 	const maxURILength = 4096
 	if len(s) > maxURILength {

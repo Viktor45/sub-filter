@@ -183,5 +183,5 @@ func TestGenericValidator_Conditional(t *testing.T) {
 }
 
 func stringsContains(s, substr string) bool {
-	return len(substr) == 0 || (len(s) >= len(substr) && strings.Index(s, substr) >= 0)
+	return substr == "" || strings.Contains(s, substr)
 }

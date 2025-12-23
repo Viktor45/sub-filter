@@ -1,4 +1,4 @@
-// internal/validator/generic.go
+// Package validator содержит реализации валидаторов параметров протоколов.
 package validator
 
 import (
@@ -6,11 +6,14 @@ import (
 	"strings"
 )
 
-// <-- Убедиться, что импортирован
+// GenericValidator реализует базовую логику проверки параметров в соответствии с Rule.
+// Он поддерживает required/allowed/forbidden параметров и условные правила.
 type GenericValidator struct {
 	Rule Rule
 }
 
+// Validate выполняет проверку переданных параметров по правилам, описанным в gv.Rule.
+// Возвращает ValidationResult с полем Valid=true, если все проверки пройдены.
 func (gv *GenericValidator) Validate(params map[string]string) ValidationResult {
 	// Кэшируем lower-case версию параметров, чтобы избежать многократных вызовов ToLower
 	lowerParams := make(map[string]string, len(params))

@@ -56,11 +56,13 @@ const (
 
 var defaultCacheDir = filepath.Join(os.TempDir(), "sub-filter-cache")
 
+// SafeSource содержит URL источника и резолвнутый IP-адрес для подключения.
 type SafeSource struct {
 	URL string
 	IP  net.IP
 }
 
+// SourceMap отображает идентификатор источника в его описание (SafeSource).
 type SourceMap map[string]*SafeSource
 
 type AppConfig struct {
@@ -70,7 +72,7 @@ type AppConfig struct {
 	BadWordsFile    string        `mapstructure:"bad_words_file"`
 	UAgentFile      string        `mapstructure:"uagent_file"`
 	RulesFile       string        `mapstructure:"rules_file"`
-	CountriesFile   string        `mapstructure:"countries_file"` // ← ЭТО КЛЮЧ!
+	CountriesFile   string        `mapstructure:"countries_file"`
 	AllowedUA       []string
 	BadWords        []string
 	Sources         SourceMap
@@ -81,6 +83,8 @@ type AppConfig struct {
 	MergeBuckets    int `mapstructure:"merge_buckets"`
 }
 
+// Init устанавливает значения по умолчанию для полей AppConfig, если они не заданы.
+// Это позволяет корректно запускать приложение при неполной конфигурации.
 func (cfg *AppConfig) Init() {
 	if cfg.CacheDir == "" {
 		cfg.CacheDir = defaultCacheDir
@@ -128,6 +132,12 @@ type ProxyLink interface {
 	Process(s string) (string, string)
 }
 
+// ProxyLink описывает обработчик одного формата прокси-ссылки.
+// Реализации должны определять, соответствует ли строка формату
+// (`Matches`) и возвращать нормализованную строку и (опционально)
+// причину отказа из `Process`.
+
+// createProxyProcessors формирует список обработчиков ссылок для поддерживаемых протоколов.
 func createProxyProcessors(badWords []string, rules map[string]validator.Validator) []ProxyLink {
 	checkBadWords := func(fragment string) (bool, string) {
 		if fragment == "" {
@@ -157,15 +167,19 @@ func createProxyProcessors(badWords []string, rules map[string]validator.Validat
 	}
 }
 
+// loadTextFile читает текстовый файл построчно, опционально применяя
+// функцию-обработчик к каждой непустой и некомментированной строке.
+// Поддерживается удаление BOM (UTF-8). Возвращается слайс обработанных строк.
+
 func loadTextFile(filename string, processor func(string) string) ([]string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	reader := bufio.NewReader(file)
 	if b, err := reader.Peek(3); err == nil && bytes.Equal(b, []byte{0xEF, 0xBB, 0xBF}) {
-		reader.Discard(3)
+		_, _ = reader.Discard(3)
 	}
 	var result []string
 	scanner := bufio.NewScanner(reader)
@@ -190,8 +204,8 @@ func getDefaultPort(scheme string) string {
 }
 
 func isIPAllowed(ip net.IP) bool {
-	return !(ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() || ip.IsMulticast())
+	return !ip.IsLoopback() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast() &&
+		!ip.IsLinkLocalMulticast() && !ip.IsMulticast()
 }
 
 func isValidSourceURL(rawURL string) bool {
@@ -233,6 +247,10 @@ func getLimiter(ip string) *rate.Limiter {
 	return limiter
 }
 
+// getLimiter возвращает или создаёт rate limiter для указанного IP.
+// Также обновляет метку времени последнего обращения для IP. Вызовам
+// не следует удерживать блокировки при использовании возвращённого лимитера.
+
 func cleanupLimiters(ctx context.Context) {
 	ticker := time.NewTicker(cleanupInterval)
 	defer ticker.Stop()
@@ -262,6 +280,9 @@ func cleanupLimiters(ctx context.Context) {
 	}
 }
 
+// cleanupLimiters периодически удаляет из памяти неиспользуемые лимитеры IP.
+// Функция работает пока не будет отменён контекст.
+
 func isValidUserAgent(ua string, allowedUA []string) bool {
 	lowerUA := strings.ToLower(ua)
 	for _, prefix := range builtinAllowedPrefixes {
@@ -277,7 +298,11 @@ func isValidUserAgent(ua string, allowedUA []string) bool {
 	return false
 }
 
-func serveFile(w http.ResponseWriter, r *http.Request, content []byte, sourceURL, id string) {
+// isValidUserAgent проверяет, разрешён ли User-Agent запроса.
+// Разрешаются встроенные префиксы и значения из конфигурации.
+// Сравнение проводится без учёта регистра.
+
+func serveFile(w http.ResponseWriter, content []byte, sourceURL, id string) {
 	filename := "filtered_" + id + ".txt"
 	if u, err := url.Parse(sourceURL); err == nil {
 		base := path.Base(u.Path)
@@ -293,8 +318,12 @@ func serveFile(w http.ResponseWriter, r *http.Request, content []byte, sourceURL
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	w.Header().Set("Content-Length", strconv.Itoa(len(content)))
-	w.Write(content)
+	_, _ = w.Write(content)
 }
+
+// serveFile отправляет `content` в ответ как загружаемый .txt файл.
+// Имя файла формируется из URL источника или переданного id и
+// очищается для предотвращения обхода путей и недопустимых символов.
 
 func isLocalIP(ipStr string) bool {
 	ip := net.ParseIP(ipStr)
@@ -307,9 +336,12 @@ func isLocalIP(ipStr string) bool {
 	return ip.IsLoopback() || ip.IsPrivate()
 }
 
-// parseCountryCodes парсит и валидирует список кодов стран из строки вида "AD,DE,FR".
-// parseCountryCodes парсит и валидирует список кодов стран из строки вида "AD,DE,FR".
-// Параметр maxCodes задаёт максимальное число кодов, берётся из конфигурации приложения.
+// isLocalIP возвращает true для loopback/частных адресов или если
+// входная строка не распарсилась как IP. Это позволяет трактовать
+// некорректные RemoteAddr как локальные для консервативной обработки.
+
+// parseCountryCodes парсит и валидирует список кодов стран вида "AD,DE,FR".
+// Возвращает отсортованный список уникальных кодов или ошибку.
 func parseCountryCodes(cParam string, countryMap map[string]utils.CountryInfo, maxCodes int) ([]string, error) {
 	if cParam == "" {
 		return nil, nil
@@ -363,7 +395,7 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 	copy(sortedIDs, idList)
 	sort.Strings(sortedIDs)
 
-	// ← НОВОЕ: несколько кодов стран
+	// Поддерживается указание нескольких кодов стран, разделённых запятой.
 	countryCodes, err := parseCountryCodes(r.URL.Query().Get("c"), cfg.Countries, cfg.MaxCountryCodes)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid country codes: %v", err), http.StatusBadRequest)
@@ -379,7 +411,7 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 	cacheFilePath := filepath.Join(cfg.CacheDir, mergeCacheKey+".txt")
 	if info, err := os.Stat(cacheFilePath); err == nil && time.Since(info.ModTime()) <= cfg.CacheTTL {
 		content, _ := os.ReadFile(cacheFilePath)
-		serveFile(w, r, content, "merged_sources", mergeCacheKey)
+		serveFile(w, content, "merged_sources", mergeCacheKey)
 		return
 	}
 
@@ -399,7 +431,7 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 	bucketWriters := make([]*bufio.Writer, nBuckets)
 	bucketLocks := make([]sync.Mutex, nBuckets)
 
-	// Ensure partial resources are cleaned up on early return
+	// Гарантируем очистку частично созданных ресурсов при раннем выходе
 	success := false
 	defer func() {
 		if !success {
@@ -489,7 +521,7 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 				bucketMap[key] = full
 			}
 		}
-		f.Close()
+		_ = f.Close()
 		for _, v := range bucketMap {
 			finalLines = append(finalLines, v)
 		}
@@ -514,11 +546,20 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 	}
 	// mark successful completion to avoid deferred cleanup
 	success = true
-	serveFile(w, r, []byte(finalContent), "merged_sources", mergeCacheKey)
+	serveFile(w, []byte(finalContent), "merged_sources", mergeCacheKey)
 }
+
+// handleMerge обрабатывает несколько идентификаторов источников
+// параллельно и выполняет потоковое слияние по bucket'ам на диске,
+// что позволяет выполнить дедупликацию с ограниченным использованием памяти.
+// Результат сохраняется в кэше и отдаётся как загружаемый файл.
 
 // Обратите внимание: countryCode заменён на countryCodes []string
 func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessors []ProxyLink, stdout bool, countryCodes []string) (string, error) {
+	// processSource загружает (или читает из кэша) источник подписки,
+	// парсит его, фильтрует и нормализует прокси‑ссылки и возвращает
+	// финальный контент профиля. При stdout==false результат кешируется
+	// в каталоге cfg.CacheDir.
 	parsedSource, err := url.Parse(source.URL)
 	if err != nil || parsedSource.Host == "" {
 		return "", fmt.Errorf("invalid source URL")
@@ -540,11 +581,11 @@ func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessor
 	modCache := filepath.Join(cfg.CacheDir, "mod_"+id+cacheSuffix+".txt")
 	rejectedCache := filepath.Join(cfg.CacheDir, "rejected_"+id+cacheSuffix+".txt")
 
-	//if !utils.IsPathSafe(origCache, cfg.CacheDir) ||
-	//	!utils.IsPathSafe(modCache, cfg.CacheDir) ||
-	//	!utils.IsPathSafe(rejectedCache, cfg.CacheDir) {
-	//	return "", fmt.Errorf("unsafe cache path for id=%s", id)
-	//}
+	if !utils.IsPathSafe(origCache, cfg.CacheDir) ||
+		!utils.IsPathSafe(modCache, cfg.CacheDir) ||
+		!utils.IsPathSafe(rejectedCache, cfg.CacheDir) {
+		return "", fmt.Errorf("unsafe cache path for id=%s", id)
+	}
 
 	if !stdout {
 		if info, err := os.Stat(modCache); err == nil && time.Since(info.ModTime()) <= cfg.CacheTTL {
@@ -570,7 +611,7 @@ func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessor
 		client := &http.Client{
 			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
-				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
 					dialer := &net.Dialer{Timeout: 5 * time.Second}
 					return dialer.DialContext(ctx, network, net.JoinHostPort(source.IP.String(), portStr))
 				},
@@ -589,7 +630,7 @@ func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessor
 			if err != nil {
 				return nil, fmt.Errorf("fetch failed: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			if resp.StatusCode >= 400 {
 				return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 			}
@@ -720,6 +761,10 @@ func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessor
 // "key\tfull_line\n". Это позволяет затем выполнять дедупликацию по частям,
 // уменьшая пиковое использование памяти.
 func processSourceToBuckets(id string, source *SafeSource, cfg *AppConfig, proxyProcessors []ProxyLink, countryCodes []string, nBuckets int, bucketWriters []*bufio.Writer, bucketLocks *[]sync.Mutex) error {
+	// processSourceToBuckets загружает (или читает из кэша) источник и
+	// записывает нормализованные записи прокси в writers bucket'ов на диске.
+	// Каждая запись имеет вид "key\tfull_line\n" для последующей
+	// дедупликации по bucket'ам.
 	parsedSource, err := url.Parse(source.URL)
 	if err != nil || parsedSource.Host == "" {
 		return fmt.Errorf("invalid source URL")
@@ -740,9 +785,9 @@ func processSourceToBuckets(id string, source *SafeSource, cfg *AppConfig, proxy
 	origCache := filepath.Join(cfg.CacheDir, "orig_"+id+cacheSuffix+".txt")
 	rejectedCache := filepath.Join(cfg.CacheDir, "rejected_"+id+cacheSuffix+".txt")
 
-	//if !utils.IsPathSafe(origCache, cfg.CacheDir) || !utils.IsPathSafe(rejectedCache, cfg.CacheDir) {
-	//	return fmt.Errorf("unsafe cache path for id=%s", id)
-	//}
+	if !utils.IsPathSafe(origCache, cfg.CacheDir) || !utils.IsPathSafe(rejectedCache, cfg.CacheDir) {
+		return fmt.Errorf("unsafe cache path for id=%s", id)
+	}
 
 	var origContent []byte
 	if info, err := os.Stat(origCache); err == nil && time.Since(info.ModTime()) <= cfg.CacheTTL {
@@ -759,7 +804,7 @@ func processSourceToBuckets(id string, source *SafeSource, cfg *AppConfig, proxy
 		client := &http.Client{
 			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
-				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
 					dialer := &net.Dialer{Timeout: 5 * time.Second}
 					return dialer.DialContext(ctx, network, net.JoinHostPort(source.IP.String(), portStr))
 				},
@@ -778,7 +823,7 @@ func processSourceToBuckets(id string, source *SafeSource, cfg *AppConfig, proxy
 			if err != nil {
 				return nil, fmt.Errorf("fetch failed: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			if resp.StatusCode >= 400 {
 				return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 			}
@@ -939,10 +984,6 @@ func loadSourcesFromFile(sourcesFile string) (SourceMap, error) {
 		}
 		u, _ := url.Parse(line)
 		host := u.Hostname()
-		portStr := u.Port()
-		if portStr == "" {
-			portStr = getDefaultPort(u.Scheme)
-		}
 		ips, err := net.LookupIP(host)
 		if err != nil {
 			continue
@@ -1056,7 +1097,7 @@ func loadConfigFromFile(configPath string) (*AppConfig, error) {
 	return cfg, nil
 }
 
-func loadConfigFromArgsOrFile(configPath, defaultConfigPath string, args []string) (*AppConfig, error) {
+func loadConfigFromArgsOrFile(configPath, _ string, args []string) (*AppConfig, error) {
 	var cfg *AppConfig
 	var err error
 	if _, statErr := os.Stat(configPath); statErr == nil {
@@ -1066,7 +1107,7 @@ func loadConfigFromArgsOrFile(configPath, defaultConfigPath string, args []strin
 		}
 	} else {
 		if len(args) < 1 {
-			return nil, fmt.Errorf("Usage: <port> [cache_ttl] [sources] [bad] [ua] [rules]")
+			return nil, fmt.Errorf("usage: <port> [cache_ttl] [sources] [bad] [ua] [rules]")
 		}
 		cacheTTLSeconds := 1800
 		sourcesFile := "./config/sub.txt"
@@ -1151,7 +1192,7 @@ func main() {
 		stdout          = flag.Bool("stdout", false, "Print results to stdout (CLI only)")
 		config          = flag.String("config", "", "Path to config file (YAML/JSON/TOML). Defaults to ./config/config.yaml if not specified.")
 		countries       = flag.Bool("countries", false, "Generate ./config/countries.yaml from REST API (CLI only)")
-		countryCodesCLI = flag.String("country", "", "Filter by country codes (comma-separated, max 20), e.g. --country=AR,AE") // ← НОВОЕ
+		countryCodesCLI = flag.String("country", "", "Filter by country codes (comma-separated, max 20), e.g. --country=AR,AE")
 	)
 	flag.Parse()
 
@@ -1176,7 +1217,7 @@ func main() {
 		}
 		fmt.Fprintf(os.Stderr, "Cache directory: %s\n", cfg.CacheDir)
 
-		// ← НОВОЕ: парсинг флагов стран
+		// Парсинг флага стран для CLI-режима
 		var parsedCountryCodes []string
 		if *countryCodesCLI != "" {
 			var err error
@@ -1286,7 +1327,7 @@ func main() {
 			http.Error(w, "Result not found", http.StatusNotFound)
 			return
 		}
-		serveFile(w, r, content, source.URL, id)
+		serveFile(w, content, source.URL, id)
 	})
 
 	http.HandleFunc("/merge", func(w http.ResponseWriter, r *http.Request) {

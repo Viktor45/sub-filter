@@ -12,7 +12,9 @@ import (
 	"sub-filter/internal/validator"
 )
 
-// VMessLink реализует обработку VMess-ссылок.
+// VMessLink обрабатывает VMess-ссылки (vmess://).
+//
+//nolint:revive
 type VMessLink struct {
 	badWords      []string
 	isValidHost   func(string) bool

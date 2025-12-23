@@ -1,6 +1,7 @@
-// internal/utils/utils.go
-// Пакет utils содержит общие вспомогательные функции для обработки прокси-подписок.
-// Все функции чистые и не зависят от глобального состояния.
+// Package utils содержит общие вспомогательные функции для обработки
+// прокси-подписок и работы с URL-параметрами, декодированием и т.п.
+//
+//nolint:revive
 package utils
 
 import (
@@ -112,10 +113,8 @@ func NormalizeParams(m map[string]string) map[string]string {
 var (
 	// hostRegex валидирует доменные имена (включая Punycode xn--)
 	hostRegex = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]*[a-z0-9])?$|^xn--([a-z0-9-]+\.)+[a-z0-9-]+$`)
-	// ssCipherRe валидирует шифры Shadowsocks
-	ssCipherRe = regexp.MustCompile(`^[a-zA-Z0-9_+-]+$`)
-	// base64UrlRegex валидирует 32-байтный ключ в base64url без padding (43 символа)
-	base64UrlRegex = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
+	// ssCipherRe валидирует шифры Shadowsocks (если потребуется в будущем).
+	// Дефиниции конкретных шифров находятся в пакетах протоколов.
 )
 
 // IsPrintableASCII проверяет, что байты содержат только печатаемые ASCII-символы.
@@ -242,7 +241,7 @@ func IsPathSafe(p, baseDir string) bool {
 	if err != nil {
 		return false
 	}
-	return !(strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == "..")
+	return !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".."
 }
 
 // NormalizeLinkKey извлекает ключевые компоненты из URL-адреса прокси-ссылки для дедупликации.
@@ -267,9 +266,10 @@ func NormalizeLinkKey(line string) (string, error) {
 
 	portStr := u.Port()
 	if portStr == "" {
-		if scheme == "https" {
+		switch scheme {
+		case "https":
 			portStr = "443"
-		} else if scheme == "http" {
+		case "http":
 			portStr = "80"
 		}
 	}

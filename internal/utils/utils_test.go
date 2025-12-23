@@ -1,4 +1,6 @@
 // internal/utils/utils_test.go
+//
+//nolint:revive
 package utils
 
 import (
