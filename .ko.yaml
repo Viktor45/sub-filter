@@ -1,7 +1,5 @@
 # .ko.yaml
-baseImageOverrides:
-  linux/arm/v6: gcr.io/distroless/static:nonroot
-  linux/arm/v7: gcr.io/distroless/static:nonroot
+defaultBaseImage: gcr.io/distroless/static:nonroot
 
 defaultPlatform: linux/amd64
 platforms:
