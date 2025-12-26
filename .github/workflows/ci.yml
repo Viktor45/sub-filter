@@ -32,7 +32,7 @@ jobs:
           go-version-file: ./go.mod
 
       - name: Install golangci-lint action
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v1.58.0
           install: true
@@ -46,7 +46,7 @@ jobs:
           fi
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v1.58.0
           args: run ./...
