@@ -1,16 +1,15 @@
-[EN](FILTER_RULES_en.md) / [RU](FILTER_RULES_ru.md)  / [ZH](FILTER_RULES_zh.md) 
+[EN](FILTER_RULES_en.md) / [RU](FILTER_RULES_ru.md) / [ZH](FILTER_RULES_zh.md)
 
 此翻译由神经网络完成，如有任何错误，敬请谅解。
 
 - [`rules.yaml` 配置文档](#rulesyaml-配置文档)
-    - [文件结构](#文件结构)
-    - [1. `required_params` — 必需参数](#1-required_params--必需参数)
-    - [2. `allowed_values` — 允许的值](#2-allowed_values--允许的值)
-    - [3. `forbidden_values` — 禁止的值](#3-forbidden_values--禁止的值)
-    - [4. `conditional` — 条件规则](#4-conditional--条件规则)
-    - [VLESS 完整示例](#vless-完整示例)
-    - [验证细节](#验证细节)
-
+  - [文件结构](#文件结构)
+  - [1. `required_params` — 必需参数](#1-required_params--必需参数)
+  - [2. `allowed_values` — 允许的值](#2-allowed_values--允许的值)
+  - [3. `forbidden_values` — 禁止的值](#3-forbidden_values--禁止的值)
+  - [4. `conditional` — 条件规则](#4-conditional--条件规则)
+  - [VLESS 完整示例](#vless-完整示例)
+  - [验证细节](#验证细节)
 
 # `rules.yaml` 配置文档
 
@@ -56,8 +55,8 @@
   allowed_values:
     security: [tls, reality]
     flow:
-      - "xtls-rprx-vision"
-      - "xtls-rprx-vision-udp443"
+      - 'xtls-rprx-vision'
+      - 'xtls-rprx-vision-udp443'
   ```
 
 > ⚠️ 此规则**仅在参数存在时生效**。缺失参数的检查由 `required_params` 负责。
@@ -86,24 +85,26 @@
 **仅在特定条件下**生效的规则。
 
 结构说明：
+
 - `when` — 触发条件（所有条件必须同时满足）
 - `require` — 条件满足时的必需参数
 - `forbidden_values` — 条件满足时的禁止值
 
 **示例：**
+
 ```yaml
 conditional:
   # 当 security=reality 时，必须包含 pbk
-  - when: { security: "reality" }
+  - when: { security: 'reality' }
     require: [pbk]
 
   # 当 type=grpc 时，必须包含 serviceName
-  - when: { type: "grpc" }
+  - when: { type: 'grpc' }
     require: [serviceName]
 
   # 当 type 不是 ws 时，禁止 security=none
-  - when: { type: { not: "ws" } }
-    forbidden_values: { security: ["none"] }
+  - when: { type: { not: 'ws' } }
+    forbidden_values: { security: ['none'] }
 ```
 
 ---
@@ -116,20 +117,21 @@ vless:
     - encryption
     - sni
   allowed_values:
-    security: ["tls", "reality"]
+    security: ['tls', 'reality']
     flow:
-      - "xtls-rprx-vision"
-      - "xtls-rprx-vision-udp443"
+      - 'xtls-rprx-vision'
+      - 'xtls-rprx-vision-udp443'
   conditional:
-    - when: { security: "reality" }
-      require: ["pbk"]
-    - when: { type: "grpc" }
-      require: ["serviceName"]
-    - when: { type: { not: "ws" } }
-      forbidden_values: { security: ["none"] }
+    - when: { security: 'reality' }
+      require: ['pbk']
+    - when: { type: 'grpc' }
+      require: ['serviceName']
+    - when: { type: { not: 'ws' } }
+      forbidden_values: { security: ['none'] }
 ```
 
 **规则说明：**
+
 1. **所有 VLESS 链接** 必须包含 `encryption` 和 `sni`。
 2. `security` 参数**只能是** `tls` 或 `reality`。
 3. 若 `security=reality`，**必须提供** `pbk`。

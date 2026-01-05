@@ -1,4 +1,4 @@
-[EN](FAQ_en.md) / [RU](FAQ.md)  / [ZH](FAQ_zh.md) 
+[EN](FAQ_en.md) / [RU](FAQ.md) / [ZH](FAQ_zh.md)
 
 This translation was made using AI.
 
@@ -40,6 +40,7 @@ To use only servers located in your desired jurisdictions — for example, to im
 ## How does country filtering work?
 
 The program scans the **fragment** of the proxy link (`#...`) for any of the following strings:
+
 - ISO 3166-1 alpha-2 country code: `AD`
 - ISO 3166-1 alpha-3 country code: `AND`
 - Flag emoji: `🇦🇩`
@@ -51,16 +52,19 @@ Matching is **case-insensitive** and supports **URL decoding**.
 ## Where can I see what the program removed?
 
 In the cache directory (`/tmp/sub-filter-cache`), two files are created for each subscription:
+
 - `mod_??.txt` — filtered subscription
 - `rejected_??.txt` — list of rejected lines with reasons
 
 The filename depends on:
+
 - Subscription number (`?id=1` → `rejected_1.txt`)
 - Country code (if filtering by country, e.g., `rejected_1_ad.txt`)
 
 ## Will my data be sent anywhere?
 
 No. All operations happen **locally**. The program only:
+
 1. Downloads a public subscription
 2. Processes it on your device
 3. Delivers the result to your client (Clash, router, etc.)
@@ -69,4 +73,3 @@ No. All operations happen **locally**. The program only:
 The program can run as a background server or in one-time CLI mode. It requires no cloud services and can even be run in a Docker container on your own device.
 
 ---
-

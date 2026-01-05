@@ -1,4 +1,4 @@
-[EN](README_en.md) / [RU](README.md)  / [ZH](README_zh.md) 
+[EN](README_en.md) / [RU](README.md) / [ZH](README_zh.md)
 
 This translation was made using AI.
 
@@ -31,6 +31,7 @@ This translation was made using AI.
 A smart proxy subscription filter for **VLESS, VMess, Trojan, Shadowsocks, and Hysteria2**.
 
 This tool validates every proxy link in your subscription by checking:
+
 - **Security** (e.g., blocks `security=none` in VLESS),
 - **Correctness** (e.g., requires `pbk` when `security=reality`),
 - **Presence of forbidden keywords** in server names,
@@ -48,7 +49,7 @@ The result is a clean, secure, and ready-to-use subscription for Clash, Sing-Box
 ✅ Filtering by **one or multiple countries** (up to 20) and bad words  
 ✅ Deduplication with selection of the most complete link version  
 ✅ Built-in caching (30 minutes by default)  
-✅ CLI mode with terminal output support  
+✅ CLI mode with terminal output support
 
 ---
 
@@ -71,11 +72,13 @@ The program supports two modes: **HTTP server** and **CLI**.
 Starts a server that filters subscriptions on-the-fly.
 
 #### Syntax:
+
 ```bash
 ./sub-filter <port> [cache_ttl] [sources_file] [bad_words_file] [uagent_file] [rules_file]
 ```
 
 #### Examples:
+
 ```bash
 # Minimal start (uses files from ./config/)
 ./sub-filter 8000
@@ -85,20 +88,23 @@ Starts a server that filters subscriptions on-the-fly.
 ```
 
 #### Endpoints:
+
 | Endpoint  | Description                             |
 | --------- | --------------------------------------- |
 | `/filter` | Filter a single subscription            |
 | `/merge`  | Merge and filter multiple subscriptions |
 
 **Parameters:**
+
 - `id` — line number from `sources_file` (for `/filter`)
 - `ids` — comma-separated line numbers (max 20, for `/merge`)
 - `c` — [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes) country codes (max 20)
 
 **Examples:**
-- `/filter?id=1` → filter the first subscription  
-- `/filter?id=1&c=DE` → filter by Germany  
-- `/merge?ids=1,2,3&c=US,CA` → merge three subscriptions, keep only US/CA servers  
+
+- `/filter?id=1` → filter the first subscription
+- `/filter?id=1&c=DE` → filter by Germany
+- `/merge?ids=1,2,3&c=US,CA` → merge three subscriptions, keep only US/CA servers
 
 ---
 
@@ -107,11 +113,13 @@ Starts a server that filters subscriptions on-the-fly.
 Processes all subscriptions once and saves results to disk.
 
 #### Syntax:
+
 ```bash
 ./sub-filter --cli [--stdout] [--config config.yaml] [--country AD,DE]
 ```
 
 #### Flags:
+
 | Flag        | Description                                       |
 | ----------- | ------------------------------------------------- |
 | `--cli`     | Enable CLI mode                                   |
@@ -120,6 +128,7 @@ Processes all subscriptions once and saves results to disk.
 | `--country` | Filter by country codes (e.g., `--country=NL,RU`) |
 
 #### Examples:
+
 ```bash
 # Process all and save to cache
 ./sub-filter --cli
@@ -145,17 +154,19 @@ Country information is stored in `./config/countries.yaml` in a **flat structure
 ```yaml
 RU:
   cca3: RUS
-  flag: "🇷🇺"
+  flag: '🇷🇺'
   name: Russia
-  native: "Россия|Российская Федерация"
+  native: 'Россия|Российская Федерация'
 ```
 
 **Generate the file:**
+
 ```bash
 ./sub-filter --cli --countries
 ```
 
 The tool searches the **fragment** (`#...`) of each proxy link for:
+
 - **ISO 3166-1 alpha-2 code**: `RU`
 - **ISO 3166-1 alpha-3 code**: `RUS`
 - **Flag emoji**: `🇷🇺`
@@ -194,11 +205,13 @@ Matching is **case-insensitive** and supports **URL decoding**.
 ## ✅ Quick Test
 
 ### Server
+
 ```bash
 curl -H "User-Agent: Clash" "http://localhost:8000/filter?id=1&c=AD"
 ```
 
 ### CLI
+
 ```bash
 ./sub-filter --cli --country=US --stdout
 ```
@@ -210,6 +223,7 @@ Results are saved to `/tmp/sub-filter-cache` (or your configured directory).
 ## 📲 Client Integration
 
 Add a dynamic subscription like:
+
 ```
 http://your-server:8000/filter?id=1&c=NL,RU
 ```
@@ -221,6 +235,7 @@ http://your-server:8000/filter?id=1&c=NL,RU
 ## 🐳 Docker
 
 ### Run Server
+
 ```bash
 docker run -d \
   -p 8080:8080 \
@@ -231,6 +246,7 @@ docker run -d \
 ```
 
 ### CLI in Docker
+
 ```bash
 # Process subscriptions
 docker run --rm \

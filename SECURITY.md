@@ -10,8 +10,8 @@ We’ll work with you to check if it’s a real issue and fix it as quickly as p
 
 When you report a problem, please include:
 
-- **Which part** of the project is affected  
-- **How to reproduce** the issue (step by step, if possible)  
+- **Which part** of the project is affected
+- **How to reproduce** the issue (step by step, if possible)
 - A short explanation of **what the problem is** and **why it could be dangerous**
 
 👉 **Important:** Please don’t share the issue publicly right away.  

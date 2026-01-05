@@ -1,16 +1,15 @@
-[EN](FILTER_RULES_en.md) / [RU](FILTER_RULES_ru.md)  / [ZH](FILTER_RULES_zh.md) 
+[EN](FILTER_RULES_en.md) / [RU](FILTER_RULES_ru.md) / [ZH](FILTER_RULES_zh.md)
 
 This translation was made using AI.
 
 - [Documentation for `rules.yaml`](#documentation-for-rulesyaml)
-    - [File Structure](#file-structure)
-    - [1. `required_params` — Required Parameters](#1-required_params--required-parameters)
-    - [2. `allowed_values` — Allowed Values](#2-allowed_values--allowed-values)
-    - [3. `forbidden_values` — Forbidden Values](#3-forbidden_values--forbidden-values)
-    - [4. `conditional` — Conditional Rules](#4-conditional--conditional-rules)
-    - [Current Example for VLESS](#current-example-for-vless)
-    - [Validation Details](#validation-details)
-
+  - [File Structure](#file-structure)
+  - [1. `required_params` — Required Parameters](#1-required_params--required-parameters)
+  - [2. `allowed_values` — Allowed Values](#2-allowed_values--allowed-values)
+  - [3. `forbidden_values` — Forbidden Values](#3-forbidden_values--forbidden-values)
+  - [4. `conditional` — Conditional Rules](#4-conditional--conditional-rules)
+  - [Current Example for VLESS](#current-example-for-vless)
+  - [Validation Details](#validation-details)
 
 # Documentation for `rules.yaml`
 
@@ -56,8 +55,8 @@ A list of **permitted values** for a specific parameter.
   allowed_values:
     security: [tls, reality]
     flow:
-      - "xtls-rprx-vision"
-      - "xtls-rprx-vision-udp443"
+      - 'xtls-rprx-vision'
+      - 'xtls-rprx-vision-udp443'
   ```
 
 > ⚠️ This rule **only applies if the parameter exists**. Missing parameters are checked only by `required_params`.
@@ -86,24 +85,26 @@ A list of **prohibited values** for a specific parameter.
 Rules that apply **only when specific conditions are met**.
 
 Structure:
+
 - `when` — activation conditions (all must be true)
 - `require` — required parameters (if condition is met)
 - `forbidden_values` — forbidden values (if condition is met)
 
 **Examples:**
+
 ```yaml
 conditional:
   # If security=reality, pbk is mandatory
-  - when: { security: "reality" }
+  - when: { security: 'reality' }
     require: [pbk]
 
   # If type=grpc, serviceName is mandatory
-  - when: { type: "grpc" }
+  - when: { type: 'grpc' }
     require: [serviceName]
 
   # If type is NOT ws, forbid security=none
-  - when: { type: { not: "ws" } }
-    forbidden_values: { security: ["none"] }
+  - when: { type: { not: 'ws' } }
+    forbidden_values: { security: ['none'] }
 ```
 
 ---
@@ -116,20 +117,21 @@ vless:
     - encryption
     - sni
   allowed_values:
-    security: ["tls", "reality"]
+    security: ['tls', 'reality']
     flow:
-      - "xtls-rprx-vision"
-      - "xtls-rprx-vision-udp443"
+      - 'xtls-rprx-vision'
+      - 'xtls-rprx-vision-udp443'
   conditional:
-    - when: { security: "reality" }
-      require: ["pbk"]
-    - when: { type: "grpc" }
-      require: ["serviceName"]
-    - when: { type: { not: "ws" } }
-      forbidden_values: { security: ["none"] }
+    - when: { security: 'reality' }
+      require: ['pbk']
+    - when: { type: 'grpc' }
+      require: ['serviceName']
+    - when: { type: { not: 'ws' } }
+      forbidden_values: { security: ['none'] }
 ```
 
 **Explanation:**
+
 1. **All VLESS links** must include `encryption` and `sni`.
 2. The `security` parameter may only be `tls` or `reality`.
 3. If `security=reality`, `pbk` **must be present**.
