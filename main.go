@@ -982,7 +982,7 @@ func processSourceToBuckets(id string, source *SafeSource, cfg *AppConfig, proxy
 		for _, line := range bucketBatches[bucketIdx] {
 			_, err := bucketWriters[bucketIdx].WriteString(line)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "[ERROR] Failed to write to bucket %d: %v\n", bucketIdx, err)
+				logErrorf("IO", fmt.Sprintf("write bucket_%d", bucketIdx), err)
 				return err
 			}
 		}
@@ -1029,7 +1029,7 @@ func processSourceToBuckets(id string, source *SafeSource, cfg *AppConfig, proxy
 			h := fnv.New32a()
 			_, err = h.Write([]byte(key))
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "[WARN] Failed to write hash: %v\n", err)
+				logWarnf("Hash", "write", err)
 				return nil
 			}
 			b := int(h.Sum32() % uint32(nBuckets))
@@ -1061,7 +1061,7 @@ func processSourceToBuckets(id string, source *SafeSource, cfg *AppConfig, proxy
 	for i := 0; i < nBuckets; i++ {
 		if err := flushBatch(i); err != nil {
 			// Логирование ошибки но продолжение промывки остальных bucket'ов
-			fmt.Fprintf(os.Stderr, "[ERROR] Failed to flush remaining batch for bucket %d: %v\n", i, err)
+			logErrorf("IO", fmt.Sprintf("flush bucket_%d", i), err)
 		}
 	}
 
@@ -1126,7 +1126,7 @@ func loadSourcesFromFile(sourcesFile string) (SourceMap, error) {
 	validIndex := 1
 	for _, line := range lines {
 		if !isValidSourceURL(line) {
-			fmt.Fprintf(os.Stderr, "Skipping invalid source: %s\n", line)
+			logWarnf("Config", fmt.Sprintf("skipping invalid source: %s", line), nil)
 			continue
 		}
 		u, _ := url.Parse(line)
@@ -1209,7 +1209,7 @@ func loadConfigFromFile(configPath string) (*AppConfig, error) {
 	cfg.Rules = rules
 	countries, err := utils.LoadCountries(cfg.CountriesFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to load countries file %s: %v\n", cfg.CountriesFile, err)
+		logWarnf("Config", "load countries file", err)
 		cfg.Countries = make(map[string]utils.CountryInfo)
 	} else {
 		cfg.Countries = countries
@@ -1355,14 +1355,14 @@ func main() {
 		}
 		cfg, err := loadConfigFromArgsOrFile(*config, defaultConfigPath, flag.Args())
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+			logErrorf("Config", "load config", err)
 			os.Exit(1)
 		}
 		if err := os.MkdirAll(cfg.CacheDir, 0o755); err != nil {
-			fmt.Fprintf(os.Stderr, "Create cache dir: %v\n", err)
+			logErrorf("FileOp", "create cache dir", err)
 			os.Exit(1)
 		}
-		fmt.Fprintf(os.Stderr, "Cache directory: %s\n", cfg.CacheDir)
+		fmt.Printf("Cache directory: %s\n", cfg.CacheDir)
 
 		// Парсинг флага стран для CLI-режима
 		var parsedCountryCodes []string
@@ -1370,7 +1370,7 @@ func main() {
 			var err error
 			parsedCountryCodes, err = parseCountryCodes(*countryCodesCLI, cfg.Countries, cfg.MaxCountryCodes)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Invalid country codes: %v\n", err)
+				logErrorf("Validate", "parse country codes", err)
 				os.Exit(1)
 			}
 		}
@@ -1398,7 +1398,7 @@ func main() {
 			})
 		}
 		if err := g.Wait(); err != nil {
-			fmt.Fprintf(os.Stderr, "Processing error(s): %v\n", err)
+			logErrorf("Process", "processing sources", err)
 			os.Exit(1)
 		}
 		if *stdout {
@@ -1410,17 +1410,17 @@ func main() {
 	}
 
 	if len(flag.Args()) < 1 {
-		fmt.Fprintf(os.Stderr, "Usage: %s <port> [cache_ttl] [sources] [bad] [ua] [rules]\n", os.Args[0])
+		logErrorf("Config", "invalid arguments", fmt.Errorf("usage: %s <port> [cache_ttl] [sources] [bad] [ua] [rules]", os.Args[0]))
 		os.Exit(1)
 	}
 	port := flag.Args()[0]
 	cfg, err := loadConfigFromArgsOrFile(*config, defaultConfigPath, flag.Args())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		logErrorf("Config", "load config", err)
 		os.Exit(1)
 	}
 	if err := os.MkdirAll(cfg.CacheDir, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "Create cache dir: %v\n", err)
+		logErrorf("FileOp", "create cache dir", err)
 		os.Exit(1)
 	}
 	fmt.Printf("Countries loaded: %d\n", len(cfg.Countries))
@@ -1484,7 +1484,7 @@ func main() {
 
 	listener, err := net.Listen("tcp", ":"+port)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Listen: %v\n", err)
+		logErrorf("Network", "listen", err)
 		os.Exit(1)
 	}
 	fmt.Printf("Proxy Filter Server Starting...\n")
@@ -1502,14 +1502,14 @@ func main() {
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	select {
 	case err := <-errChan:
-		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
+		logErrorf("Network", "server", err)
 		os.Exit(1)
 	case <-sigChan:
 		fmt.Println("\nShutting down gracefully...")
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer shutdownCancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			fmt.Fprintf(os.Stderr, "Force shutdown: %v\n", err)
+			logErrorf("Network", "shutdown", err)
 			os.Exit(1)
 		}
 	}
