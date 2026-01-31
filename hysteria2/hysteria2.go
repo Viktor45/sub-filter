@@ -18,7 +18,7 @@ import (
 type Hysteria2Link struct {
 	badWords      []string
 	isValidHost   func(string) bool
-	checkBadWords func(string) (bool, string)
+	checkBadWords func(string) (string, bool, string)
 	ruleValidator validator.Validator
 }
 
@@ -26,7 +26,7 @@ type Hysteria2Link struct {
 func NewHysteria2Link(
 	bw []string,
 	vh func(string) bool,
-	cb func(string) (bool, string),
+	cb func(string) (string, bool, string),
 	val validator.Validator,
 ) *Hysteria2Link {
 	if val == nil {
@@ -68,8 +68,10 @@ func (h *Hysteria2Link) Process(s string) (string, string) {
 	if !ok {
 		return "", "invalid host or port in Hysteria2"
 	}
-	if hasBad, reason := h.checkBadWords(u.Fragment); hasBad {
+	if newFrag, hasBad, reason := h.checkBadWords(u.Fragment); hasBad {
 		return "", reason
+	} else {
+		u.Fragment = newFrag
 	}
 
 	q := u.Query()

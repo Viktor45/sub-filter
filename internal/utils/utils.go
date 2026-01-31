@@ -230,7 +230,12 @@ func ParseHostPort(u *url.URL) (string, int, error) {
 func IsPathSafe(p, baseDir string) bool {
 	resolvedBase, err := filepath.EvalSymlinks(baseDir)
 	if err != nil {
-		return false // база должна существовать
+		// Если не удалось разрешить симлинки (директория может не существовать),
+		// используем абсолютный путь в качестве fallback.
+		resolvedBase, err = filepath.Abs(baseDir)
+		if err != nil {
+			return false
+		}
 	}
 	resolvedBase = filepath.Clean(resolvedBase)
 

@@ -18,7 +18,7 @@ import (
 type VMessLink struct {
 	badWords      []string
 	isValidHost   func(string) bool
-	checkBadWords func(string) (bool, string)
+	checkBadWords func(string) (string, bool, string)
 	ruleValidator validator.Validator
 }
 
@@ -27,7 +27,7 @@ type VMessLink struct {
 func NewVMessLink(
 	bw []string,
 	vh func(string) bool,
-	cb func(string) (bool, string),
+	cb func(string) (string, bool, string),
 	val validator.Validator,
 ) *VMessLink {
 	if val == nil {
@@ -96,8 +96,10 @@ func (v *VMessLink) Process(s string) (string, string) {
 		return "", "invalid server host"
 	}
 	if ps != "" {
-		if hasBad, reason := v.checkBadWords(ps); hasBad {
+		if newPs, hasBad, reason := v.checkBadWords(ps); hasBad {
 			return "", reason
+		} else {
+			vm["ps"] = newPs
 		}
 	}
 

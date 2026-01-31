@@ -20,7 +20,7 @@ type VLESSLink struct {
 	badWords       []string
 	isValidHost    func(string) bool
 	isValidPort    func(int) bool
-	checkBadWords  func(string) (bool, string)
+	checkBadWords  func(string) (string, bool, string)
 	ruleValidator  validator.Validator
 	hostRegex      *regexp.Regexp
 	base64UrlRegex *regexp.Regexp
@@ -32,7 +32,7 @@ func NewVLESSLink(
 	bw []string,
 	vh func(string) bool,
 	vp func(int) bool,
-	cb func(string) (bool, string),
+	cb func(string) (string, bool, string),
 	val validator.Validator,
 ) *VLESSLink {
 	if val == nil {
@@ -73,8 +73,11 @@ func (v *VLESSLink) Process(s string) (string, string) {
 	if hostErr != "" {
 		return "", "VLESS: " + hostErr
 	}
-	if hasBad, reason := v.checkBadWords(u.Fragment); hasBad {
+	// Проверяем и при необходимости очищаем fragment
+	if newFrag, hasBad, reason := v.checkBadWords(u.Fragment); hasBad {
 		return "", reason
+	} else {
+		u.Fragment = newFrag
 	}
 
 	q := u.Query()

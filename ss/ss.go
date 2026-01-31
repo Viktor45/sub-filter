@@ -18,7 +18,7 @@ import (
 type SSLink struct {
 	badWords      []string
 	isValidHost   func(string) bool
-	checkBadWords func(string) (bool, string)
+	checkBadWords func(string) (string, bool, string)
 	ssCipherRe    *regexp.Regexp
 	ruleValidator validator.Validator
 }
@@ -27,7 +27,7 @@ type SSLink struct {
 func NewSSLink(
 	bw []string,
 	vh func(string) bool,
-	cb func(string) (bool, string),
+	cb func(string) (string, bool, string),
 	val validator.Validator,
 ) *SSLink {
 	if val == nil {
@@ -81,8 +81,10 @@ func (s *SSLink) Process(sLink string) (string, string) {
 	if !ok {
 		return "", "invalid host or port"
 	}
-	if hasBad, reason := s.checkBadWords(u.Fragment); hasBad {
+	if newFrag, hasBad, reason := s.checkBadWords(u.Fragment); hasBad {
 		return "", reason
+	} else {
+		u.Fragment = newFrag
 	}
 
 	// SS не имеет query-параметров → валидатор получает пустой map

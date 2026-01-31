@@ -3,6 +3,7 @@ package vmess
 
 import (
 	"encoding/base64"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -12,6 +13,34 @@ import (
 
 func encodeJSON(s string) string {
 	return base64.StdEncoding.EncodeToString([]byte(s))
+}
+
+func TestVMessLink_StripBadWordsEnabled(t *testing.T) {
+	badWords := []string{"blocked"}
+	checkBadWords := func(fragment string) (string, bool, string) {
+		if fragment == "" {
+			return fragment, false, ""
+		}
+		decoded := utils.FullyDecode(fragment)
+		for _, word := range badWords {
+			if word == "" {
+				continue
+			}
+			re := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(word))
+			if re.MatchString(decoded) {
+				cleaned := re.ReplaceAllString(decoded, "")
+				return cleaned, false, ""
+			}
+		}
+		return fragment, false, ""
+	}
+	link := NewVMessLink(badWords, utils.IsValidHost, checkBadWords, loadRuleForTest("vmess"))
+	validVMessJSON := `{"v":"2","ps":"blocked-server","add":"example.com","port":443,"id":"12345678-1234-1234-1234-123456789abc","aid":"0","net":"tcp","type":"none","host":"","path":"","tls":"tls"}`
+	encoded := "vmess://" + encodeJSON(validVMessJSON)
+	got, reason := link.Process(encoded)
+	if got == "" || strings.Contains(got, "blocked") {
+		t.Fatalf("expected stripped name and accepted vmess, got: %q reason: %q", got, reason)
+	}
 }
 
 func loadRuleForTest(proto string) validator.Validator {
@@ -57,18 +86,18 @@ func loadRuleForTest(proto string) validator.Validator {
 
 func TestVMessLink(t *testing.T) {
 	badWords := []string{"blocked"}
-	checkBadWords := func(fragment string) (bool, string) {
+	checkBadWords := func(fragment string) (string, bool, string) {
 		if fragment == "" {
-			return false, ""
+			return fragment, false, ""
 		}
 		decoded := utils.FullyDecode(fragment)
 		lower := strings.ToLower(decoded)
 		for _, word := range badWords {
 			if word != "" && strings.Contains(lower, word) {
-				return true, "bad word"
+				return "", true, "bad word"
 			}
 		}
-		return false, ""
+		return fragment, false, ""
 	}
 	link := NewVMessLink(badWords, utils.IsValidHost, checkBadWords, loadRuleForTest("vmess"))
 

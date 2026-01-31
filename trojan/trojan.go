@@ -17,7 +17,7 @@ import (
 type TrojanLink struct {
 	badWords      []string
 	isValidHost   func(string) bool
-	checkBadWords func(string) (bool, string)
+	checkBadWords func(string) (string, bool, string)
 	ruleValidator validator.Validator
 }
 
@@ -25,7 +25,7 @@ type TrojanLink struct {
 func NewTrojanLink(
 	bw []string,
 	vh func(string) bool,
-	cb func(string) (bool, string),
+	cb func(string) (string, bool, string),
 	val validator.Validator,
 ) *TrojanLink {
 	if val == nil {
@@ -63,8 +63,10 @@ func (t *TrojanLink) Process(s string) (string, string) {
 	if !ok {
 		return "", "invalid host or port"
 	}
-	if hasBad, reason := t.checkBadWords(u.Fragment); hasBad {
+	if newFrag, hasBad, reason := t.checkBadWords(u.Fragment); hasBad {
 		return "", reason
+	} else {
+		u.Fragment = newFrag
 	}
 
 	q := u.Query()

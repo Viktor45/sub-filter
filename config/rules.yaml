@@ -7,17 +7,27 @@ vless:
     - sni
   forbidden_values:
     security: ["none"]
+    # Запретить пустой authority (распространённая ошибка)
+    authority: [""]
   allowed_values:
     security: ["tls", "reality"]
+    type: ["tcp", "ws", "httpupgrade", "grpc", "xhttp"]
     flow:
       - "xtls-rprx-vision"
       - "xtls-rprx-vision-udp443"
       - "xtls-rprx-vision-direct"
+    # Опционально: разрешённые режимы для gRPC
+    mode: ["gun", "multi"]
   conditional:
+    # REALITY: pbk обязателен
     - when: { security: "reality" }
       require: ["pbk"]
+
+    # gRPC: serviceName обязателен
     - when: { type: "grpc" }
       require: ["serviceName"]
+
+    # WebSocket и производные: path обязателен
     - when: { type: "ws" }
       require: ["path"]
     - when: { type: "httpupgrade" }
@@ -32,6 +42,7 @@ vmess:
     - tls
   allowed_values:
     tls: ["tls"]
+    net: ["tcp", "ws", "grpc", "httpupgrade", "h2"]
   conditional:
     - when: { net: "grpc" }
       require: ["serviceName"]

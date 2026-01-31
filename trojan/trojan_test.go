@@ -1,6 +1,7 @@
 package trojan
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -49,20 +50,46 @@ func loadRuleForTest(proto string) validator.Validator {
 	return &validator.GenericValidator{}
 }
 
+func TestTrojanLink_StripBadWordsEnabled(t *testing.T) {
+	badWords := []string{"blocked"}
+	checkBadWords := func(fragment string) (string, bool, string) {
+		if fragment == "" {
+			return fragment, false, ""
+		}
+		decoded := utils.FullyDecode(fragment)
+		for _, word := range badWords {
+			if word == "" {
+				continue
+			}
+			re := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(word))
+			if re.MatchString(decoded) {
+				cleaned := re.ReplaceAllString(decoded, "")
+				return cleaned, false, ""
+			}
+		}
+		return fragment, false, ""
+	}
+	link := NewTrojanLink(badWords, utils.IsValidHost, checkBadWords, loadRuleForTest("trojan"))
+	got, reason := link.Process("trojan://password@example.com:443#blocked-server")
+	if got == "" || strings.Contains(got, "blocked") {
+		t.Fatalf("expected stripped name and accepted trojan, got: %q reason: %q", got, reason)
+	}
+}
+
 func TestTrojanLink(t *testing.T) {
 	badWords := []string{"blocked"}
-	checkBadWords := func(fragment string) (bool, string) {
+	checkBadWords := func(fragment string) (string, bool, string) {
 		if fragment == "" {
-			return false, ""
+			return fragment, false, ""
 		}
 		decoded := utils.FullyDecode(fragment)
 		lower := strings.ToLower(decoded)
 		for _, word := range badWords {
 			if word != "" && strings.Contains(lower, word) {
-				return true, "bad word"
+				return "", true, "bad word"
 			}
 		}
-		return false, ""
+		return fragment, false, ""
 	}
 	link := NewTrojanLink(badWords, utils.IsValidHost, checkBadWords, loadRuleForTest("trojan"))
 

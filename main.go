@@ -81,6 +81,9 @@ type AppConfig struct {
 	MaxCountryCodes int `mapstructure:"max_country_codes"`
 	MaxMergeIDs     int `mapstructure:"max_merge_ids"`
 	MergeBuckets    int `mapstructure:"merge_buckets"`
+	// StripBadWordsInName: если true, вместо удаления всей строки при совпадении bad-word
+	// будет удалять только сам bad-word (регистронезависимо) из описания/fragment сервера.
+	StripBadWordsInName bool `mapstructure:"strip_bad_words_in_name"`
 }
 
 // Init устанавливает значения по умолчанию для полей AppConfig, если они не заданы.
@@ -346,19 +349,29 @@ func fetchSourceContent(id string, source *SafeSource, cfg *AppConfig, origCache
 }
 
 // createProxyProcessors формирует список обработчиков ссылок для поддерживаемых протоколов.
-func createProxyProcessors(badWords []string, rules map[string]validator.Validator) []ProxyLink {
-	checkBadWords := func(fragment string) (bool, string) {
+func createProxyProcessors(badWords []string, rules map[string]validator.Validator, stripBadWords bool) []ProxyLink {
+	checkBadWords := func(fragment string) (string, bool, string) {
 		if fragment == "" {
-			return false, ""
+			return fragment, false, ""
 		}
 		decoded := utils.FullyDecode(fragment)
 		lower := strings.ToLower(decoded)
 		for _, word := range badWords {
-			if word != "" && strings.Contains(lower, word) {
-				return true, fmt.Sprintf("bad word in name: %q", word)
+			if word == "" {
+				continue
+			}
+			lw := strings.ToLower(word)
+			if strings.Contains(lower, lw) {
+				if stripBadWords {
+					// Удаляем все вхождения bad-word регистронезависимо
+					re := regexp.MustCompile("(?i)" + regexp.QuoteMeta(word))
+					newFrag := strings.TrimSpace(re.ReplaceAllString(decoded, ""))
+					return newFrag, false, ""
+				}
+				return fragment, true, fmt.Sprintf("bad word in name: %q", word)
 			}
 		}
-		return false, ""
+		return fragment, false, ""
 	}
 	getValidator := func(name string) validator.Validator {
 		if v, ok := rules[name]; ok {
@@ -1375,7 +1388,7 @@ func main() {
 			}
 		}
 
-		proxyProcessors := createProxyProcessors(cfg.BadWords, cfg.Rules)
+		proxyProcessors := createProxyProcessors(cfg.BadWords, cfg.Rules, cfg.StripBadWordsInName)
 		g, _ := errgroup.WithContext(context.Background())
 		var mu sync.Mutex
 		var outputs []string
@@ -1424,7 +1437,7 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf("Countries loaded: %d\n", len(cfg.Countries))
-	proxyProcessors := createProxyProcessors(cfg.BadWords, cfg.Rules)
+	proxyProcessors := createProxyProcessors(cfg.BadWords, cfg.Rules, cfg.StripBadWordsInName)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

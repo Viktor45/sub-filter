@@ -2,6 +2,7 @@ package ss
 
 import (
 	"encoding/base64"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -50,20 +51,47 @@ func loadRuleForTest(proto string) validator.Validator {
 	return &validator.GenericValidator{}
 }
 
+func TestSSLink_StripBadWordsEnabled(t *testing.T) {
+	badWords := []string{"blocked"}
+	checkBadWords := func(fragment string) (string, bool, string) {
+		if fragment == "" {
+			return fragment, false, ""
+		}
+		decoded := utils.FullyDecode(fragment)
+		for _, word := range badWords {
+			if word == "" {
+				continue
+			}
+			re := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(word))
+			if re.MatchString(decoded) {
+				cleaned := re.ReplaceAllString(decoded, "")
+				return cleaned, false, ""
+			}
+		}
+		return fragment, false, ""
+	}
+	link := NewSSLink(badWords, utils.IsValidHost, checkBadWords, loadRuleForTest("ss"))
+	userinfo := base64.RawURLEncoding.EncodeToString([]byte("aes-256-gcm:test123"))
+	got, reason := link.Process("ss://" + userinfo + "@example.com:8388#blocked")
+	if got == "" || strings.Contains(got, "blocked") {
+		t.Fatalf("expected stripped name and accepted ss, got: %q reason: %q", got, reason)
+	}
+}
+
 func TestSSLink(t *testing.T) {
 	badWords := []string{"blocked"}
-	checkBadWords := func(fragment string) (bool, string) {
+	checkBadWords := func(fragment string) (string, bool, string) {
 		if fragment == "" {
-			return false, ""
+			return fragment, false, ""
 		}
 		decoded := utils.FullyDecode(fragment)
 		lower := strings.ToLower(decoded)
 		for _, word := range badWords {
 			if word != "" && strings.Contains(lower, word) {
-				return true, "bad word"
+				return "", true, "bad word"
 			}
 		}
-		return false, ""
+		return fragment, false, ""
 	}
 	link := NewSSLink(badWords, utils.IsValidHost, checkBadWords, loadRuleForTest("ss"))
 
