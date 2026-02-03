@@ -1,4 +1,4 @@
-[EN](FILTER_RULES_en.md) / [RU](FILTER_RULES_ru.md) / [ZH](FILTER_RULES_zh.md)
+[EN](FILTER_RULES_en.md) / [RU](FILTER_RULES.md) / [ZH](FILTER_RULES_zh.md)
 
 - [Документация для `rules.yaml`](#документация-для-rulesyaml)
   - [Структура файла](#структура-файла)

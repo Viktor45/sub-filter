@@ -1,4 +1,4 @@
-[EN](FILTER_RULES_en.md) / [RU](FILTER_RULES_ru.md) / [ZH](FILTER_RULES_zh.md)
+[EN](FILTER_RULES_en.md) / [RU](FILTER_RULES.md) / [ZH](FILTER_RULES_zh.md)
 
 此翻译由神经网络完成，如有任何错误，敬请谅解。
 
