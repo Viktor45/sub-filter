@@ -45,7 +45,7 @@
 
 ## ✨ 功能特性
 
-✅ 通过 `rules.yaml` 中的[灵活规则](./FILTER_RULES_zh.md) 进行验证  以及来自 `badwords.yaml` 的 [设置](./BADWORDS.md)
+✅ 通过 `rules.yaml` 中的[灵活规则](./FILTER_RULES_zh.md) 进行验证  以及来自 `badwords.yaml` 的 [设置](./BADWORDS.md)  
 ✅ 支持 **单国或多国过滤**（最多 20 个）及关键词屏蔽  
 ✅ 自动去重，并保留最完整的链接版本  
 ✅ 内置缓存（默认 30 分钟）  
