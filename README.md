@@ -24,7 +24,7 @@ It automatically:
 
 - 🔒 **Blocks insecure configurations** (e.g., VLESS without encryption)
 - 🧪 **Validates correctness** (required parameters, allowed values)
-- 🚫 **Filters by forbidden keywords** in server names
+- 🚫 **Rule-based filtering of prohibited (bad) keywords**
 - 🌍 **Selects servers by country** (flag, name, ISO code)
 - 🔁 **Merges and deduplicates** multiple subscriptions into one clean list
 
@@ -45,7 +45,7 @@ The result is a ready-to-use subscription for **Clash, Sing-Box, routers, and ot
 | **Bad words filters** | [EN](docs/BADWORDS_en.md) · [RU](docs/BADWORDS.md) · [ZH](docs/BADWORDS_zh.md)             |
 | **Configuration**     | [config/config.yaml](config/config.yaml)                                                   |
 | **Rules Example**     | [config/rules.yaml](config/rules.yaml)                                                     |
-| **Bad words Example** | [config/rules.yaml](config/badwords.yaml)                                                  |
+| **Bad words Example** | [config/badwords.yaml](config/badwords.yaml)                                               |
 | Example configuration | [./config](./config)                                                                       |
 
 ---

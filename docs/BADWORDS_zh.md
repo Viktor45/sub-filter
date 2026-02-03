@@ -405,7 +405,7 @@ Strip 后:   "Server Fast"
 
 ```bash
 # 尝试加载配置（程序将显示解析错误）
-./sub-filter
+./sub-filter --cli
 
 # 如果配置加载无 YAML 错误，它将输出：
 # "Configuration loaded successfully"
@@ -430,48 +430,6 @@ Test strings:
   Test (demo) US      ✅ 匹配
   Server <demo>       ✅ 匹配
   Normal Server       ❌ 不匹配
-```
-
-**方法 2：本地测试（Go）**
-
-创建文件 `test_pattern.go`：
-```go
-package main
-
-import (
-	"fmt"
-	"regexp"
-)
-
-func main() {
-	pattern := `(?i)\[demo\]|\(demo\)|<demo>`
-	re := regexp.MustCompile(pattern)
-	
-	testCases := []struct {
-		name  string
-		input string
-		want  bool
-	}{
-		{"[DEMO]", "My [DEMO] Server", true},
-		{"(demo)", "Test (demo) US", true},
-		{"<demo>", "Server <demo>", true},
-		{"normal", "Normal Server", false},
-	}
-	
-	for _, tc := range testCases {
-		result := re.MatchString(tc.input)
-		status := "✅"
-		if result != tc.want {
-			status = "❌"
-		}
-		fmt.Printf("%s %s: %v (expected %v)\n", status, tc.name, result, tc.want)
-	}
-}
-```
-
-运行它：
-```bash
-go run test_pattern.go
 ```
 
 ### 故障排除

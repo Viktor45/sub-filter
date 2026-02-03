@@ -405,7 +405,7 @@ Make sure your `badwords.yaml` file is syntactically correct:
 
 ```bash
 # Try to load the config (the program will show parsing errors)
-./sub-filter
+./sub-filter --cli
 
 # If config loads without YAML errors, it will output:
 # "Configuration loaded successfully"
@@ -430,48 +430,6 @@ Test strings:
   Test (demo) US      ✅ matches
   Server <demo>       ✅ matches
   Normal Server       ❌ does not match
-```
-
-**Method 2: Local testing (Go)**
-
-Create a file `test_pattern.go`:
-```go
-package main
-
-import (
-	"fmt"
-	"regexp"
-)
-
-func main() {
-	pattern := `(?i)\[demo\]|\(demo\)|<demo>`
-	re := regexp.MustCompile(pattern)
-	
-	testCases := []struct {
-		name  string
-		input string
-		want  bool
-	}{
-		{"[DEMO]", "My [DEMO] Server", true},
-		{"(demo)", "Test (demo) US", true},
-		{"<demo>", "Server <demo>", true},
-		{"normal", "Normal Server", false},
-	}
-	
-	for _, tc := range testCases {
-		result := re.MatchString(tc.input)
-		status := "✅"
-		if result != tc.want {
-			status = "❌"
-		}
-		fmt.Printf("%s %s: %v (expected %v)\n", status, tc.name, result, tc.want)
-	}
-}
-```
-
-Run it:
-```bash
-go run test_pattern.go
 ```
 
 ### Troubleshooting

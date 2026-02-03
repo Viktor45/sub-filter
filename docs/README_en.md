@@ -34,7 +34,7 @@ This tool validates every proxy link in your subscription by checking:
 
 - **Security** (e.g., blocks `security=none` in VLESS),
 - **Correctness** (e.g., requires `pbk` when `security=reality`),
-- **Presence of forbidden keywords** in server names,
+- **Rule-based filtering of prohibited (bad) keywords**,
 - **Geographic filtering** by country name, flag, or native language.
 
 The result is a clean, secure, and ready-to-use subscription for Clash, Sing-Box, routers, and other clients.
@@ -45,7 +45,7 @@ The result is a clean, secure, and ready-to-use subscription for Clash, Sing-Box
 
 ## ✨ Features
 
-✅ Validation via flexible [rules](./FILTER_RULES_en.md) from `rules.yaml`  
+✅ Validation via flexible [rules](./FILTER_RULES_en.md) from `rules.yaml` and [settings](./BADWORDS_en.md) from `badwords.yaml`  
 ✅ Filtering by **one or multiple countries** (up to 20) and bad words  
 ✅ Deduplication with selection of the most complete link version  
 ✅ Built-in caching (30 minutes by default)  
