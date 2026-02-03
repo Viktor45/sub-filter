@@ -679,21 +679,25 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 	bucketFiles := make([]*os.File, nBuckets)
 	bucketWriters := make([]*bufio.Writer, nBuckets)
 	bucketLocks := make([]sync.Mutex, nBuckets)
+	bucketExists := make([]bool, nBuckets) // отслеживание созданных файлов
 
 	// Гарантируем очистку частично созданных ресурсов при раннем выходе
 	success := false
 	defer func() {
 		if !success {
+			// Закрытие и удаление только тех файлов, которые были созданы
 			for i := 0; i < nBuckets; i++ {
 				if bucketWriters[i] != nil {
-					logErrorf("FileOp", fmt.Sprintf("flush bucket_%d", i), bucketWriters[i].Flush())
+					_ = bucketWriters[i].Flush()
 				}
 				if bucketFiles[i] != nil {
-					logErrorf("FileOp", fmt.Sprintf("close bucket_%d", i), bucketFiles[i].Close())
+					_ = bucketFiles[i].Close()
 				}
-				logErrorf("FileOp", fmt.Sprintf("remove bucket_%d", i), os.Remove(filepath.Join(tmpDir, fmt.Sprintf("bucket_%d.txt", i))))
+				if bucketExists[i] {
+					_ = os.Remove(filepath.Join(tmpDir, fmt.Sprintf("bucket_%d.txt", i)))
+				}
 			}
-			logErrorf("FileOp", "remove merge temp dir", os.RemoveAll(tmpDir))
+			_ = os.RemoveAll(tmpDir) // удаление всей директории и содержимого
 		}
 	}()
 
@@ -706,6 +710,7 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 		}
 		bucketFiles[i] = f
 		bucketWriters[i] = bufio.NewWriter(f)
+		bucketExists[i] = true // отметка что файл был успешно создан
 	}
 
 	// Обработка источников параллельно, запись обработанных строк в файлы bucket
@@ -741,12 +746,16 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 	}
 
 	// Итерирование bucket'ов, дедупликация per-bucket и сбор финальных строк
-	finalLines := make([]string, 0)
+	finalLines := make([]string, 0, 10000) // pre-allocate для уменьшения реаллокаций
 	for i := 0; i < nBuckets; i++ {
+		if !bucketExists[i] {
+			continue // пропуск файлов которые не были созданы
+		}
 		p := filepath.Join(tmpDir, fmt.Sprintf("bucket_%d.txt", i))
 		f, err := os.Open(p)
 		if err != nil {
 			// пропуск пустых/отсутствующих bucket'ов
+			logWarnf("FileOp", fmt.Sprintf("open bucket_%d", i), err)
 			continue
 		}
 		scanner := bufio.NewScanner(f)
@@ -775,10 +784,18 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 			finalLines = append(finalLines, v)
 		}
 		// удаление файла bucket для экономии памяти
-		logErrorf("FileOp", "remove bucket file", os.Remove(p))
+		if err := os.Remove(p); err == nil {
+			bucketExists[i] = false // файл успешно удалён
+		} else {
+			logWarnf("FileOp", fmt.Sprintf("remove bucket_%d", i), err)
+		}
 	}
-	// удаление временной директории
-	logErrorf("FileOp", "remove merge temp dir", os.Remove(tmpDir))
+	// удаление временной директории со всем содержимым
+	if err := os.RemoveAll(tmpDir); err != nil {
+		logWarnf("FileOp", "remove merge temp dir", err)
+	}
+	// отметка успешного завершения для избежания отложенной очистки
+	success = true
 	sort.Strings(finalLines)
 
 	profileName := "merged_" + strings.Join(sortedIDs, "_")
@@ -795,10 +812,12 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 
 	tmpFile := cacheFilePath + ".tmp"
 	if err := os.WriteFile(tmpFile, []byte(finalContent), 0o644); err == nil {
-		logErrorf("FileOp", "rename merge cache", os.Rename(tmpFile, cacheFilePath))
+		if err := os.Rename(tmpFile, cacheFilePath); err != nil {
+			logWarnf("FileOp", "rename merge cache", err)
+		}
+	} else {
+		logWarnf("FileOp", "write merge cache", err)
 	}
-	// отметка успешного завершения для избежания отложенной очистки
-	success = true
 	serveFile(w, []byte(finalContent), "merged_sources", mergeCacheKey)
 }
 
