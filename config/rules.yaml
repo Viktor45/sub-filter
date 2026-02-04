@@ -22,8 +22,8 @@
 vless:
   required_params:
     # Смягчим правила, можно убрать требование к наличию encryption в ссылке, security значительно важнее
-    #    - encryption
-    - sni
+    # - encryption
+    # - sni
   forbidden_values:
     security: ["none"]
     authority: [""]
