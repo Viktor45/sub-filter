@@ -95,8 +95,9 @@ func NormalizeALPN(raw string) string {
 }
 
 // NormalizeParams нормализует map[string]string: ключи в lower-case, значения trimmed.
-// Пустые значения удаляются.
-func NormalizeParams(m map[string]string) map[string]string {
+// Пустые значения удаляются (параметры с пустыми значениями не включаются в результат).
+// Если dropempty не пустой, то параметр с ключом, совпадающим с dropempty, сохраняется даже с пустым значением.
+func NormalizeParams(m map[string]string, dropempty string) map[string]string {
 	if m == nil {
 		return map[string]string{}
 	}
@@ -104,7 +105,11 @@ func NormalizeParams(m map[string]string) map[string]string {
 	for k, v := range m {
 		nk := strings.ToLower(strings.TrimSpace(k))
 		nv := strings.TrimSpace(v)
-		out[nk] = nv
+		// Сохраняем параметр, если он непустой, либо если его ключ совпадает с `dropempty`.
+		// Это позволяет, например, сохранить параметр `tls` даже когда он передан пустым.
+		if nv != "" || nk == strings.ToLower(strings.TrimSpace(dropempty)) {
+			out[nk] = nv
+		}
 	}
 	return out
 }

@@ -76,7 +76,7 @@ func (h *Hysteria2Link) Process(s string) (string, string) {
 
 	q := u.Query()
 	params := utils.ParamsFromValues(q)
-	params = utils.NormalizeParams(params)
+	params = utils.NormalizeParams(params, "")
 
 	if result := h.ruleValidator.Validate(params); !result.Valid {
 		return "", "Hysteria2: " + result.Reason

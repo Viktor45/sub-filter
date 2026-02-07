@@ -71,7 +71,7 @@ func (t *TrojanLink) Process(s string) (string, string) {
 
 	q := u.Query()
 	params := utils.ParamsFromValues(q)
-	params = utils.NormalizeParams(params)
+	params = utils.NormalizeParams(params, "")
 
 	// Валидация параметров выполняется через ruleValidator
 	// (проверка forbidden_values для параметра 'flow' в rules.yaml)

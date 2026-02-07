@@ -88,7 +88,7 @@ func (v *VLESSLink) Process(s string) (string, string) {
 
 	// Собираем параметры для валидатора
 	params := utils.ParamsFromValues(q)
-	params = utils.NormalizeParams(params)
+	params = utils.NormalizeParams(params, "")
 
 	// Если параметр 'security' отсутствует, устанавливаем значение по умолчанию 'none'.
 	// Это упрощает обработку политик, которые ожидают явно заданное значение.

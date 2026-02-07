@@ -105,7 +105,7 @@ func (v *VMessLink) Process(s string) (string, string) {
 
 	// Собираем параметры строкового представления для валидатора
 	params := utils.ParamsFromInterface(vm)
-	params = utils.NormalizeParams(params)
+	params = utils.NormalizeParams(params, "tls") // Параметр 'tls' может быть пустым, но мы не хотим его удалять — он важен для политик, которые проверяют его наличие или значение.
 
 	// Делегируем валидацию политике
 	if result := v.ruleValidator.Validate(params); !result.Valid {

@@ -361,3 +361,67 @@ func TestCompareAndSelectBetter(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeParams(t *testing.T) {
+	tests := []struct {
+		name  string
+		input map[string]string
+		want  map[string]string
+	}{
+		{
+			name:  "removes empty values",
+			input: map[string]string{"param1": "", "param2": "value"},
+			want:  map[string]string{"param2": "value"},
+		},
+		{
+			name:  "removes whitespace-only values",
+			input: map[string]string{"param1": "   ", "param2": "value"},
+			want:  map[string]string{"param2": "value"},
+		},
+		{
+			name:  "lowercase keys",
+			input: map[string]string{"Param1": "value1", "PARAM2": "value2"},
+			want:  map[string]string{"param1": "value1", "param2": "value2"},
+		},
+		{
+			name:  "trim whitespace from values",
+			input: map[string]string{"param1": "  value1  ", "param2": "value2\t"},
+			want:  map[string]string{"param1": "value1", "param2": "value2"},
+		},
+		{
+			name:  "removes multiple empty values",
+			input: map[string]string{"p1": "", "p2": "v2", "p3": "  ", "p4": "v4", "p5": ""},
+			want:  map[string]string{"p2": "v2", "p4": "v4"},
+		},
+		{
+			name:  "empty input",
+			input: map[string]string{},
+			want:  map[string]string{},
+		},
+		{
+			name:  "nil input",
+			input: nil,
+			want:  map[string]string{},
+		},
+		{
+			name:  "all empty values",
+			input: map[string]string{"p1": "", "p2": "  ", "p3": "\t"},
+			want:  map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NormalizeParams(tt.input, "")
+			if len(got) != len(tt.want) {
+				t.Errorf("NormalizeParams() length = %d, want %d", len(got), len(tt.want))
+				return
+			}
+			for k, v := range tt.want {
+				if got[k] != v {
+					t.Errorf("NormalizeParams()[%q] = %q, want %q", k, got[k], v)
+				}
+			}
+		})
+	}
+}
