@@ -68,10 +68,10 @@ vmess:
   #  required_params:
   #    - uuid
   forbidden_values:
-    security: ["none"]
+    security: ["zero", "none"]
   allowed_values:
     net: ["tcp", "ws", "grpc", "httpupgrade", "h2", "xhttp", "splithttp"]
-    security: ["auto", "aes-128-gcm", "chacha20-poly1305", "zero", "none"]
+    security: ["auto", "aes-128-gcm", "chacha20-poly1305"]
   conditional:
     # gRPC: serviceName обязателен
     - when: { net: "grpc" }
