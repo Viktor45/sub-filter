@@ -48,13 +48,16 @@ import (
 )
 
 const (
-	maxIDLength     = 64
-	maxURILength    = 4096
-	maxSourceBytes  = 10 * 1024 * 1024
-	limiterBurst    = 5
-	limiterEvery    = 100 * time.Millisecond
-	cleanupInterval = 2 * time.Minute
-	inactiveTimeout = 30 * time.Minute
+	maxIDLength       = 64
+	maxURILength      = 4096
+	maxSourceBytes    = 10 * 1024 * 1024
+	maxRegexPatterns  = 20  // ограничить количество шаблонов
+	maxRegexLength    = 100 // Ограничьте длину шаблона, чтобы предотвратить DoS
+	maxFilenameLength = 255 // ограничение длины имени файла
+	limiterBurst      = 5
+	limiterEvery      = 100 * time.Millisecond
+	cleanupInterval   = 2 * time.Minute
+	inactiveTimeout   = 30 * time.Minute
 )
 
 var defaultCacheDir = filepath.Join(os.TempDir(), "sub-filter-cache")
@@ -228,9 +231,9 @@ func streamProcessResponse(resp *http.Response, processor func(string) error) er
 	return nil
 }
 
-// createHTTPClientWithDialContext создает HTTP клиента с pooling транспортом и кастомным DialContext
+// createHTTPClientWithDialContext создает HTTP клиента с pooling транспортом и кастомным DialContext с поддержкой TLS SNI
 // Переиспользует соединения благодаря MaxIdleConns и IdleConnTimeout.
-func createHTTPClientWithDialContext(_ context.Context, dialFunc func(ctx context.Context, network, addr string) (net.Conn, error)) *http.Client {
+func createHTTPClientWithDialContext(hostname string, dialFunc func(ctx context.Context, network, addr string) (net.Conn, error)) *http.Client {
 	return &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
@@ -241,7 +244,11 @@ func createHTTPClientWithDialContext(_ context.Context, dialFunc func(ctx contex
 			IdleConnTimeout:     90 * time.Second,
 			DisableKeepAlives:   false,
 			DisableCompression:  false,
-			TLSClientConfig:     &tls.Config{InsecureSkipVerify: false},
+			// Установка TLSClientConfig с ServerName для правильной TLS верификации при использовании HTTPS источников.
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: false,
+				ServerName:         hostname, // для правильной TLS верификации
+			},
 		},
 	}
 }
@@ -277,7 +284,8 @@ func fetchSourceContent(id string, source *SafeSource, cfg *AppConfig, origCache
 		dialer := &net.Dialer{Timeout: 5 * time.Second}
 		return dialer.DialContext(ctx, network, net.JoinHostPort(source.IP.String(), portStr))
 	}
-	client := createHTTPClientWithDialContext(context.TODO(), dialFunc)
+	// Передать hostname для правильной TLS верификации при использовании HTTPS источников
+	client := createHTTPClientWithDialContext(parsedSource.Hostname(), dialFunc)
 
 	// Если lineProcessor предоставлен, используем streamProcessResponse для построчной обработки
 	if lineProcessor != nil {
@@ -335,9 +343,27 @@ func fetchSourceContent(id string, source *SafeSource, cfg *AppConfig, origCache
 
 		// Кеширование исходного содержимого
 		if !stdout {
-			tmpFile := origCache + ".tmp"
-			if err := os.WriteFile(tmpFile, content, 0o644); err == nil {
-				logErrorf("FileOp", "rename cache", os.Rename(tmpFile, origCache))
+			// Использовать безопасное создание временного файла с правами 0600
+			tmpFileObj, err := os.CreateTemp(cfg.CacheDir, filepath.Base(origCache)+".*.tmp")
+			if err == nil {
+				tmpName := tmpFileObj.Name()
+				if _, writeErr := tmpFileObj.Write(content); writeErr == nil {
+					if closeErr := tmpFileObj.Close(); closeErr == nil {
+						if renameErr := os.Rename(tmpName, origCache); renameErr != nil {
+							logErrorf("FileOp", "rename cache", renameErr)
+							os.Remove(tmpName)
+						}
+					} else {
+						logErrorf("FileOp", "close temp file", closeErr)
+						os.Remove(tmpName)
+					}
+				} else {
+					tmpFileObj.Close()
+					logErrorf("FileOp", "write cache", writeErr)
+					os.Remove(tmpName)
+				}
+			} else {
+				logErrorf("FileOp", "create temp file", err)
 			}
 		}
 
@@ -364,9 +390,24 @@ func createProxyProcessors(badRules []BadWordRule, rules map[string]validator.Va
 		action string
 		raw    string
 	}
+
+	// Ограничение количества шаблонов для предотвращения переполнения памяти
+	if len(badRules) > maxRegexPatterns {
+		logWarnf("Config", fmt.Sprintf("too many badword patterns (%d > %d), ignoring excess", len(badRules), maxRegexPatterns), nil)
+	}
+
 	compiled := make([]compiledRule, 0, len(badRules))
-	for _, br := range badRules {
+	for i, br := range badRules {
+		// Применить ограничение количества шаблонов
+		if i >= maxRegexPatterns {
+			break
+		}
 		if br.Pattern == "" {
+			continue
+		}
+		// Ограничить длину шаблона
+		if len(br.Pattern) > maxRegexLength {
+			logWarnf("Config", fmt.Sprintf("badword pattern too long (%d > %d): %q", len(br.Pattern), maxRegexLength, br.Pattern), nil)
 			continue
 		}
 		// Проверка шаблона регулярного выражения на устойчивость к ReDoS-атакам
@@ -621,6 +662,11 @@ func serveFile(w http.ResponseWriter, content []byte, sourceURL, id string) {
 		filename += ".txt"
 	}
 	filename = filepath.Base(filename)
+
+	// Ограничение длины имени файла для предотвращения проблем с буфером
+	if len(filename) > maxFilenameLength {
+		filename = filename[:maxFilenameLength]
+	}
 
 	// Санитизация filename для предотвращения Response Splitting атак
 	// Используем RFC 5987 encoding для безопасной передачи
@@ -919,13 +965,28 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 	profileInterval := fmt.Sprintf("#profile-update-interval: %d", updateInterval)
 	finalContent := strings.Join(append([]string{profileTitle, profileInterval, ""}, finalLines...), "\n")
 
-	tmpFile := cacheFilePath + ".tmp"
-	if err := os.WriteFile(tmpFile, []byte(finalContent), 0o644); err == nil {
-		if err := os.Rename(tmpFile, cacheFilePath); err != nil {
-			logWarnf("FileOp", "rename merge cache", err)
+	// Используем безопасное создание временного файла с правами 0600
+	tmpFileObj, err := os.CreateTemp(cfg.CacheDir, "merge_*.tmp")
+	if err == nil {
+		tmpName := tmpFileObj.Name()
+		if _, writeErr := tmpFileObj.WriteString(finalContent); writeErr == nil {
+			if closeErr := tmpFileObj.Close(); closeErr == nil {
+				if renameErr := os.Rename(tmpName, cacheFilePath); renameErr != nil {
+					logWarnf("FileOp", "rename merge cache", renameErr)
+					os.Remove(tmpName)
+				}
+			} else {
+				tmpFileObj.Close()
+				logWarnf("FileOp", "close merge cache temp", closeErr)
+				os.Remove(tmpName)
+			}
+		} else {
+			tmpFileObj.Close()
+			logWarnf("FileOp", "write merge cache", writeErr)
+			os.Remove(tmpName)
 		}
 	} else {
-		logWarnf("FileOp", "write merge cache", err)
+		logWarnf("FileOp", "create merge cache temp", err)
 	}
 	serveFile(w, []byte(finalContent), "merged_sources", mergeCacheKey)
 }
@@ -1038,9 +1099,28 @@ func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessor
 
 	if !stdout {
 		rejectedContent := strings.Join(rejectedLines, "\n")
-		tmpFile := rejectedCache + ".tmp"
-		if err := os.WriteFile(tmpFile, []byte(rejectedContent), 0o644); err == nil {
-			logErrorf("FileOp", "rename rejected cache", os.Rename(tmpFile, rejectedCache))
+		// Используем безопасное создание временного файла с правами 0600
+		tmpFileObj, err := os.CreateTemp(cfg.CacheDir, "rejected_"+id+"_*.tmp")
+		if err == nil {
+			tmpName := tmpFileObj.Name()
+			if _, writeErr := tmpFileObj.WriteString(rejectedContent); writeErr == nil {
+				if closeErr := tmpFileObj.Close(); closeErr == nil {
+					if renameErr := os.Rename(tmpName, rejectedCache); renameErr != nil {
+						logErrorf("FileOp", "rename rejected cache", renameErr)
+						os.Remove(tmpName)
+					}
+				} else {
+					tmpFileObj.Close()
+					logErrorf("FileOp", "close rejected cache temp", closeErr)
+					os.Remove(tmpName)
+				}
+			} else {
+				tmpFileObj.Close()
+				logErrorf("FileOp", "write rejected cache", writeErr)
+				os.Remove(tmpName)
+			}
+		} else {
+			logErrorf("FileOp", "create rejected cache temp", err)
 		}
 	}
 
@@ -1060,12 +1140,30 @@ func processSource(id string, source *SafeSource, cfg *AppConfig, proxyProcessor
 	final := strings.Join(finalLines, "\n")
 
 	if !stdout {
-		tmpFile := modCache + ".tmp"
-		if err := os.WriteFile(tmpFile, []byte(final), 0o644); err != nil {
-			logErrorf("FileOp", "remove temp file", os.Remove(tmpFile))
+		// Используем безопасное создание временного файла с правами 0600
+		tmpFileObj, err := os.CreateTemp(cfg.CacheDir, "mod_"+id+"_*.tmp")
+		if err == nil {
+			tmpName := tmpFileObj.Name()
+			if _, writeErr := tmpFileObj.WriteString(final); writeErr == nil {
+				if closeErr := tmpFileObj.Close(); closeErr == nil {
+					if renameErr := os.Rename(tmpName, modCache); renameErr != nil {
+						logErrorf("FileOp", "rename modified cache", renameErr)
+						os.Remove(tmpName)
+					}
+				} else {
+					tmpFileObj.Close()
+					logErrorf("FileOp", "close modified cache temp", closeErr)
+					os.Remove(tmpName)
+				}
+			} else {
+				tmpFileObj.Close()
+				logErrorf("FileOp", "write modified cache", writeErr)
+				os.Remove(tmpName)
+			}
+		} else {
+			logErrorf("FileOp", "create modified cache temp", err)
 			return "", err
 		}
-		logErrorf("FileOp", "rename modified cache", os.Rename(tmpFile, modCache))
 	}
 	return final, nil
 }
@@ -1208,9 +1306,28 @@ func processSourceToBuckets(id string, source *SafeSource, cfg *AppConfig, proxy
 
 	// запись кэша отклонённых
 	rejectedContent := strings.Join(rejectedLines, "\n")
-	tmpFile := rejectedCache + ".tmp"
-	if err := os.WriteFile(tmpFile, []byte(rejectedContent), 0o644); err == nil {
-		logErrorf("FileOp", "rename rejected cache", os.Rename(tmpFile, rejectedCache))
+	// Используем безопасное создание временного файла с правами 0600
+	tmpFileObj, err := os.CreateTemp(cfg.CacheDir, "rejected_"+id+"_*.tmp")
+	if err == nil {
+		tmpName := tmpFileObj.Name()
+		if _, writeErr := tmpFileObj.WriteString(rejectedContent); writeErr == nil {
+			if closeErr := tmpFileObj.Close(); closeErr == nil {
+				if renameErr := os.Rename(tmpName, rejectedCache); renameErr != nil {
+					logErrorf("FileOp", "rename rejected cache", renameErr)
+					os.Remove(tmpName)
+				}
+			} else {
+				tmpFileObj.Close()
+				logErrorf("FileOp", "close rejected cache temp", closeErr)
+				os.Remove(tmpName)
+			}
+		} else {
+			tmpFileObj.Close()
+			logErrorf("FileOp", "write rejected cache", writeErr)
+			os.Remove(tmpName)
+		}
+	} else {
+		logErrorf("FileOp", "create rejected cache temp", err)
 	}
 	return nil
 }
