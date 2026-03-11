@@ -1,5 +1,6 @@
 # rules.yaml
 # Конфигурация правил валидации прокси-подписок.
+# В этот файл можно добавлять свои правила для протоколов или параметров, а также изменять существующие.
 # Если отредактировали файл - перезапустите фильтр для применения изменений.
 
 # ============================================================================
@@ -68,7 +69,8 @@ vmess:
   #  required_params:
   #    - uuid
   forbidden_values:
-    security: ["zero", "none"]
+    security: ["null", "zero", "none"]
+    scy: ["null"]
   allowed_values:
     net: ["tcp", "ws", "grpc", "httpupgrade", "h2", "xhttp", "splithttp"]
     security: ["auto", "aes-128-gcm", "chacha20-poly1305"]
