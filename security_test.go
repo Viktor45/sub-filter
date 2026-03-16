@@ -22,6 +22,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"sub-filter/pkg/config"
+	"sub-filter/pkg/service"
 )
 
 // TestHeaderInjectionProtection verifies that filenames with CRLF are properly sanitized
@@ -42,19 +45,19 @@ func TestHeaderInjectionProtection(t *testing.T) {
 			name:        "CRLF injection attempt",
 			input:       "file.txt\r\nSet-Cookie: admin=true",
 			shouldBlock: true,
-			reason:      "CRLF sequences should be removed by encodeRFC5987 and cleanup",
+			reason:      "CRLF sequences should be removed by service.EncodeRFC5987 and cleanup",
 		},
 		{
 			name:        "newline injection",
 			input:       "file.txt\nX-Custom-Header: hack",
 			shouldBlock: true,
-			reason:      "newlines should be removed by encodeRFC5987 and cleanup",
+			reason:      "newlines should be removed by service.EncodeRFC5987 and cleanup",
 		},
 		{
 			name:        "carriage return",
 			input:       "file.txt\r",
 			shouldBlock: true,
-			reason:      "carriage returns should be removed by encodeRFC5987 and cleanup",
+			reason:      "carriage returns should be removed by service.EncodeRFC5987 and cleanup",
 		},
 		{
 			name:        "unicode filename",
@@ -75,8 +78,8 @@ func TestHeaderInjectionProtection(t *testing.T) {
 			// Use filepath.Base to simulate path traversal defense
 			cleaned := filepath.Base(tt.input)
 
-			// Use encodeRFC5987 to simulate header injection defense
-			encoded := encodeRFC5987(cleaned)
+			// Use service.EncodeRFC5987 to simulate header injection defense
+			encoded := service.EncodeRFC5987(cleaned)
 
 			// Check that dangerous characters are not in the encoded result
 			hasInjection := strings.Contains(encoded, "\r") || strings.Contains(encoded, "\n")
@@ -90,8 +93,8 @@ func TestHeaderInjectionProtection(t *testing.T) {
 				t.Errorf("%s: expected safe encoding, but got injection chars: %q", tt.reason, encoded)
 			}
 
-			if len(encoded) > maxFilenameLength {
-				t.Errorf("encoded filename exceeds max length: %d > %d", len(encoded), maxFilenameLength)
+			if len(encoded) > service.MaxFilenameLength {
+				t.Errorf("encoded filename exceeds max length: %d > %d", len(encoded), service.MaxFilenameLength)
 			}
 		})
 	}
@@ -100,10 +103,10 @@ func TestHeaderInjectionProtection(t *testing.T) {
 // TestSSRFProtectionIPValidation verifies that private/local IPs are rejected
 func TestSSRFProtectionIPValidation(t *testing.T) {
 	tests := []struct {
-		name      string
-		ip        string
+		name        string
+		ip          string
 		shouldAllow bool
-		reason    string
+		reason      string
 	}{
 		{
 			name:        "public IP (Google DNS)",
@@ -174,7 +177,7 @@ func TestSSRFProtectionIPValidation(t *testing.T) {
 				t.Fatalf("failed to parse IP: %s", tt.ip)
 			}
 
-			allowed := isIPAllowed(parsedIP)
+			allowed := config.IsIPAllowed(parsedIP)
 
 			if allowed != tt.shouldAllow {
 				t.Errorf("%s: expected allowed=%v, got %v", tt.reason, tt.shouldAllow, allowed)
@@ -186,10 +189,10 @@ func TestSSRFProtectionIPValidation(t *testing.T) {
 // TestSSRFProtectionSourceURL verifies that dangerous source URLs are validated properly
 func TestSSRFProtectionSourceURL(t *testing.T) {
 	tests := []struct {
-		name     string
-		url      string
-		valid    bool
-		reason   string
+		name   string
+		url    string
+		valid  bool
+		reason string
 	}{
 		{
 			name:   "valid HTTPS URL",
@@ -266,7 +269,7 @@ func TestSSRFProtectionSourceURL(t *testing.T) {
 			ip := net.ParseIP(hostname)
 			if ip != nil {
 				// It's an IP address, check if it's allowed
-				allowed := isIPAllowed(ip)
+				allowed := config.IsIPAllowed(ip)
 				if allowed != tt.valid {
 					t.Errorf("%s: expected valid=%v, got %v (IP=%s)", tt.reason, tt.valid, allowed, hostname)
 				}
@@ -285,7 +288,6 @@ func TestSSRFProtectionSourceURL(t *testing.T) {
 		})
 	}
 }
-
 
 // TestRegexPatternValidation verifies that dangerous patterns are rejected
 func TestRegexPatternValidation(t *testing.T) {
@@ -347,7 +349,7 @@ func TestRegexPatternValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			safe := isRegexSafe(tt.pattern)
+			safe := service.IsRegexSafe(tt.pattern)
 
 			if safe != tt.safe {
 				t.Errorf("%s: expected safe=%v, got %v", tt.reason, tt.safe, safe)
@@ -358,10 +360,10 @@ func TestRegexPatternValidation(t *testing.T) {
 
 // TestRegexPatternLength verifies that overly long patterns are rejected
 func TestRegexPatternLength(t *testing.T) {
-	// Create a pattern that exceeds maxRegexLength
-	longPattern := strings.Repeat("a", maxRegexLength+1)
+	// Create a pattern that exceeds service.MaxRegexLength
+	longPattern := strings.Repeat("a", service.MaxRegexLength+1)
 
-	if len(longPattern) <= maxRegexLength {
+	if len(longPattern) <= service.MaxRegexLength {
 		t.Fatalf("test setup error: long pattern not actually long enough")
 	}
 
@@ -371,10 +373,10 @@ func TestRegexPatternLength(t *testing.T) {
 		t.Logf("Note: Go regex compiler rejected ultra-long pattern: %v", err)
 	}
 
-	// Verify that isRegexSafe would catch it
-	// (In practice, length check is done before calling isRegexSafe)
-	if len(longPattern) > maxRegexLength {
-		t.Logf("✓ Pattern exceeds max length: %d > %d", len(longPattern), maxRegexLength)
+	// Verify that service.IsRegexSafe would catch it
+	// (In practice, length check is done before calling service.IsRegexSafe)
+	if len(longPattern) > service.MaxRegexLength {
+		t.Logf("✓ Pattern exceeds max length: %d > %d", len(longPattern), service.MaxRegexLength)
 	}
 }
 
@@ -409,7 +411,7 @@ func TestFilePermissions(t *testing.T) {
 	mode := info.Mode().Perm()
 	// os.CreateTemp creates files with mode 0600 on Unix
 	// (which is 384 in octal)
-	if mode != 0600 {
+	if mode != 0o600 {
 		t.Logf("Warning: temp file mode is %o, expected 0600", mode)
 		// This is a warning, not a failure, because behavior may vary by OS
 	}
@@ -479,22 +481,22 @@ func TestTLSServerName(t *testing.T) {
 
 // TestFilenameLength verifies that filenames are truncated to max length
 func TestFilenameLength(t *testing.T) {
-	// Create a filename that exceeds maxFilenameLength
+	// Create a filename that exceeds service.MaxFilenameLength
 	longID := strings.Repeat("a", 500)
 	overlyLongFilename := "filtered_" + longID + ".txt"
 
-	if len(overlyLongFilename) <= maxFilenameLength {
+	if len(overlyLongFilename) <= service.MaxFilenameLength {
 		t.Fatalf("test setup error: filename not actually long enough")
 	}
 
 	// Simulate what serveFile does
 	filename := overlyLongFilename
-	if len(filename) > maxFilenameLength {
-		filename = filename[:maxFilenameLength]
+	if len(filename) > service.MaxFilenameLength {
+		filename = filename[:service.MaxFilenameLength]
 	}
 
-	if len(filename) > maxFilenameLength {
-		t.Errorf("filename length %d exceeds max %d", len(filename), maxFilenameLength)
+	if len(filename) > service.MaxFilenameLength {
+		t.Errorf("filename length %d exceeds max %d", len(filename), service.MaxFilenameLength)
 	}
 
 	t.Logf("✓ Filename truncated from %d to %d bytes", len(overlyLongFilename), len(filename))
@@ -502,21 +504,21 @@ func TestFilenameLength(t *testing.T) {
 
 // TestPatternCountLimit verifies that excess patterns are rejected
 func TestPatternCountLimit(t *testing.T) {
-	// Create more patterns than maxRegexPatterns
-	numPatterns := maxRegexPatterns + 5
-	
-	if numPatterns <= maxRegexPatterns {
+	// Create more patterns than service.MaxRegexPatterns
+	numPatterns := service.MaxRegexPatterns + 5
+
+	if numPatterns <= service.MaxRegexPatterns {
 		t.Fatalf("test setup error: pattern count not correctly set")
 	}
 
-	// Verify that when we attempt to process maxRegexPatterns+5 patterns,
-	// only maxRegexPatterns are actually used by the system
-	t.Logf("✓ Pattern count limit: max=%d, test with %d patterns", maxRegexPatterns, numPatterns)
+	// Verify that when we attempt to process service.MaxRegexPatterns+5 patterns,
+	// only service.MaxRegexPatterns are actually used by the system
+	t.Logf("✓ Pattern count limit: max=%d, test with %d patterns", service.MaxRegexPatterns, numPatterns)
 
-	// In actual code, createProxyProcessors would limit to maxRegexPatterns
+	// In actual code, createProxyProcessors would limit to service.MaxRegexPatterns
 	// The enforcement happens in the loop:
 	// for i, br := range badRules {
-	//     if i >= maxRegexPatterns { break }
+	//     if i >= service.MaxRegexPatterns { break }
 	//     ...
 	// }
 }
@@ -527,7 +529,7 @@ func BenchmarkFilenameEncoding(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = encodeRFC5987(filename)
+		_ = service.EncodeRFC5987(filename)
 	}
 }
 
@@ -537,7 +539,7 @@ func BenchmarkIPValidation(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = isIPAllowed(testIP)
+		_ = config.IsIPAllowed(testIP)
 	}
 }
 
@@ -553,7 +555,7 @@ func BenchmarkRegexSafety(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, p := range patterns {
-			// In actual code, this would call isRegexSafe(p)
+			// In actual code, this would call service.IsRegexSafe(p)
 			_ = len(p) // Placeholder
 		}
 	}
