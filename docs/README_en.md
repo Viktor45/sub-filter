@@ -5,7 +5,9 @@ This translation was made using AI.
 - [sub-filter](#sub-filter)
   - [✨ Features](#-features)
   - [🛠️ Build Instructions](#️-build-instructions)
+    - [Architecture](#architecture)
   - [▶️ Usage](#️-usage)
+    - [Configuration format](#configuration-format)
     - [1. HTTP Server Mode (Dynamic Filtering)](#1-http-server-mode-dynamic-filtering)
       - [Syntax:](#syntax)
       - [Examples:](#examples)
@@ -61,6 +63,18 @@ Requires **Go 1.21+**.
 go build -o sub-filter .
 ```
 
+### Architecture
+
+The project uses a modular architecture with dependency injection:
+
+- **`pkg/config`**: Loading and validating configuration from YAML/JSON/TOML files
+- **`pkg/service`**: Main business logic, HTTP handlers, regex caching
+- **`pkg/errors`**: Typed errors with codes and severity
+- **`pkg/logger`**: Structured logging based on slog
+- **`pkg/cache`**: Caching compiled regex for performance
+
+Protocols (VLESS, VMess, etc.) are implemented in separate packages with a common `ProxyLink` interface.
+
 ---
 
 ## ▶️ Usage
@@ -68,6 +82,29 @@ go build -o sub-filter .
 The program supports two modes: **HTTP server** and **CLI**.
 
 Example [configuration files](../config)
+
+### Configuration format
+
+Main file `config/config.yaml`:
+
+```yaml
+# File paths
+sources_file: "./config/sub.txt" # List of subscription URLs
+rules_file: "./config/rules.yaml" # Validation rules
+bad_words_file: "./config/badwords.yaml" # Disallowed words
+uagent_file: "./config/uagent.txt" # User-Agent for requests
+
+# Caching
+cache_dir: "/tmp/sub-filter-cache" # Cache directory
+cache_ttl: 1800s # Cache lifetime
+
+# Limits
+max_country_codes: 20 # Max country codes
+max_merge_ids: 10 # Max subscriptions for merge
+merge_buckets: 256 # Shards for merge
+```
+
+---
 
 ### 1. HTTP Server Mode (Dynamic Filtering)
 
@@ -101,6 +138,7 @@ Starts a server that filters subscriptions on-the-fly.
 - `id` — line number from `sources_file` (for `/filter`)
 - `ids` — comma-separated line numbers (max 20, for `/merge`)
 - `c` — [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes) country codes (max 20)
+- `lim` — maximum number of links in the result (for `/filter` and `/merge`)
 
 **Examples:**
 

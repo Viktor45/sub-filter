@@ -472,7 +472,7 @@ func (s *Service) handleFilter(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Invalid country codes: %v", err), http.StatusBadRequest)
 		return
 	}
-
+	// Ограничиваем число отдаваемых строк для слабых клиентов (iOS), чтобы избежать их перегрузки при больших профилях
 	lim := parseLimit(r.URL.Query().Get("lim"))
 
 	content, err := s.Filter(id, countryCodes, lim)
@@ -522,7 +522,7 @@ func (s *Service) handleMerge(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Invalid country codes: %v", err), http.StatusBadRequest)
 		return
 	}
-
+	// Ограничиваем число отдаваемых строк для слабых клиентов (iOS), чтобы избежать их перегрузки при больших профилях
 	lim := parseLimit(r.URL.Query().Get("lim"))
 
 	content, err := s.Merge(sortedIDs, countryCodes, lim)
