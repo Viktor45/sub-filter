@@ -5,7 +5,9 @@
 - [sub-filter](#sub-filter)
   - [✨ 功能特性](#-功能特性)
   - [🛠️ 编译说明](#️-编译说明)
+    - [架构](#架构)
   - [▶️ 使用方法](#️-使用方法)
+    - [配置格式](#配置格式)
     - [1. HTTP 服务器模式（动态过滤）](#1-http-服务器模式动态过滤)
       - [语法：](#语法)
       - [示例：](#示例)
@@ -61,6 +63,22 @@
 go build -o sub-filter .
 ```
 
+### 架构
+
+该项目采用模块化架构，并支持依赖注入：
+
+- **`pkg/config`**：从 YAML/JSON/TOML 文件加载和验证配置
+
+- **`pkg/service`**：主要业务逻辑、HTTP 处理程序、正则表达式缓存
+
+- **`pkg/errors`**：类型化错误，包含代码和严重性
+
+- **`pkg/logger`**：基于 slog 的结构化日志记录
+
+- **`pkg/cache`**：缓存已编译的正则表达式以提升性能
+
+协议（VLESS、VMess 等）在单独的包中实现，并使用通用的 `ProxyLink` 接口。
+
 ---
 
 ## ▶️ 使用方法
@@ -68,6 +86,33 @@ go build -o sub-filter .
 本程序支持两种模式：**HTTP 服务器** 和 **命令行（CLI）**。
 
 示例[配置文件](../config)
+
+### 配置格式
+
+主文件 `config/config.yaml`：
+
+```yaml
+# 文件路径
+
+sources_file: "./config/sub.txt" # 订阅 URL 列表
+rules_file: "./config/rules.yaml" # 验证规则
+bad_words_file: "./config/badwords.yaml" # 禁用词
+uagent_file: "./config/uagent.txt" # 请求的 User-Agent
+
+# 缓存
+
+cache_dir: "/tmp/sub-filter-cache" # 缓存目录
+cache_ttl: 1800s # 缓存生存期
+
+# 限制
+
+max_country_codes: 20 # 最大国家/地区代码
+max_merge_ids: 10 # 合并的最大订阅数
+merge_buckets: 256 # 合并的分片数
+
+```
+
+---
 
 ### 1. HTTP 服务器模式（动态过滤）
 
@@ -101,6 +146,7 @@ go build -o sub-filter .
 - `id` — `sources_file` 中的行号（用于 `/filter`）
 - `ids` — 以逗号分隔的行号（最多 20 个，用于 `/merge`）
 - `c` — [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes) 国家代码（最多 20 个）
+- `lim` — 结果中的最大链接数量（用于 `/filter` 和 `/merge`）
 
 **示例：**
 
