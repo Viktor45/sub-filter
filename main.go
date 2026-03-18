@@ -18,7 +18,7 @@ import (
 )
 
 func main() {
-	// Initialize logger
+	// Инициализируем логгер
 	logLevel := logger.ParseLevel(os.Getenv("LOG_LEVEL"))
 	if logLevel == 0 {
 		logLevel = logger.ParseLevel("info")
@@ -53,7 +53,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		// Parse country codes
+		// Парсим коды стран
 		var parsedCountryCodes []string
 		if *countryCodesCLI != "" {
 			parsedCountryCodes = strings.Split(*countryCodesCLI, ",")
@@ -62,7 +62,7 @@ func main() {
 			}
 		}
 
-		// Prepare service options
+		// Подготавливаем опции сервиса
 		opts := &service.ServiceOptions{
 			Sources:         cfg.SourcesMap,
 			Rules:           cfg.Rules,
@@ -73,14 +73,14 @@ func main() {
 			MergeBuckets:    cfg.Cache.MergeBuckets,
 		}
 
-		// Create service
+		// Создаем сервис
 		svc, err := service.NewService(cfg, log, opts)
 		if err != nil {
 			log.Error("Failed to create service", "error", err)
 			os.Exit(1)
 		}
 
-		// Get source IDs
+		// Получаем ИД источников
 		var ids []string
 		if flag.NArg() > 0 {
 			ids = flag.Args()
@@ -91,7 +91,7 @@ func main() {
 			}
 		}
 
-		// Process CLI
+		// Обрабатываем CLI
 		if err := svc.ProcessCLI(ids, parsedCountryCodes, *stdout); err != nil {
 			log.Error("CLI processing failed", "error", err)
 			os.Exit(1)
@@ -99,7 +99,7 @@ func main() {
 		return
 	}
 
-	// Server mode
+	// Нормальный режим работы
 	portStr := ""
 	if flag.NArg() > 0 {
 		portStr = flag.Arg(0)
