@@ -56,17 +56,17 @@ func TestService_HealthEndpoint(t *testing.T) {
 		t.Errorf("Response too short: %s", w.Body.String())
 	}
 
-	// now test filter/merge with a real source
+	// Теперь тестируем filter/merge с настоящим источником
 	userinfo := base64.StdEncoding.EncodeToString([]byte("aes-256-gcm:test123"))
 	content := "#c\nss://" + userinfo + "@example.com:8388#my-server\n#b\nss://" + userinfo + "@example2.com:8388#my-server2\nss://" + userinfo + "@example3.com:8388#my-server3\n"
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, content)
 	}))
 	defer ts.Close()
-	// add source
+	// Добавляем источник
 	svc.sources["x"] = &config.SafeSource{URL: ts.URL, IP: net.ParseIP("127.0.0.1")}
 
-	// filter without limit
+	// Фильтруем без лимита
 	reqF := httptest.NewRequest("GET", "/filter?id=x", nil)
 	reqF.Header.Set("User-Agent", "test-agent")
 	wF := httptest.NewRecorder()
@@ -78,7 +78,7 @@ func TestService_HealthEndpoint(t *testing.T) {
 		t.Errorf("filter body unexpected: %s", wF.Body.String())
 	}
 
-	// filter with limit
+	// Фильтруем с лимитом
 	reqF2 := httptest.NewRequest("GET", "/filter?id=x&lim=1", nil)
 	reqF2.Header.Set("User-Agent", "test-agent")
 	wF2 := httptest.NewRecorder()
@@ -91,7 +91,7 @@ func TestService_HealthEndpoint(t *testing.T) {
 		t.Errorf("expected 1 line, got %d", len(lines))
 	}
 
-	// merge - add another source with overlapping data
+	// Слияние - добавляем еще один источник с перекрывающимися данными
 	svc.sources["y"] = &config.SafeSource{URL: ts.URL, IP: net.ParseIP("127.0.0.1")}
 	reqM := httptest.NewRequest("GET", "/merge?ids=x&ids=y", nil)
 	reqM.Header.Set("User-Agent", "test-agent")
@@ -104,7 +104,7 @@ func TestService_HealthEndpoint(t *testing.T) {
 		t.Errorf("merge body unexpected: %s", wM.Body.String())
 	}
 
-	// merge with limit
+	// Слияние с лимитом
 	reqM2 := httptest.NewRequest("GET", "/merge?ids=x&ids=y&lim=2", nil)
 	reqM2.Header.Set("User-Agent", "test-agent")
 	wM2 := httptest.NewRecorder()
@@ -113,8 +113,15 @@ func TestService_HealthEndpoint(t *testing.T) {
 		t.Errorf("merge status %d", wM2.Code)
 	}
 	mlines := strings.Split(strings.TrimSpace(wM2.Body.String()), "\n")
-	if len(mlines) != 1 {
-		t.Errorf("expected 1 merge line, got %d", len(mlines))
+	// Фильтруем строки комментариев (начинаются с #) для подсчета только прокси-строк
+	proxyCount := 0
+	for _, line := range mlines {
+		if !strings.HasPrefix(line, "#") && strings.TrimSpace(line) != "" {
+			proxyCount++
+		}
+	}
+	if proxyCount != 2 {
+		t.Errorf("expected 2 proxy lines with lim=2, got %d", proxyCount)
 	}
 }
 

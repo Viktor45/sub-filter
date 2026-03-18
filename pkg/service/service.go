@@ -70,8 +70,8 @@ func IsRegexSafe(pattern string) bool {
 	return true
 }
 
-// protoSchemes are used by detectProxyScheme for a fast single-pass check.
-// Copied from main.go to keep service package independent.
+// protoSchemes используются detectProxyScheme для быстрой однопроходной проверки.
+// Скопировано из main.go чтобы сохранить независимость пакета service.
 var protoSchemes = [][]byte{
 	[]byte("vless://"),
 	[]byte("vmess://"),
@@ -92,17 +92,17 @@ func detectProxyScheme(content []byte) bool {
 	return false
 }
 
-// ProxyLink is the interface implemented by protocol handlers (ss, vless, etc).
-// It is intentionally duplicated here; any value whose methods match can be
-// stored in this interface regardless of package.
+// ProxyLink это интерфейс, реализованный процессорами протоколов (ss, vless, etc).
+// Это сделано намеренно; любые значения, чьи методы совпадают, могут быть
+// сохранены в этот интерфейс независимо от пакета.
 type ProxyLink interface {
 	Matches(s string) bool
 	Process(s string) (string, string)
 }
 
-// ServiceOptions contains application-specific data required by filtering
-// and merging logic. The main package constructs this struct when creating
-// the service to avoid a circular dependency.
+// ServiceOptions содержит данные специфичные для приложения, требуемые для логики
+// фильтрации и слияния. Пакет main конструирует эту структуру при создании
+// сервиса чтобы избежать циклической зависимости.
 type ServiceOptions struct {
 	Sources         map[string]*config.SafeSource
 	Rules           map[string]validator.Validator
@@ -113,7 +113,7 @@ type ServiceOptions struct {
 	MergeBuckets    int
 }
 
-// Service представляет основной сервис приложения с dependency injection
+// Service представляет основной сервис приложения с внедрением зависимостей
 type Service struct {
 	// Конфигурация
 	cfg *config.Config
@@ -415,7 +415,11 @@ func (s *Service) GetLimiter(ip string) *rate.Limiter {
 	const limiterEvery = 100 * time.Millisecond
 
 	val, _ := s.ipLimiter.LoadOrStore(ip, rate.NewLimiter(rate.Every(limiterEvery), limiterBurst))
-	limiter, _ := val.(*rate.Limiter)
+	limiter, ok := val.(*rate.Limiter)
+	if !ok || limiter == nil {
+		// Fallback: create new limiter (defensive programming)
+		limiter = rate.NewLimiter(rate.Every(limiterEvery), limiterBurst)
+	}
 	return limiter
 }
 
@@ -451,7 +455,9 @@ func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, `{"status":"ok","timestamp":"%s"}`, time.Now().Format(time.RFC3339))
+	if _, err := fmt.Fprintf(w, `{"status":"ok","timestamp":"%s"}`, time.Now().Format(time.RFC3339)); err != nil {
+		s.logger.Error("Failed to write health status", "error", err)
+	}
 }
 
 // handleFilter обрабатывает запросы на фильтрацию подписок
@@ -480,7 +486,12 @@ func (s *Service) handleFilter(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Processing error: %v", err), http.StatusInternalServerError)
 		return
 	}
-	s.serveFile(w, content, s.sources[id].URL, id)
+	source, ok := s.sources[id]
+	if !ok || source == nil {
+		http.Error(w, "Source not found", http.StatusInternalServerError)
+		return
+	}
+	s.serveFile(w, content, source.URL, id)
 }
 
 // handleMerge обрабатывает запросы на слияние подписок
@@ -557,7 +568,13 @@ func (s *Service) serveFile(w http.ResponseWriter, content []byte, sourceURL, id
 	w.Header().Set("Content-Length", strconv.Itoa(len(content)))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 
-	w.Write(content)
+	if _, err := w.Write(content); err != nil {
+		s.logger.Error("Failed to write response",
+			"error", err,
+			"id", id,
+			"size", len(content),
+		)
+	}
 }
 
 // parseLimit преобразует строковый параметр лимита в int (0 если не указано или некорректно)
@@ -769,20 +786,22 @@ func (s *Service) generateProfile(id string, countryCodes []string) (string, err
 
 	rejectedContent := strings.Join(rejectedLines, "\n")
 	tmpFileObj, tmpErr := os.CreateTemp(s.cfg.Cache.Directory, "rejected_"+id+"_*.tmp")
-	if tmpErr == nil {
+	if tmpErr != nil {
+		s.logger.Warn("Failed to create temp file for rejected cache", "error", tmpErr, "id", id)
+	} else {
 		tmpName := tmpFileObj.Name()
-		if _, writeErr := tmpFileObj.WriteString(rejectedContent); writeErr == nil {
-			if closeErr := tmpFileObj.Close(); closeErr == nil {
-				_ = os.Rename(tmpName, rejectedCache)
-			} else {
-				tmpFileObj.Close()
-				os.Remove(tmpName)
-			}
+		_, writeErr := tmpFileObj.WriteString(rejectedContent)
+		closeErr := tmpFileObj.Close()
+		if writeErr != nil {
+			s.logger.Error("Failed to write rejected cache", "error", writeErr, "id", id)
+			_ = os.Remove(tmpName)
+		} else if closeErr != nil {
+			s.logger.Error("Failed to close rejected cache temp file", "error", closeErr, "id", id)
+			_ = os.Remove(tmpName)
 		} else {
-			tmpFileObj.Close()
-			os.Remove(tmpName)
+			_ = os.Rename(tmpName, rejectedCache)
 		}
-	} // silently ignore errors
+	}
 
 	profileName := "filtered_" + id
 	if u, err := url.Parse(source.URL); err == nil {
@@ -800,20 +819,22 @@ func (s *Service) generateProfile(id string, countryCodes []string) (string, err
 	final := strings.Join(finalLines, "\n")
 
 	tmpFileObj, tmpErr = os.CreateTemp(s.cfg.Cache.Directory, "mod_"+id+"_*.tmp")
-	if tmpErr == nil {
+	if tmpErr != nil {
+		s.logger.Warn("Failed to create temp file for modified cache", "error", tmpErr, "id", id)
+	} else {
 		tmpName := tmpFileObj.Name()
-		if _, writeErr := tmpFileObj.WriteString(final); writeErr == nil {
-			if closeErr := tmpFileObj.Close(); closeErr == nil {
-				_ = os.Rename(tmpName, modCache)
-			} else {
-				tmpFileObj.Close()
-				os.Remove(tmpName)
-			}
+		_, writeErr := tmpFileObj.WriteString(final)
+		closeErr := tmpFileObj.Close()
+		if writeErr != nil {
+			s.logger.Error("Failed to write modified cache", "error", writeErr, "id", id)
+			_ = os.Remove(tmpName)
+		} else if closeErr != nil {
+			s.logger.Error("Failed to close modified cache temp file", "error", closeErr, "id", id)
+			_ = os.Remove(tmpName)
 		} else {
-			tmpFileObj.Close()
-			os.Remove(tmpName)
+			_ = os.Rename(tmpName, modCache)
 		}
-	} // ignore errors
+	}
 
 	return final, nil
 }
@@ -968,18 +989,20 @@ func (s *Service) Merge(ids []string, countryCodes []string, lim int) ([]byte, e
 	finalContent := strings.Join(append([]string{profileTitle, profileInterval, ""}, finalLines...), "\n")
 
 	tmpFileObj, tmpErr := os.CreateTemp(s.cfg.Cache.Directory, "merge_*.tmp")
-	if tmpErr == nil {
+	if tmpErr != nil {
+		s.logger.Warn("Failed to create temp file for merge cache", "error", tmpErr)
+	} else {
 		tmpName := tmpFileObj.Name()
-		if _, writeErr := tmpFileObj.WriteString(finalContent); writeErr == nil {
-			if closeErr := tmpFileObj.Close(); closeErr == nil {
-				_ = os.Rename(tmpName, cacheFilePath)
-			} else {
-				tmpFileObj.Close()
-				os.Remove(tmpName)
-			}
+		_, writeErr := tmpFileObj.WriteString(finalContent)
+		closeErr := tmpFileObj.Close()
+		if writeErr != nil {
+			s.logger.Error("Failed to write merge cache", "error", writeErr)
+			_ = os.Remove(tmpName)
+		} else if closeErr != nil {
+			s.logger.Error("Failed to close merge cache temp file", "error", closeErr)
+			_ = os.Remove(tmpName)
 		} else {
-			tmpFileObj.Close()
-			os.Remove(tmpName)
+			_ = os.Rename(tmpName, cacheFilePath)
 		}
 	}
 	return applyLimit([]byte(finalContent), lim), nil
@@ -1067,7 +1090,7 @@ func (s *Service) fetchSourceContent(id string, source *config.SafeSource, origC
 	if !stdout {
 		if info, err := os.Stat(origCache); err == nil && time.Since(info.ModTime()) <= s.cfg.Cache.TTL {
 			if content, err := os.ReadFile(origCache); err == nil {
-				// If lineProcessor is provided, process the cached content
+				// Если lineProcessor предоставлен, обработаем кэшированный контент
 				if lineProcessor != nil {
 					for _, line := range strings.Split(strings.TrimSpace(string(content)), "\n") {
 						if err := lineProcessor(line); err != nil {

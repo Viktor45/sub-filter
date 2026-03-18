@@ -16,8 +16,8 @@ import (
 	"sub-filter/pkg/logger"
 )
 
-// simple passthrough processor used in unit tests to avoid needing real
-// protocol handlers. It accepts any line and returns it unchanged.
+// Простой пропускной процессор, используемый в модульных тестах для избежания необходимости реальных
+// обработчиков протоколов. Он принимает любую строку и возвращает ее неизменной.
 type passthroughProcessor struct{}
 
 func (passthroughProcessor) Matches(_ string) bool             { return true }
@@ -79,7 +79,7 @@ func makeSimpleService(t *testing.T) *Service {
 	}
 	log := logger.NewDefault(logger.ParseLevel("info"))
 	opts := &ServiceOptions{Sources: make(map[string]*config.SafeSource), Rules: make(map[string]validator.Validator)}
-	// include simple passthrough processor so Filter/Merge yield actual content
+	// Включаем простой пропускной процессор, чтобы Filter/Merge возвращали реальный контент
 	svc, err := NewService(cfg, log, opts)
 	if err != nil {
 		t.Fatalf("Failed to create service: %v", err)
@@ -159,8 +159,8 @@ func TestService_BufferPool(t *testing.T) {
 }
 
 func TestService_FilterAndMerge(t *testing.T) {
-	// set up a simple HTTP server that serves exactly one valid SS proxy link
-	// we construct a minimal userinfo ("cipher:password") encoded in base64.
+	// Устанавливаем простой HTTP сервер, который служит ровно одной валидной SS прокси-ссылкой
+	// Мы конструируем минимальный userinfo ("cipher:password") закодированный в base64.
 	userinfo := base64.RawURLEncoding.EncodeToString([]byte("aes-256-gcm:test123"))
 	content := "#comment\nss://" + userinfo + "@example.com:8388#my-server\n#ignored\n"
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -169,10 +169,10 @@ func TestService_FilterAndMerge(t *testing.T) {
 	defer ts.Close()
 
 	svc := makeSimpleService(t)
-	// add source
+	// Добавляем источник
 	svc.sources["a"] = &config.SafeSource{URL: ts.URL, IP: net.ParseIP("127.0.0.1")}
 
-	// filter without limit
+	// Фильтруем без лимита
 	res, err := svc.Filter("a", nil, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -181,8 +181,8 @@ func TestService_FilterAndMerge(t *testing.T) {
 		t.Errorf("unexpected filter output: %s", string(res))
 	}
 
-	// limit =2 should restrict to at most two non-comment entries; we only
-	// have one proxy link so expect a single line back.
+	// limit=2 должен ограничить максимум двумя неколичественными записями; у нас только
+	// одна прокси-ссылка, поэтому ожидаем одну строку назад.
 	res2, err := svc.Filter("a", nil, 2)
 	if err != nil {
 		t.Fatal(err)
@@ -192,7 +192,7 @@ func TestService_FilterAndMerge(t *testing.T) {
 		t.Errorf("expected 1 line after limit, got %d", len(lines))
 	}
 
-	// merge two sources
+	// Слияние двух источников
 	svc.sources["b"] = &config.SafeSource{URL: ts.URL, IP: net.ParseIP("127.0.0.1")}
 	merged, err := svc.Merge([]string{"a", "b"}, nil, 0)
 	if err != nil {
@@ -202,7 +202,7 @@ func TestService_FilterAndMerge(t *testing.T) {
 		t.Errorf("unexpected merge output: %s", string(merged))
 	}
 
-	// merge with limit
+	// Слияние с лимитом
 	merged2, err := svc.Merge([]string{"a", "b"}, nil, 1)
 	if err != nil {
 		t.Fatal(err)
