@@ -2,38 +2,40 @@
 
 This translation was made using AI.
 
-- [Documentation for `badwords.yaml`](#documentation-for-badwordsyaml)
-- [Purpose and Concept](#purpose-and-concept)
-  - [What is a "bad word"?](#what-is-a-bad-word)
-  - [Two Filtering Strategies](#two-filtering-strategies)
-- [File Structure](#file-structure)
-  - [Rule Fields](#rule-fields)
-  - [Minimal Example](#minimal-example)
-- [Action Types](#action-types)
-  - [Action: `strip`](#action-strip)
-  - [Action: `delete`](#action-delete)
-- [Regular Expression Syntax](#regular-expression-syntax)
-  - [Basic Constructs](#basic-constructs)
-  - [Special Sequences](#special-sequences)
-  - [Modifiers](#modifiers)
-  - [Escaping Special Characters](#escaping-special-characters)
-- [Practical Examples](#practical-examples)
-  - [Example 1: Removing Version Numbers](#example-1-removing-version-numbers)
-  - [Example 2: Removing Quality/Status Markers](#example-2-removing-qualitystatus-markers)
-  - [Example 3: Blocking Private IPs (Parsing Error Indicator)](#example-3-blocking-private-ips-parsing-error-indicator)
-  - [Example 4: Blocking Spam and Malware](#example-4-blocking-spam-and-malware)
-  - [Example 5: Blocking Invalid Ports](#example-5-blocking-invalid-ports)
-- [Pattern Writing Rules](#pattern-writing-rules)
-  - [✅ Best Practices](#-best-practices)
-  - [⚠️ Common Mistakes](#️-common-mistakes)
-- [Debugging and Testing](#debugging-and-testing)
-  - [YAML Syntax Validation](#yaml-syntax-validation)
-  - [Pattern Testing](#pattern-testing)
-  - [Troubleshooting](#troubleshooting)
-- [Organization Recommendations](#organization-recommendations)
-  - [Rule Order](#rule-order)
-  - [YAML Comments](#yaml-comments)
-- [Conclusion](#conclusion)
+<!-- TOC -->
+  * [Documentation for `badwords.yaml`](#documentation-for-badwordsyaml)
+  * [Purpose and Concept](#purpose-and-concept)
+    * [What is a "bad word"?](#what-is-a-bad-word)
+    * [Two Filtering Strategies](#two-filtering-strategies)
+  * [File Structure](#file-structure)
+    * [Rule Fields](#rule-fields)
+    * [Minimal Example](#minimal-example)
+  * [Action Types](#action-types)
+    * [Action: `strip`](#action-strip)
+    * [Action: `delete`](#action-delete)
+  * [Regular Expression Syntax](#regular-expression-syntax)
+    * [Basic Constructs](#basic-constructs)
+    * [Special Sequences](#special-sequences)
+    * [Modifiers](#modifiers)
+    * [Escaping Special Characters](#escaping-special-characters)
+  * [Practical Examples](#practical-examples)
+    * [Example 1: Removing Version Numbers](#example-1-removing-version-numbers)
+    * [Example 2: Removing Quality/Status Markers](#example-2-removing-qualitystatus-markers)
+    * [Example 3: Blocking Private IPs (Parsing Error Indicator)](#example-3-blocking-private-ips-parsing-error-indicator)
+    * [Example 4: Blocking Spam and Malware](#example-4-blocking-spam-and-malware)
+    * [Example 5: Blocking Invalid Ports](#example-5-blocking-invalid-ports)
+  * [Pattern Writing Rules](#pattern-writing-rules)
+    * [✅ Best Practices](#-best-practices)
+    * [⚠️ Common Mistakes](#-common-mistakes)
+  * [Debugging and Testing](#debugging-and-testing)
+    * [YAML Syntax Validation](#yaml-syntax-validation)
+    * [Pattern Testing](#pattern-testing)
+    * [Troubleshooting](#troubleshooting)
+  * [Organization Recommendations](#organization-recommendations)
+    * [Rule Order](#rule-order)
+    * [YAML Comments](#yaml-comments)
+  * [Conclusion](#conclusion)
+<!-- TOC -->
 
 ---
 
@@ -83,7 +85,7 @@ The `badwords.yaml` file contains an **array of rules**. Each rule is an object 
 ### Rule Fields
 
 | Field     | Type   | Required | Description                             |
-| --------- | ------ | -------- | --------------------------------------- |
+|-----------|--------|----------|-----------------------------------------|
 | `pattern` | string | ✅ yes    | Regular expression (Go `regexp` syntax) |
 | `action`  | string | ✅ yes    | `"strip"` or `"delete"`                 |
 
@@ -159,7 +161,7 @@ Result:         ❌ REJECTED (entire line removed)
 ### Basic Constructs
 
 | Construct | Meaning                     | Example                      |
-| --------- | --------------------------- | ---------------------------- |
+|-----------|-----------------------------|------------------------------|
 | `.`       | Any character (except `\n`) | `a.c` → `abc`, `aXc`         |
 | `*`       | 0 or more                   | `ab*c` → `ac`, `abc`, `abbc` |
 | `+`       | 1 or more                   | `ab+c` → `abc`, `abbc`       |
@@ -173,7 +175,7 @@ Result:         ❌ REJECTED (entire line removed)
 ### Special Sequences
 
 | Sequence | Meaning                          |
-| -------- | -------------------------------- |
+|----------|----------------------------------|
 | `\d`     | Any digit (0-9)                  |
 | `\D`     | Not a digit                      |
 | `\w`     | Letter, digit, underscore        |
@@ -190,7 +192,7 @@ Result:         ❌ REJECTED (entire line removed)
 **Go `regexp` uses built-in syntax flags:**
 
 | Flag   | Purpose                                          |
-| ------ | ------------------------------------------------ |
+|--------|--------------------------------------------------|
 | `(?i)` | Case-insensitive search (place at pattern start) |
 | `(?m)` | Multiline mode                                   |
 
@@ -205,7 +207,7 @@ Result:         ❌ REJECTED (entire line removed)
 If you need to search for a **literal special character** (not its special meaning), escape it with a backslash:
 
 | Character | Escaping | Example                                           |
-| --------- | -------- | ------------------------------------------------- |
+|-----------|----------|---------------------------------------------------|
 | `.`       | `\.`     | `example\.com` → matches "example.com" (with dot) |
 | `[`       | `\[`     | `\[TEST\]` → matches "[TEST]" (brackets)          |
 | `(`       | `\(`     | `\(v1\)` → matches "(v1)"                         |
@@ -388,7 +390,7 @@ Status:        ✅ ACCEPTED with modified name
 ### ⚠️ Common Mistakes
 
 | Mistake                             | Example                           | Fix                                      |
-| ----------------------------------- | --------------------------------- | ---------------------------------------- |
+|-------------------------------------|-----------------------------------|------------------------------------------|
 | Brackets not escaped                | `pattern: '[TEST]'`               | `pattern: '\\[TEST\\]'`                  |
 | Missing `(?i)` for case-insensitive | `pattern: '\[demo\]'`             | `pattern: '(?i)\\[demo\\]'`              |
 | Pattern too broad                   | `pattern: 'a'`                    | `pattern: '(?i)\\[a\\]'` (be specific)   |
@@ -435,7 +437,7 @@ Test strings:
 ### Troubleshooting
 
 | Problem                                | Cause                                | Solution                                                            |
-| -------------------------------------- | ------------------------------------ | ------------------------------------------------------------------- |
+|----------------------------------------|--------------------------------------|---------------------------------------------------------------------|
 | "Error: invalid pattern" on startup    | Syntax error in regex                | Check the pattern on regex101.com with Go flag                      |
 | Pattern doesn't match expected strings | Missing `(?i)` or incorrect escaping | Use `(?i)` for case-insensitive; check double slashes in YAML       |
 | Strip removes too much                 | Pattern too broad                    | Narrow it down (add `\b` or more specific characters)               |

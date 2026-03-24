@@ -2,31 +2,33 @@
 
 This translation was made using AI.
 
-- [sub-filter](#sub-filter)
-  - [✨ Features](#-features)
-  - [🛠️ Build Instructions](#️-build-instructions)
-    - [Architecture](#architecture)
-  - [▶️ Usage](#️-usage)
-    - [Configuration format](#configuration-format)
-    - [1. HTTP Server Mode (Dynamic Filtering)](#1-http-server-mode-dynamic-filtering)
-      - [Syntax:](#syntax)
-      - [Examples:](#examples)
-      - [Endpoints:](#endpoints)
-    - [2. CLI Mode (One-time Processing)](#2-cli-mode-one-time-processing)
-      - [Syntax:](#syntax-1)
-      - [Flags:](#flags)
-      - [Examples:](#examples-1)
-  - [🌍 Country Filtering](#-country-filtering)
-    - [Country Data Format](#country-data-format)
-  - [🔤 Parameter Reference](#-parameter-reference)
-  - [🖥️ CLI Flags](#️-cli-flags)
-  - [✅ Quick Test](#-quick-test)
-    - [Server](#server)
-    - [CLI](#cli)
-  - [📲 Client Integration](#-client-integration)
-  - [🐳 Docker](#-docker)
-    - [Run Server](#run-server)
-    - [CLI in Docker](#cli-in-docker)
+<!-- TOC -->
+* [sub-filter](#sub-filter)
+  * [✨ Features](#-features)
+  * [🛠️ Build Instructions](#-build-instructions)
+    * [Architecture](#architecture)
+  * [▶️ Usage](#-usage)
+    * [Configuration format](#configuration-format)
+    * [1. HTTP Server Mode (Dynamic Filtering)](#1-http-server-mode-dynamic-filtering)
+      * [Syntax:](#syntax)
+      * [Examples:](#examples)
+      * [Endpoints:](#endpoints)
+    * [2. CLI Mode (One-time Processing)](#2-cli-mode-one-time-processing)
+      * [Syntax:](#syntax-1)
+      * [Flags:](#flags)
+      * [Examples:](#examples-1)
+  * [🌍 Country Filtering](#-country-filtering)
+    * [Country Data Format](#country-data-format)
+  * [🔤 Parameter Reference](#-parameter-reference)
+  * [🖥️ CLI Flags](#-cli-flags)
+  * [✅ Quick Test](#-quick-test)
+    * [Server](#server)
+    * [CLI](#cli)
+  * [📲 Client Integration](#-client-integration)
+  * [🐳 Docker](#-docker)
+    * [Run Server](#run-server)
+    * [CLI in Docker](#cli-in-docker)
+<!-- TOC -->
 
 # sub-filter
 
@@ -129,7 +131,7 @@ Starts a server that filters subscriptions on-the-fly.
 #### Endpoints:
 
 | Endpoint  | Description                             |
-| --------- | --------------------------------------- |
+|-----------|-----------------------------------------|
 | `/filter` | Filter a single subscription            |
 | `/merge`  | Merge and filter multiple subscriptions |
 
@@ -161,7 +163,7 @@ Processes all subscriptions once and saves results to disk.
 #### Flags:
 
 | Flag        | Description                                       |
-| ----------- | ------------------------------------------------- |
+|-------------|---------------------------------------------------|
 | `--cli`     | Enable CLI mode                                   |
 | `--stdout`  | Print result to terminal                          |
 | `--config`  | Use external config file                          |
@@ -220,7 +222,7 @@ Matching is **case-insensitive** and supports **URL decoding**.
 ## 🔤 Parameter Reference
 
 | Parameter        | Description                                                                         |
-| ---------------- | ----------------------------------------------------------------------------------- |
+|------------------|-------------------------------------------------------------------------------------|
 | `<port>`         | HTTP server port (required in server mode)                                          |
 | `cache_ttl`      | Cache TTL in seconds (default: 1800)                                                |
 | `sources_file`   | List of subscription URLs (one per line) [sub.txt](../config/sub.txt)               |
@@ -233,7 +235,7 @@ Matching is **case-insensitive** and supports **URL decoding**.
 ## 🖥️ CLI Flags
 
 | Flag          | Description                                         |
-| ------------- | --------------------------------------------------- |
+|---------------|-----------------------------------------------------|
 | `--cli`       | Run in CLI mode                                     |
 | `--stdout`    | Output to stdout                                    |
 | `--config`    | Path to config file                                 |

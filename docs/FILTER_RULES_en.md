@@ -2,52 +2,53 @@
 
 This translation was made using AI.
 
-- [Documentation for `rules.yaml`](#documentation-for-rulesyaml)
-  - [Structure and Core Concepts](#structure-and-core-concepts)
-  - [1. `required_params` — Required Parameters](#1-required_params--required-parameters)
-  - [2. `allowed_values` — Allowed Values](#2-allowed_values--allowed-values)
-  - [3. `forbidden_values` — Forbidden Values](#3-forbidden_values--forbidden-values)
-  - [4. `conditional` — Conditional Rules](#4-conditional--conditional-rules)
-  - [VLESS — Complete Documentation](#vless--complete-documentation)
-    - [Rules Structure](#rules-structure)
-    - [Required Parameters](#required-parameters)
-    - [Allowed Parameters](#allowed-parameters)
-    - [Forbidden Parameters](#forbidden-parameters)
-    - [Conditional Rules](#conditional-rules)
-    - [Examples of Valid Links](#examples-of-valid-links)
-  - [VMess — Complete Documentation](#vmess--complete-documentation)
-    - [Rules Structure](#rules-structure-1)
-    - [Required Parameters](#required-parameters-1)
-    - [Allowed Parameters](#allowed-parameters-1)
-    - [Forbidden Parameters](#forbidden-parameters-1)
-    - [Conditional Rules](#conditional-rules-1)
-    - [Examples of Valid Links](#examples-of-valid-links-1)
-  - [Trojan — Complete Documentation](#trojan--complete-documentation)
-    - [Rules Structure](#rules-structure-2)
-    - [Required Parameters](#required-parameters-2)
-    - [Allowed Parameters](#allowed-parameters-2)
-    - [🔴 Forbidden Parameters](#-forbidden-parameters)
-    - [Conditional Rules](#conditional-rules-2)
-    - [Examples of Valid Links](#examples-of-valid-links-2)
-  - [Shadowsocks (SS) — Complete Documentation](#shadowsocks-ss--complete-documentation)
-    - [Rules Structure](#rules-structure-3)
-    - [Required Parameters](#required-parameters-3)
-    - [Allowed Encryption Methods](#allowed-encryption-methods)
-      - [✅ AEAD Methods (Modern Standard)](#-aead-methods-modern-standard)
-      - [✅ Shadowsocks 2022 (New Standard with Blake3)](#-shadowsocks-2022-new-standard-with-blake3)
-      - [✅ Special Method](#-special-method)
-    - [🔴 Forbidden Methods (REMOVED in Xray-core 2024+)](#-forbidden-methods-removed-in-xray-core-2024)
-    - [Examples of Valid Links](#examples-of-valid-links-3)
-  - [Hysteria2 — Complete Documentation](#hysteria2--complete-documentation)
-    - [Rules Structure](#rules-structure-4)
-    - [Required Parameters](#required-parameters-4)
-    - [Allowed Parameters](#allowed-parameters-3)
-    - [Examples of Valid Links](#examples-of-valid-links-4)
-  - [Critical Changes (February 2026)](#critical-changes-february-2026)
-    - [🔴 Trojan: The `flow` parameter is no longer supported](#-trojan-the-flow-parameter-is-no-longer-supported)
-    - [🔴 Shadowsocks: CFB and CTR methods are no longer supported](#-shadowsocks-cfb-and-ctr-methods-are-no-longer-supported)
-  - [Additional Resources](#additional-resources)
-
+<!-- TOC -->
+* [Documentation for `rules.yaml`](#documentation-for-rulesyaml)
+  * [Structure and Core Concepts](#structure-and-core-concepts)
+  * [1. `required_params` — Required Parameters](#1-required_params--required-parameters)
+  * [2. `allowed_values` — Allowed Values](#2-allowed_values--allowed-values)
+  * [3. `forbidden_values` — Forbidden Values](#3-forbidden_values--forbidden-values)
+  * [4. `conditional` — Conditional Rules](#4-conditional--conditional-rules)
+  * [VLESS — Complete Documentation](#vless--complete-documentation)
+    * [Rules Structure](#rules-structure)
+    * [Required Parameters](#required-parameters)
+    * [Allowed Parameters](#allowed-parameters)
+    * [Forbidden Parameters](#forbidden-parameters)
+    * [Conditional Rules](#conditional-rules)
+    * [Examples of Valid Links](#examples-of-valid-links)
+  * [VMess — Complete Documentation](#vmess--complete-documentation)
+    * [Rules Structure](#rules-structure-1)
+    * [Required Parameters](#required-parameters-1)
+    * [Allowed Parameters](#allowed-parameters-1)
+    * [Forbidden Parameters](#forbidden-parameters-1)
+    * [Conditional Rules](#conditional-rules-1)
+    * [Examples of Valid Links](#examples-of-valid-links-1)
+  * [Trojan — Complete Documentation](#trojan--complete-documentation)
+    * [Rules Structure](#rules-structure-2)
+    * [Required Parameters](#required-parameters-2)
+    * [Allowed Parameters](#allowed-parameters-2)
+    * [🔴 Forbidden Parameters](#-forbidden-parameters)
+    * [Conditional Rules](#conditional-rules-2)
+    * [Examples of Valid Links](#examples-of-valid-links-2)
+  * [Shadowsocks (SS) — Complete Documentation](#shadowsocks-ss--complete-documentation)
+    * [Rules Structure](#rules-structure-3)
+    * [Required Parameters](#required-parameters-3)
+    * [Allowed Encryption Methods](#allowed-encryption-methods)
+      * [✅ AEAD Methods (Modern Standard)](#-aead-methods-modern-standard)
+      * [✅ Shadowsocks 2022 (New Standard with Blake3)](#-shadowsocks-2022-new-standard-with-blake3)
+      * [✅ Special Method](#-special-method)
+    * [🔴 Forbidden Methods (REMOVED in Xray-core 2024+)](#-forbidden-methods-removed-in-xray-core-2024)
+    * [Examples of Valid Links](#examples-of-valid-links-3)
+  * [Hysteria2 — Complete Documentation](#hysteria2--complete-documentation)
+    * [Rules Structure](#rules-structure-4)
+    * [Required Parameters](#required-parameters-4)
+    * [Allowed Parameters](#allowed-parameters-3)
+    * [Examples of Valid Links](#examples-of-valid-links-4)
+  * [Critical Changes (February 2026)](#critical-changes-february-2026)
+    * [🔴 Trojan: The `flow` parameter is no longer supported](#-trojan-the-flow-parameter-is-no-longer-supported)
+    * [🔴 Shadowsocks: CFB and CTR methods are no longer supported](#-shadowsocks-cfb-and-ctr-methods-are-no-longer-supported)
+  * [Additional Resources](#additional-resources)
+<!-- TOC -->
 
 # Documentation for `rules.yaml`
 
@@ -204,13 +205,13 @@ vless:
 
 ### Required Parameters
 | Parameter    | Description                        |
-| ------------ | ---------------------------------- |
+|--------------|------------------------------------|
 | `encryption` | Encryption method (mandatory)      |
 | `sni`        | Server Name Indication (mandatory) |
 
 ### Allowed Parameters
 | Parameter  | Allowed Values                                                           | Description                          |
-| ---------- | ------------------------------------------------------------------------ | ------------------------------------ |
+|------------|--------------------------------------------------------------------------|--------------------------------------|
 | `security` | `tls`, `reality`                                                         | Security type. **Forbidden:** `none` |
 | `type`     | `tcp`, `ws`, `httpupgrade`, `grpc`, `xhttp`, `splithttp`                 | Transport type                       |
 | `flow`     | `xtls-rprx-vision`, `xtls-rprx-vision-udp443`, `xtls-rprx-vision-direct` | XTLS flow (REALITY only)             |
@@ -218,13 +219,13 @@ vless:
 
 ### Forbidden Parameters
 | Parameter   | Forbidden Values | Reason                      |
-| ----------- | ---------------- | --------------------------- |
+|-------------|------------------|-----------------------------|
 | `security`  | `none`           | No security — insecure      |
 | `authority` | `` (empty)       | Violates gRPC specification |
 
 ### Conditional Rules
 | Condition          | Required Parameter | Description                   |
-| ------------------ | ------------------ | ----------------------------- |
+|--------------------|--------------------|-------------------------------|
 | `security=reality` | `pbk`              | REALITY requires a public key |
 | `type=grpc`        | `serviceName`      | gRPC requires a service name  |
 | `type=ws`          | `path`             | WebSocket requires a path     |
@@ -273,25 +274,25 @@ vmess:
 
 ### Required Parameters
 | Parameter | Description             |
-| --------- | ----------------------- |
+|-----------|-------------------------|
 | `uuid`    | Client UUID (mandatory) |
 
 ### Allowed Parameters
 | Parameter  | Allowed Values                                                 | Description       |
-| ---------- | -------------------------------------------------------------- | ----------------- |
+|------------|----------------------------------------------------------------|-------------------|
 | `net`      | `tcp`, `ws`, `grpc`, `httpupgrade`, `h2`, `xhttp`, `splithttp` | Transport type    |
 | `security` | `auto`, `aes-128-gcm`, `chacha20-poly1305`, `zero`, `none`     | Encryption method |
 
 ### Forbidden Parameters
 | Parameter  | Forbidden Values | Reason                   |
-| ---------- | ---------------- | ------------------------ |
+|------------|------------------|--------------------------|
 | `security` | `none`           | No encryption — insecure |
 
 > ⚠️ **Note:** The `zero` and `none` values for security are included in `allowed_values` for **backward compatibility**, but are listed in `forbidden_values` for **rejection** — i.e., they are de facto prohibited.
 
 ### Conditional Rules
 | Condition         | Required Parameter | Description                  |
-| ----------------- | ------------------ | ---------------------------- |
+|-------------------|--------------------|------------------------------|
 | `net=grpc`        | `serviceName`      | gRPC requires a service name |
 | `net=ws`          | `path`             | WebSocket requires a path    |
 | `net=httpupgrade` | `path`             | HTTP Upgrade requires a path |
@@ -339,26 +340,26 @@ trojan:
 
 ### Required Parameters
 | Parameter  | Description                         |
-| ---------- | ----------------------------------- |
+|------------|-------------------------------------|
 | `password` | Authentication password (mandatory) |
 
 ### Allowed Parameters
 | Parameter  | Allowed Values                                           | Description    |
-| ---------- | -------------------------------------------------------- | -------------- |
+|------------|----------------------------------------------------------|----------------|
 | `type`     | `tcp`, `ws`, `grpc`, `httpupgrade`, `xhttp`, `splithttp` | Transport type |
 | `security` | `tls`, `reality`                                         | Security type  |
 | `mode`     | `gun`, `multi`                                           | gRPC mode      |
 
 ### 🔴 Forbidden Parameters
 | Parameter | Forbidden Values              | Reason                           |
-| --------- | ----------------------------- | -------------------------------- |
+|-----------|-------------------------------|----------------------------------|
 | `flow`    | **ALL** values (wildcard `*`) | ❌ **REMOVED in Xray-core 2024+** |
 
 > ⚠️ **CRITICAL:** The `flow` parameter is **no longer supported** in modern versions of Xray-core. Any Trojan config containing the `flow` parameter will be **automatically rejected** during filtering.
 
 ### Conditional Rules
 | Condition          | Required Parameter | Description                   |
-| ------------------ | ------------------ | ----------------------------- |
+|--------------------|--------------------|-------------------------------|
 | `security=reality` | `pbk`              | REALITY requires a public key |
 | `type=grpc`        | `serviceName`      | gRPC requires a service name  |
 | `type=ws`          | `path`             | WebSocket requires a path     |
@@ -409,14 +410,14 @@ ss:
 
 ### Required Parameters
 | Parameter  | Description                         |
-| ---------- | ----------------------------------- |
+|------------|-------------------------------------|
 | `password` | Authentication password (mandatory) |
 | `method`   | Encryption method (mandatory)       |
 
 ### Allowed Encryption Methods
 #### ✅ AEAD Methods (Modern Standard)
 | Method               | Recommendation                                               |
-| -------------------- | ------------------------------------------------------------ |
+|----------------------|--------------------------------------------------------------|
 | `aes-128-gcm`        | ✅ Supported, but less secure than 256-bit                    |
 | `aes-256-gcm`        | ✅ **RECOMMENDED** — good balance of security and performance |
 | `chacha20-poly1305`  | ✅ Supported, an alternative to AES (per SP 800-38D)          |
@@ -424,19 +425,19 @@ ss:
 
 #### ✅ Shadowsocks 2022 (New Standard with Blake3)
 | Method                          | Recommendation                             |
-| ------------------------------- | ------------------------------------------ |
+|---------------------------------|--------------------------------------------|
 | `2022-blake3-aes-128-gcm`       | ✅ Supported (SS 2022 specification)        |
 | `2022-blake3-aes-256-gcm`       | ✅ **RECOMMENDED** — most secure and modern |
 | `2022-blake3-chacha20-poly1305` | ✅ Supported (SS 2022 specification)        |
 
 #### ✅ Special Method
-| Method | Recommendation                                           |
-| ------ | -------------------------------------------------------- |
+| Method | Recommendation                                            |
+|--------|-----------------------------------------------------------|
 | `none` | ⚠️ No encryption — rarely used, only for testing purposes |
 
 ### 🔴 Forbidden Methods (REMOVED in Xray-core 2024+)
 | Method        | Reason for Removal       |
-| ------------- | ------------------------ |
+|---------------|--------------------------|
 | `aes-128-cfb` | ❌ Obsolete stream cipher |
 | `aes-256-cfb` | ❌ Obsolete stream cipher |
 | `aes-128-ctr` | ❌ Obsolete stream cipher |
@@ -473,13 +474,13 @@ hysteria2:
 
 ### Required Parameters
 | Parameter       | Description                      |
-| --------------- | -------------------------------- |
+|-----------------|----------------------------------|
 | `obfs`          | Obfuscation method (mandatory)   |
 | `obfs-password` | Obfuscation password (mandatory) |
 
 ### Allowed Parameters
 | Parameter | Allowed Values | Description                           |
-| --------- | -------------- | ------------------------------------- |
+|-----------|----------------|---------------------------------------|
 | `obfs`    | `salamander`   | The only supported obfuscation method |
 
 ### Examples of Valid Links

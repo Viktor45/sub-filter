@@ -17,7 +17,7 @@ type FilterError struct {
 ## Error Codes
 
 | Code                   | Description            |
-| ---------------------- | ---------------------- |
+|------------------------|------------------------|
 | `config_error`         | Configuration errors   |
 | `validation_error`     | Data validation errors |
 | `network_error`        | Network errors         |

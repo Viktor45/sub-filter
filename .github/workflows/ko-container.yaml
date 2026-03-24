@@ -1,5 +1,8 @@
 name: ghcr.io ko container ci
 
+# Сборка multi-platform контейнера и публикация в GitHub Container Registry.
+# Триггерится по тегам v*.
+
 on:
   workflow_dispatch:
   push:
@@ -59,10 +62,13 @@ jobs:
       - name: Cache Go modules
         uses: actions/cache@v5
         with:
+          # Кэшируем загруженные модули и артефакты сборки Go
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4

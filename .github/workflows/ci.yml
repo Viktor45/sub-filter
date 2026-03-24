@@ -1,5 +1,8 @@
 name: CI
 
+# CI-пайплайн: линтинг, статический анализ и тесты с покрытием.
+# Запускается на pull request в main.
+
 on:
   #  push:
   #    branches: [ main ]
@@ -17,15 +20,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          # Shallow clone accelerates workflow; full history is not required for CI checks
+          fetch-depth: 1
 
       - name: Cache Go modules
         uses: actions/cache@v5
         with:
+          # Кэшируем модули и построенный кеш go для ускорения следующих прогонов
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -56,5 +63,20 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
-      - name: Run tests
-        run: go test ./... -v
+      - name: Run tests with coverage
+        run: |
+          go test ./... -covermode=atomic -coverprofile=coverage.out
+          go tool cover -func=coverage.out | awk 'END {print "total: " $3}'
+
+      - name: Enforce minimum coverage (80%)
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total: | awk '{print $3}' | sed 's/%//')
+          # Используем чистый Bash для сравнения (без bc)
+          COVERAGE_INT=$(printf "%.0f" "$COVERAGE")
+          if [ "$COVERAGE_INT" -lt 80 ]; then
+            echo "Code coverage $COVERAGE% is below required 80%";
+            exit 1;
+          fi
+
+      - name: Run race detector (длительно)
+        run: go test -race ./... -run Test -count=1
