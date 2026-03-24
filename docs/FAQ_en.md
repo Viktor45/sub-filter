@@ -2,13 +2,15 @@
 
 This translation was made using AI.
 
-- [Frequently Asked Questions](#frequently-asked-questions)
-  - [Why does this program exist?](#why-does-this-program-exist)
-  - [What exactly does the program remove?](#what-exactly-does-the-program-remove)
-  - [Why filter by country?](#why-filter-by-country)
-  - [How does country filtering work?](#how-does-country-filtering-work)
-  - [Where can I see what the program removed?](#where-can-i-see-what-the-program-removed)
-  - [Will my data be sent anywhere?](#will-my-data-be-sent-anywhere)
+<!-- TOC -->
+* [Frequently Asked Questions](#frequently-asked-questions)
+  * [Why does this program exist?](#why-does-this-program-exist)
+  * [What exactly does the program remove?](#what-exactly-does-the-program-remove)
+  * [Why filter by country?](#why-filter-by-country)
+  * [How does country filtering work?](#how-does-country-filtering-work)
+  * [Where can I see what the program removed?](#where-can-i-see-what-the-program-removed)
+  * [Will my data be sent anywhere?](#will-my-data-be-sent-anywhere)
+<!-- TOC -->
 
 # Frequently Asked Questions
 
