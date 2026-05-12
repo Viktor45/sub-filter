@@ -501,10 +501,11 @@ func (s *Service) handleMerge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idList := r.URL.Query()["ids"]
-	if len(idList) == 0 {
-		idList = r.URL.Query()["id"]
+	rawIDs := r.URL.Query()["ids"]
+	if len(rawIDs) == 0 {
+		rawIDs = r.URL.Query()["id"]
 	}
+	idList := parseIDs(rawIDs)
 	if len(idList) == 0 {
 		http.Error(w, "no ids provided", http.StatusBadRequest)
 		return
@@ -1283,4 +1284,22 @@ func (s *Service) processSource(id string, stdout bool, countryCodes []string) (
 	}
 
 	return finalContent, nil
+}
+
+func parseIDs(rawIDs []string) []string {
+	var ids []string
+	seen := make(map[string]bool)
+	for _, raw := range rawIDs {
+		for _, part := range strings.Split(raw, ",") {
+			id := strings.TrimSpace(part)
+			if id == "" {
+				continue
+			}
+			if !seen[id] {
+				seen[id] = true
+				ids = append(ids, id)
+			}
+		}
+	}
+	return ids
 }
