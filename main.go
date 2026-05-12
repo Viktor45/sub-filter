@@ -783,10 +783,11 @@ func handleMerge(w http.ResponseWriter, r *http.Request, cfg *AppConfig, proxyPr
 		return
 	}
 
-	idList := r.URL.Query()["ids"]
-	if len(idList) == 0 {
-		idList = r.URL.Query()["id"]
+	rawIDs := r.URL.Query()["ids"]
+	if len(rawIDs) == 0 {
+		rawIDs = r.URL.Query()["id"]
 	}
+	idList := parseIDs(rawIDs)
 	if status, msg := validateIDs(idList, cfg); status != 0 {
 		http.Error(w, msg, status)
 		return
@@ -1353,6 +1354,24 @@ func validateClientRequest(r *http.Request, cfg *AppConfig) (int, string) {
 
 // validateIDs проверяет список id: длину, формат и существование в cfg.Sources.
 // Возвращает HTTP-статус != 0 и текст ошибки для прямого ответа клиенту.
+func parseIDs(rawIDs []string) []string {
+	var ids []string
+	seen := make(map[string]bool)
+	for _, raw := range rawIDs {
+		for _, part := range strings.Split(raw, ",") {
+			id := strings.TrimSpace(part)
+			if id == "" {
+				continue
+			}
+			if !seen[id] {
+				seen[id] = true
+				ids = append(ids, id)
+			}
+		}
+	}
+	return ids
+}
+
 func validateIDs(idList []string, cfg *AppConfig) (int, string) {
 	if len(idList) == 0 {
 		return http.StatusBadRequest, "Missing 'ids' parameter"

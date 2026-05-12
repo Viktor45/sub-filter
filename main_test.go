@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -188,6 +189,30 @@ vless:
 }
 
 // TestParseCountryCodes проверяет парсинг и валидацию кодов стран
+func TestParseIDs(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  []string
+		want []string
+	}{
+		{"single id", []string{"1"}, []string{"1"}},
+		{"multiple values", []string{"1", "2", "3"}, []string{"1", "2", "3"}},
+		{"comma separated", []string{"1,2,3"}, []string{"1", "2", "3"}},
+		{"comma separated with spaces", []string{" 1, 2 ,3 "}, []string{"1", "2", "3"}},
+		{"mixed forms", []string{"1,2", "3"}, []string{"1", "2", "3"}},
+		{"duplicate ids", []string{"1,2,1,3"}, []string{"1", "2", "3"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseIDs(tt.raw)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("parseIDs(%v) = %v, want %v", tt.raw, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseCountryCodes(t *testing.T) {
 	countries := map[string]utils.CountryInfo{
 		"AD": {CCA3: "AND", Name: "Andorra"},
@@ -235,6 +260,7 @@ func TestParseCountryCodes(t *testing.T) {
 		})
 	}
 }
+
 // TestBadWordRuleRegexCompilation проверяет компиляцию регулярных выражений для BadWordRule
 func TestBadWordRuleRegexCompilation(t *testing.T) {
 	tests := []struct {
@@ -347,10 +373,10 @@ func TestCreateProxyProcessorsStripAction(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		input         string
-		expectedFrag  string
-		shouldReject  bool
+		name         string
+		input        string
+		expectedFrag string
+		shouldReject bool
 	}{
 		{
 			name:         "strip 'test' from fragment",
