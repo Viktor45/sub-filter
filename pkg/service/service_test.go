@@ -134,6 +134,47 @@ func TestService_IsValidUserAgent(t *testing.T) {
 	}
 }
 
+func TestService_BadWordReplaceAction(t *testing.T) {
+	cfg := &config.Config{
+		Server: config.ServerConfig{Port: 8080},
+		Cache: config.CacheConfig{
+			Directory: os.TempDir(),
+			TTL:       30 * time.Minute,
+		},
+	}
+	log := logger.NewDefault(logger.ParseLevel("info"))
+	opts := &ServiceOptions{
+		Sources: make(map[string]*config.SafeSource),
+		Rules:   make(map[string]validator.Validator),
+		BadWordRules: []config.BadWordRule{
+			{Pattern: "fp=chrome", Action: "replace", Replacement: "fp=firefox"},
+		},
+	}
+	svc, err := NewService(cfg, log, opts)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	link := "ss://" + base64.RawURLEncoding.EncodeToString([]byte("aes-256-gcm:test")) + "@example.com:8388#fp=chrome"
+	matched := false
+	for _, processor := range svc.proxyProcessors {
+		if processor.Matches(link) {
+			matched = true
+			processed, reason := processor.Process(link)
+			if reason != "" {
+				t.Fatalf("processor rejected link: %s", reason)
+			}
+			if !strings.Contains(processed, "fp=firefox") {
+				t.Fatalf("expected fragment replacement, got %q", processed)
+			}
+			break
+		}
+	}
+	if !matched {
+		t.Fatal("expected a processor to match ss:// link")
+	}
+}
+
 func TestService_BufferPool(t *testing.T) {
 	svc := makeSimpleService(t)
 

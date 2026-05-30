@@ -126,10 +126,13 @@ func main() {
 		// Количество badword правил по типам
 		stripCount := 0
 		deleteCount := 0
+		replaceCount := 0
 		for _, br := range cfg.BadWordRules {
 			a := strings.ToLower(strings.TrimSpace(br.Action))
 			if a == "strip" {
 				stripCount++
+			} else if a == "replace" {
+				replaceCount++
 			} else {
 				deleteCount++
 			}
@@ -137,6 +140,7 @@ func main() {
 		log.Info("Debug mode enabled: config summary",
 			"rules_count", rulesCount,
 			"badword_strip", stripCount,
+			"badword_replace", replaceCount,
 			"badword_delete", deleteCount,
 			"sources_count", len(cfg.SourcesMap),
 		)

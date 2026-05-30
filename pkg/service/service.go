@@ -227,11 +227,12 @@ func (s *Service) registerHandlers(mux *http.ServeMux) {
 
 // createProxyProcessors создает процессоры протоколов с использованием regex cache
 func (s *Service) createProxyProcessors() []ProxyLink {
-	// Компилируем правила для ускорения
+	// Компилиуем правила для ускорения
 	type compiledRule struct {
-		re     *regexp.Regexp
-		action string
-		raw    string
+		re          *regexp.Regexp
+		action      string
+		raw         string
+		replacement string
 	}
 
 	// Ограничение количества шаблонов для предотвращения переполнения памяти
@@ -276,10 +277,10 @@ func (s *Service) createProxyProcessors() []ProxyLink {
 			continue
 		}
 		act := strings.ToLower(strings.TrimSpace(br.Action))
-		if act != "strip" && act != "delete" {
+		if act != "strip" && act != "delete" && act != "replace" {
 			act = "delete"
 		}
-		compiled = append(compiled, compiledRule{re: re, action: act, raw: br.Pattern})
+		compiled = append(compiled, compiledRule{re: re, action: act, raw: br.Pattern, replacement: br.Replacement})
 	}
 
 	checkBadWords := func(fragment string) (string, bool, string) {
@@ -291,6 +292,10 @@ func (s *Service) createProxyProcessors() []ProxyLink {
 			if cr.re.MatchString(decoded) {
 				if cr.action == "strip" {
 					newFrag := strings.TrimSpace(cr.re.ReplaceAllString(decoded, ""))
+					return newFrag, false, ""
+				}
+				if cr.action == "replace" {
+					newFrag := cr.re.ReplaceAllString(decoded, cr.replacement)
 					return newFrag, false, ""
 				}
 				return fragment, true, fmt.Sprintf("bad word match rule: %q", cr.raw)
@@ -316,6 +321,29 @@ func (s *Service) createProxyProcessors() []ProxyLink {
 		ss.NewSSLink(patterns, utils.IsValidHost, checkBadWords, getValidator("ss")),
 		hysteria2.NewHysteria2Link(patterns, utils.IsValidHost, checkBadWords, getValidator("hysteria2")),
 	}
+}
+
+func (s *Service) applyReplaceBadWords(line string) string {
+	if line == "" {
+		return line
+	}
+	for _, br := range s.badWordRules {
+		if strings.ToLower(strings.TrimSpace(br.Action)) != "replace" {
+			continue
+		}
+		if br.Pattern == "" || br.Replacement == "" {
+			continue
+		}
+		if !IsRegexSafe(br.Pattern) {
+			continue
+		}
+		re, err := s.regexCache.Get(br.Pattern)
+		if err != nil {
+			continue
+		}
+		line = re.ReplaceAllString(line, br.Replacement)
+	}
+	return line
 }
 
 // Start запускает HTTP сервер
@@ -798,6 +826,7 @@ func (s *Service) generateProfile(id string, countryCodes []string) (string, err
 			reason = "unsupported protocol"
 		}
 		if processedLine != "" {
+			processedLine = s.applyReplaceBadWords(processedLine)
 			if len(countryCodes) > 0 {
 				parsedProcessed, parseErr := url.Parse(processedLine)
 				if parseErr == nil && parsedProcessed.Fragment != "" {
@@ -1072,6 +1101,7 @@ func (s *Service) processSourceToBuckets(id string, source *config.SafeSource, c
 			}
 		}
 		if processedLine != "" {
+			processedLine = s.applyReplaceBadWords(processedLine)
 			// Если задан фильтр по странам, отфильтровать по фрагменту (fragment) ссылки
 			if len(countryCodes) > 0 {
 				parsedProcessed, parseErr := url.Parse(processedLine)
