@@ -111,6 +111,7 @@ type ServiceOptions struct {
 	MaxCountryCodes int
 	MaxMergeIDs     int
 	MergeBuckets    int
+	Debug           bool
 }
 
 // Service представляет основной сервис приложения с внедрением зависимостей
@@ -129,6 +130,7 @@ type Service struct {
 	maxCountryCodes int
 	maxMergeIDs     int
 	mergeBuckets    int
+	debug           bool
 
 	// Процессоры протоколов (ss, vmess, и т.п.)
 	proxyProcessors []ProxyLink
@@ -184,6 +186,7 @@ func NewService(cfg *config.Config, log *logger.Logger, opts *ServiceOptions) (*
 		maxCountryCodes: opts.MaxCountryCodes,
 		maxMergeIDs:     opts.MaxMergeIDs,
 		mergeBuckets:    opts.MergeBuckets,
+		debug:           opts.Debug,
 		regexCache:      cache.NewRegexCache(),
 		bufferPool: sync.Pool{
 			New: func() interface{} {
@@ -448,6 +451,16 @@ func (s *Service) isValidUserAgent(ua string) bool {
 
 // handleHealth обрабатывает запросы на проверку здоровья сервиса
 func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {
+	// Debug: log incoming request data
+	if s.debug {
+		clientIP := s.getClientIP(r)
+		ua := r.Header.Get("User-Agent")
+		s.logger.Info("Incoming /health request",
+			"ip", clientIP,
+			"user_agent", ua,
+			"method", r.Method,
+		)
+	}
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -462,6 +475,16 @@ func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 // handleFilter обрабатывает запросы на фильтрацию подписок
 func (s *Service) handleFilter(w http.ResponseWriter, r *http.Request) {
+	// Debug: log incoming request data
+	if s.debug {
+		clientIP := s.getClientIP(r)
+		ua := r.Header.Get("User-Agent")
+		s.logger.Info("Incoming /filter request",
+			"ip", clientIP,
+			"user_agent", ua,
+			"raw_query", r.URL.RawQuery,
+		)
+	}
 	if status, msg := s.ValidateClientRequest(r); status != 0 {
 		http.Error(w, msg, status)
 		return
@@ -496,15 +519,26 @@ func (s *Service) handleFilter(w http.ResponseWriter, r *http.Request) {
 
 // handleMerge обрабатывает запросы на слияние подписок
 func (s *Service) handleMerge(w http.ResponseWriter, r *http.Request) {
+	// Debug: log incoming request data
+	if s.debug {
+		clientIP := s.getClientIP(r)
+		ua := r.Header.Get("User-Agent")
+		s.logger.Info("Incoming /merge request",
+			"ip", clientIP,
+			"user_agent", ua,
+			"raw_query", r.URL.RawQuery,
+		)
+	}
 	if status, msg := s.ValidateClientRequest(r); status != 0 {
 		http.Error(w, msg, status)
 		return
 	}
 
-	idList := r.URL.Query()["ids"]
-	if len(idList) == 0 {
-		idList = r.URL.Query()["id"]
+	rawIDs := r.URL.Query()["ids"]
+	if len(rawIDs) == 0 {
+		rawIDs = r.URL.Query()["id"]
 	}
+	idList := parseIDs(rawIDs)
 	if len(idList) == 0 {
 		http.Error(w, "no ids provided", http.StatusBadRequest)
 		return
@@ -1038,6 +1072,19 @@ func (s *Service) processSourceToBuckets(id string, source *config.SafeSource, c
 			}
 		}
 		if processedLine != "" {
+			// Если задан фильтр по странам, отфильтровать по фрагменту (fragment) ссылки
+			if len(countryCodes) > 0 {
+				parsedProcessed, parseErr := url.Parse(processedLine)
+				if parseErr == nil && parsedProcessed.Fragment != "" {
+					allFilterStrings := utils.GetCountryFilterStringsForMultiple(countryCodes, s.countries)
+					if !utils.IsFragmentMatchingCountry(parsedProcessed.Fragment, allFilterStrings) {
+						return nil
+					}
+				} else {
+					// Если у ссылки нет фрагмента, то она не подходит под country filter
+					return nil
+				}
+			}
 			key, err := utils.NormalizeLinkKey(processedLine)
 			if err != nil {
 				return nil
@@ -1283,4 +1330,22 @@ func (s *Service) processSource(id string, stdout bool, countryCodes []string) (
 	}
 
 	return finalContent, nil
+}
+
+func parseIDs(rawIDs []string) []string {
+	var ids []string
+	seen := make(map[string]bool)
+	for _, raw := range rawIDs {
+		for _, part := range strings.Split(raw, ",") {
+			id := strings.TrimSpace(part)
+			if id == "" {
+				continue
+			}
+			if !seen[id] {
+				seen[id] = true
+				ids = append(ids, id)
+			}
+		}
+	}
+	return ids
 }

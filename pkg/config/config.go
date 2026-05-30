@@ -137,8 +137,54 @@ func Load(configPath string) (*Config, error) {
 			return nil, fmt.Errorf("failed to read config file: %w", err)
 		}
 
+		// Сначала пытаемся распарсить в структуру (новый формат)
 		if err := yaml.Unmarshal(data, cfg); err != nil {
 			return nil, fmt.Errorf("failed to parse config file: %w", err)
+		}
+
+		// Поддержка legacy плоского формата ключей (sources_file, rules_file и т.д.)
+		var flat map[string]interface{}
+		if err := yaml.Unmarshal(data, &flat); err == nil {
+			if v, ok := flat["sources_file"].(string); ok && cfg.Sources.File == "" {
+				cfg.Sources.File = v
+			}
+			if v, ok := flat["rules_file"].(string); ok && cfg.Validation.RulesFile == "" {
+				cfg.Validation.RulesFile = v
+			}
+			// старое имя без underscore
+			if v, ok := flat["badwords_file"].(string); ok && cfg.Validation.BadWordsFile == "" {
+				cfg.Validation.BadWordsFile = v
+			}
+			if v, ok := flat["bad_words_file"].(string); ok && cfg.Validation.BadWordsFile == "" {
+				cfg.Validation.BadWordsFile = v
+			}
+			if v, ok := flat["uagent_file"].(string); ok && cfg.Validation.UAFile == "" {
+				cfg.Validation.UAFile = v
+			}
+			if v, ok := flat["cache_dir"].(string); ok && cfg.Cache.Directory == "" {
+				cfg.Cache.Directory = v
+			}
+			if v, ok := flat["cache_ttl"].(string); ok && cfg.Cache.TTL == 0 {
+				if d, err := time.ParseDuration(v); err == nil {
+					cfg.Cache.TTL = d
+				}
+			}
+			if v, ok := flat["max_country_codes"].(int); ok && cfg.Validation.MaxCountries == 0 {
+				cfg.Validation.MaxCountries = v
+			}
+			if v, ok := flat["max_country_codes"].(int64); ok && cfg.Validation.MaxCountries == 0 {
+				cfg.Validation.MaxCountries = int(v)
+			}
+			if v, ok := flat["max_merge_ids"].(int); ok && cfg.Validation.MaxMergeIDs == 0 {
+				cfg.Validation.MaxMergeIDs = v
+			}
+			if v, ok := flat["merge_buckets"].(int); ok && cfg.Cache.MergeBuckets == 0 {
+				cfg.Cache.MergeBuckets = v
+			}
+			// имя rules_file может быть задано плоско как rules_file
+			if v, ok := flat["rules_file"].(string); ok && cfg.Validation.RulesFile == "" {
+				cfg.Validation.RulesFile = v
+			}
 		}
 	}
 
@@ -150,7 +196,12 @@ func Load(configPath string) (*Config, error) {
 		cfg.Logging.Level = level
 	}
 
-	// Загрузить runtime данные
+	// Валидировать конфигурацию (установит значения по умолчанию для путей)
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
+	// Загрузить runtime данные (только после установки значений по умолчанию)
 	if err := cfg.loadRuntimeData(); err != nil {
 		return nil, fmt.Errorf("failed to load runtime data: %w", err)
 	}
@@ -160,11 +211,6 @@ func Load(configPath string) (*Config, error) {
 		if uaList, err := loadTextFile(cfg.Validation.UAFile); err == nil {
 			cfg.Validation.AllowedUserAgents = uaList
 		}
-	}
-
-	// Валидировать конфигурацию
-	if err := cfg.Validate(); err != nil {
-		return nil, err
 	}
 
 	return cfg, nil
@@ -181,13 +227,18 @@ func (c *Config) loadRuntimeData() error {
 		c.SourcesMap = sources
 	}
 
-	// Загрузить правила
+	// Загрузить правила (если файл присутствует). Отсутствие файла не является фатальной ошибкой —
+	// используем пустой набор правил.
 	if c.Validation.RulesFile != "" {
-		rules, err := loadRulesOrDefault(c.Validation.RulesFile)
-		if err != nil {
-			return fmt.Errorf("failed to load rules: %w", err)
+		if fileExists(c.Validation.RulesFile) {
+			rules, err := loadRulesOrDefault(c.Validation.RulesFile)
+			if err != nil {
+				return fmt.Errorf("failed to load rules: %w", err)
+			}
+			c.Rules = rules
+		} else {
+			c.Rules = make(map[string]validator.Validator)
 		}
-		c.Rules = rules
 	}
 
 	// Загрузить bad words
@@ -201,7 +252,12 @@ func (c *Config) loadRuntimeData() error {
 	if c.Validation.CountriesFile != "" {
 		if countries, err := utils.LoadCountries(c.Validation.CountriesFile); err == nil {
 			c.Countries = countries
+		} else {
+			// tolerate missing/invalid countries file and use empty map
+			c.Countries = make(map[string]utils.CountryInfo)
 		}
+	} else {
+		c.Countries = make(map[string]utils.CountryInfo)
 	}
 
 	return nil
@@ -239,6 +295,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Validation.BadWordsFile == "" {
 		c.Validation.BadWordsFile = "./config/bad_words.yaml"
+	}
+	if c.Validation.CountriesFile == "" {
+		c.Validation.CountriesFile = "./config/countries.yaml"
 	}
 
 	// Проверить наличие требуемых файлов

@@ -31,6 +31,7 @@ func main() {
 		configPath      = flag.String("config", "", "Path to config file (YAML/JSON/TOML). Defaults to ./config/config.yaml if not specified.")
 		countries       = flag.Bool("countries", false, "Generate ./config/countries.yaml from REST API (CLI only)")
 		countryCodesCLI = flag.String("country", "", "Filter by country codes (comma-separated, max 20), e.g. --country=AR,AE")
+		debugMode       = flag.Bool("debug", false, "Enable debug mode: verbose startup info and request logging")
 	)
 	flag.Parse()
 
@@ -73,6 +74,8 @@ func main() {
 			MergeBuckets:    cfg.Cache.MergeBuckets,
 		}
 
+		// Create service options debug flag
+		opts.Debug = *debugMode
 		// Создаем сервис
 		svc, err := service.NewService(cfg, log, opts)
 		if err != nil {
@@ -116,6 +119,29 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Если включён debug, выводим статистику конфигурации в консоль
+	if *debugMode {
+		// Количество правил в rules.yaml
+		rulesCount := len(cfg.Rules)
+		// Количество badword правил по типам
+		stripCount := 0
+		deleteCount := 0
+		for _, br := range cfg.BadWordRules {
+			a := strings.ToLower(strings.TrimSpace(br.Action))
+			if a == "strip" {
+				stripCount++
+			} else {
+				deleteCount++
+			}
+		}
+		log.Info("Debug mode enabled: config summary",
+			"rules_count", rulesCount,
+			"badword_strip", stripCount,
+			"badword_delete", deleteCount,
+			"sources_count", len(cfg.SourcesMap),
+		)
+	}
+
 	if p, err := strconv.Atoi(portStr); err == nil && p > 0 && p < 65536 {
 		cfg.Server.Port = uint16(p)
 	} else {
@@ -131,6 +157,7 @@ func main() {
 		MaxCountryCodes: cfg.Validation.MaxCountries,
 		MaxMergeIDs:     cfg.Validation.MaxMergeIDs,
 		MergeBuckets:    cfg.Cache.MergeBuckets,
+		Debug:           *debugMode,
 	}
 
 	// Create service
