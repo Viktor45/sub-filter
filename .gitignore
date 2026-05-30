@@ -32,6 +32,7 @@ go.work.sum
 .vscode/
 .cache/
 cache/
+!pkg/cache/
 filter
 .DS_Store
 lint.txt
