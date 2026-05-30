@@ -32,8 +32,9 @@ type SourceMap map[string]*SafeSource
 
 // BadWordRule описывает одно правило фильтрации bad-слов.
 type BadWordRule struct {
-	Pattern string `yaml:"pattern"`
-	Action  string `yaml:"action"`
+	Pattern     string `yaml:"pattern"`
+	Action      string `yaml:"action"`
+	Replacement string `yaml:"replacement,omitempty"`
 }
 
 // Config представляет полную конфигурацию приложения
