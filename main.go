@@ -8,8 +8,10 @@ package main
 import (
 	"flag"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"sub-filter/internal/utils"
 	"sub-filter/pkg/config"
@@ -82,6 +84,11 @@ func main() {
 			log.Error("Failed to create service", "error", err)
 			os.Exit(1)
 		}
+		defer func() {
+			if err := svc.Stop(); err != nil {
+				log.Error("Failed to stop service", "error", err)
+			}
+		}()
 
 		// Получаем ИД источников
 		var ids []string
@@ -170,6 +177,19 @@ func main() {
 		log.Error("Failed to start server", "error", err)
 		os.Exit(1)
 	}
+
+	// Setup graceful shutdown handler
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
+
+	go func() {
+		sig := <-sigChan
+		log.Info("Received signal, initiating graceful shutdown", "signal", sig)
+		if err := svc.Stop(); err != nil {
+			log.Error("Error stopping service", "error", err)
+		}
+		os.Exit(0)
+	}()
 
 	if err := svc.Start(); err != nil {
 		log.Error("Failed to start server", "error", err)
