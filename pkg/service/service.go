@@ -417,27 +417,29 @@ func (s *Service) ValidateClientRequest(r *http.Request) (int, string) {
 }
 
 // getClientIP извлекает IP адрес клиента из запроса
+// SECURITY: Приоритизирует RemoteAddr для защиты от IP spoofing через proxy headers
+// X-Forwarded-For и X-Real-IP доверяются только в случае явной конфигурации
 func (s *Service) getClientIP(r *http.Request) string {
-	// Проверяем X-Forwarded-For
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if ip := net.ParseIP(xff); ip != nil {
-			return ip.String()
-		}
-	}
-
-	// Проверяем X-Real-IP
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		if ip := net.ParseIP(xri); ip != nil {
-			return ip.String()
-		}
-	}
-
-	// Используем RemoteAddr
+	// Первый приоритет: RemoteAddr (прямое соединение, невозможно подделать)
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
+	if err == nil && host != "" {
+		if ip := net.ParseIP(host); ip != nil {
+			return ip.String()
+		}
 	}
-	return host
+
+	// Fallback для IPv6 ::1 или других форматов без портов
+	if ip := net.ParseIP(r.RemoteAddr); ip != nil {
+		return ip.String()
+	}
+
+	return r.RemoteAddr
+
+	// ПРИМЕЧАНИЕ: X-Forwarded-For и X-Real-IP НЕ используются здесь
+	// для защиты от IP spoofing атак. Если ваше приложение находится
+	// за reverse proxy (nginx, HAProxy), вы можете добавить проверку
+	// доверенного источника прокси, но это требует явной конфигурации
+	// и валидации IP адреса прокси.
 }
 
 // GetLimiter возвращает rate limiter для указанного IP адреса

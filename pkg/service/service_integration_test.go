@@ -238,22 +238,27 @@ func TestService_GetClientIP(t *testing.T) {
 			expected:   "192.168.1.1",
 		},
 		{
-			name:       "X-Forwarded-For",
+			name:       "X-Forwarded-For ignored (security: RemoteAddr prioritized)",
 			remoteAddr: "10.0.0.1:12345",
 			xff:        "192.168.1.1",
-			expected:   "192.168.1.1",
+			expected:   "10.0.0.1",
 		},
 		{
-			name:       "X-Real-IP",
+			name:       "X-Real-IP ignored (security: RemoteAddr prioritized)",
 			remoteAddr: "10.0.0.1:12345",
 			xri:        "192.168.1.2",
-			expected:   "192.168.1.2",
+			expected:   "10.0.0.1",
 		},
 		{
-			name:       "Invalid X-Forwarded-For",
+			name:       "Invalid X-Forwarded-For fallback to RemoteAddr",
 			remoteAddr: "192.168.1.1:12345",
 			xff:        "invalid",
 			expected:   "192.168.1.1",
+		},
+		{
+			name:       "IPv6 with port",
+			remoteAddr: "[2001:db8::1]:8080",
+			expected:   "2001:db8::1",
 		},
 	}
 
