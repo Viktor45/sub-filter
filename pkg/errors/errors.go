@@ -99,7 +99,7 @@ func (e *FilterError) WithSeverity(s Severity) *FilterError {
 func (e *FilterError) IsRecoverable() bool {
 	switch e.Code {
 	case ErrCodeNetwork, ErrCodeHTTP, ErrCodeIO:
-		return true // Можна повторить
+		return true // Можно повторить
 	case ErrCodeConfig, ErrCodeValidate:
 		return false // Не может быть восстановлена
 	default:
