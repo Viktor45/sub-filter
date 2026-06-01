@@ -32,6 +32,7 @@ go.work.sum
 .vscode/
 .cache/
 cache/
+!pkg/cache/
 filter
 .DS_Store
 lint.txt
@@ -39,3 +40,7 @@ build/
 sub-filter
 project-go.txt
 project-md.txt
+.idea
+.kilo
+.vscode
+.qwen

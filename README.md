@@ -38,7 +38,7 @@ The result is a ready-to-use subscription for **Clash, Sing-Box, routers, and ot
 ## 📚 Documentation
 
 | Topic                 | Links                                                                                      |
-| --------------------- | ------------------------------------------------------------------------------------------ |
+|-----------------------|--------------------------------------------------------------------------------------------|
 | **Main Guide**        | [EN](docs/README_en.md) · [RU](docs/README.md) · [ZH](docs/README_zh.md)                   |
 | **FAQ**               | [EN](docs/FAQ_en.md) · [RU](docs/FAQ.md) · [ZH](docs/FAQ_zh.md)                            |
 | **Validation Rules**  | [EN](docs/FILTER_RULES_en.md) · [RU](docs/FILTER_RULES.md) · [ZH](docs/FILTER_RULES_zh.md) |
@@ -47,6 +47,10 @@ The result is a ready-to-use subscription for **Clash, Sing-Box, routers, and ot
 | **Rules Example**     | [config/rules.yaml](config/rules.yaml)                                                     |
 | **Bad words Example** | [config/badwords.yaml](config/badwords.yaml)                                               |
 | Example configuration | [./config](./config)                                                                       |
+| for developers:       |
+| Extending             | [EN](docs/EXTENDING_en.md) · [RU](docs/EXTENDING.md) · [ZH](docs/EXTENDING_zh.md)          |
+| Error Types           | [EN](docs/ERROR_TYPES_en.md) · [RU](docs/ERROR_TYPES.md) · [ZH](docs/ERROR_TYPES_zh.md)    |
+
 
 ---
 

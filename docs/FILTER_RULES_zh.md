@@ -2,83 +2,89 @@
 
 此翻译由神经网络完成，如有任何错误，敬请谅解。
 
-- [`rules.yaml` 文件說明](#rulesyaml-文件說明)
-  - [結構與核心概念](#結構與核心概念)
-  - [1. `required_params` — 必填參數](#1-required_params--必填參數)
-  - [2. `allowed_values` — 允許的值](#2-allowed_values--允許的值)
-  - [3. `forbidden_values` — 禁止的值](#3-forbidden_values--禁止的值)
-  - [4. `conditional` — 條件規則](#4-conditional--條件規則)
-    - [**Trojan — 完整文件**](#trojan--完整文件)
-      - [規則結構](#規則結構)
-      - [必填參數](#必填參數)
-      - [允許的參數](#允許的參數)
-      - [🔴 禁止的參數](#-禁止的參數)
-      - [條件規則](#條件規則)
-      - [有效連結範例](#有效連結範例)
-    - [**Shadowsocks (SS) — 完整文件**](#shadowsocks-ss--完整文件)
-      - [規則結構](#規則結構-1)
-      - [必填參數](#必填參數-1)
-      - [允許的加密方法](#允許的加密方法)
-        - [✅ AEAD 方法（現代標準）](#-aead-方法現代標準)
-        - [✅ Shadowsocks 2022（使用 Blake3 的新標準）](#-shadowsocks-2022使用-blake3-的新標準)
-        - [✅ 特殊方法](#-特殊方法)
-      - [🔴 禁止的方法（已在 Xray-core 2024+ 中移除）](#-禁止的方法已在-xray-core-2024-中移除)
-      - [有效連結範例](#有效連結範例-1)
-    - [**Hysteria2 — 完整文件**](#hysteria2--完整文件)
-      - [規則結構](#規則結構-2)
-      - [必填參數](#必填參數-2)
-      - [允許的參數](#允許的參數-1)
-      - [有效連結範例](#有效連結範例-2)
-    - [**重大變更（2026 年 2 月）**](#重大變更2026-年-2-月)
-      - [🔴 Trojan：`flow` 參數已不再支援](#-trojanflow-參數已不再支援)
-      - [🔴 Shadowsocks：CFB 和 CTR 方法已不再支援](#-shadowsockscfb-和-ctr-方法已不再支援)
-    - [**其他資源**](#其他資源)
+<!-- TOC -->
+* [`rules.yaml` 文档](#rulesyaml-文档)
+  * [结构与核心概念](#结构与核心概念)
+    * [1. `required_params` — 必需参数](#1-required_params--必需参数)
+    * [2. `allowed_values` — 允许的值](#2-allowed_values--允许的值)
+    * [3. `forbidden_values` — 禁止的值](#3-forbidden_values--禁止的值)
+    * [4. `conditional` — 条件规则](#4-conditional--条件规则)
+  * [VLESS — 完整文档](#vless--完整文档)
+    * [规则结构](#规则结构)
+    * [必需参数](#必需参数)
+    * [允许的参数](#允许的参数)
+    * [禁止的参数](#禁止的参数)
+    * [条件规则](#条件规则)
+    * [有效链接示例](#有效链接示例)
+  * [VMess — 完整文档](#vmess--完整文档)
+    * [规则结构](#规则结构-1)
+    * [必需参数](#必需参数-1)
+    * [允许的参数](#允许的参数-1)
+    * [禁止的参数](#禁止的参数-1)
+    * [条件规则](#条件规则-1)
+    * [有效链接示例](#有效链接示例-1)
+  * [Trojan — 完整文档](#trojan--完整文档)
+    * [规则结构](#规则结构-2)
+    * [必需参数](#必需参数-2)
+    * [允许的参数](#允许的参数-2)
+    * [🔴 禁止的参数](#-禁止的参数)
+    * [条件规则](#条件规则-2)
+    * [有效链接示例](#有效链接示例-2)
+  * [Shadowsocks (SS) — 完整文档](#shadowsocks-ss--完整文档)
+    * [规则结构](#规则结构-3)
+    * [必需参数](#必需参数-3)
+    * [允许的加密方法](#允许的加密方法)
+    * [🔴 禁止的方法（已在 Xray-core 2024+ 中移除）](#-禁止的方法已在-xray-core-2024-中移除)
+    * [有效链接示例](#有效链接示例-3)
+  * [Hysteria2 — 完整文档](#hysteria2--完整文档)
+    * [规则结构](#规则结构-4)
+    * [必需参数](#必需参数-4)
+    * [允许的参数](#允许的参数-3)
+    * [有效链接示例](#有效链接示例-4)
+  * [关键变更 (2026年2月)](#关键变更-2026年2月)
+    * [🔴 Trojan：不再支持 `flow` 参数](#-trojan不再支持-flow-参数)
+    * [🔴 Shadowsocks：不再支持 CFB 和 CTR 方法](#-shadowsocks不再支持-cfb-和-ctr-方法)
+  * [附加资源](#附加资源)
+<!-- TOC -->
 
+# `rules.yaml` 文档
 
-# `rules.yaml` 文件說明
+## 结构与核心概念
+`config/rules.yaml` 文件包含所有受支持代理协议的验证规则。这些规则定义了哪些配置被视为有效，哪些将被拒绝。
 
----
-## 結構與核心概念
+该文件按协议划分为不同的部分：
+- `vless` — VLESS 协议
+- `vmess` — VMess 协议
+- `trojan` — Trojan 协议
+- `ss` — Shadowsocks 协议
+- `hysteria2` — Hysteria2 协议
 
-`config/rules.yaml` 文件包含所有支援代理協定的**驗證規則**。這些規則定義了哪些設定被視為**有效**，哪些將被**拒絕**。
+### 1. `required_params` — 必需参数
+链接中必须存在的参数列表。
 
-該文件按**協定類型**分為以下幾個區塊：
-- `vless` — VLESS 協定
-- `vmess` — VMess 協定
-- `trojan` — Trojan 協定
-- `ss` — Shadowsocks 協定
-- `hysteria2` — Hysteria2 協定
+**行为：**
+- 如果缺少至少一个参数，则链接将被拒绝。
+- 此检查在所有其他规则之前优先执行。
 
----
-## 1. `required_params` — 必填參數
-
-一個在連結中**必須存在**的參數列表。
-
-**行為：**
-- 如果缺少其中任何一個參數，該連結將被**拒絕**。
-- 此檢查在所有其他規則之前**首先執行**。
-
-**範例：**
+**示例：**
 ```yaml
 vless:
   required_params:
     - encryption
     - sni
 ```
-**解讀：** VLESS 連結必須包含 `encryption` 和 `sni` 參數。如果缺少其中任何一個，該連結將被拒絕。
+**解释：** VLESS 链接必须包含 `encryption` 和 `sni` 参数。如果缺少其中任何一个，链接将被拒绝。
 
----
-## 2. `allowed_values` — 允許的值
+### 2. `allowed_values` — 允许的值
+特定参数可接受的值列表。
 
-為特定參數指定一個**允許的值**列表。
+**行为：**
+- 仅在参数存在时进行检查。
+- 如果参数的值不在列表中，则链接将被拒绝。
+- 比较不区分大小写（`aes-256-gcm` = `AES-256-GCM`）。
+- 优先级低于 `forbidden_values`。
 
-**行為：**
-- **僅在參數存在時**進行檢查。
-- 如果參數的值**不在列表中**，該連結將被**拒絕**。
-- 比較是**不區分大小寫**的（例如，`aes-256-gcm` = `AES-256-GCM`）。
-- 優先順序：**低於 `forbidden_values`**。
-
-**範例：**
+**示例：**
 ```yaml
 ss:
   allowed_values:
@@ -88,82 +94,219 @@ ss:
       - "chacha20-poly1305"
       - "2022-blake3-aes-256-gcm"
 ```
-**解讀：** Shadowsocks 僅允許這些加密方法。如果指定了其他方法（例如 `aes-128-cfb`），該連結將被拒絕。
+**解释：** 对于 Shadowsocks，仅允许使用这些加密方法。如果指定了其他方法（例如 `aes-128-cfb`），链接将被拒绝。
 
----
-## 3. `forbidden_values` — 禁止的值
+### 3. `forbidden_values` — 禁止的值
+特定参数被禁止使用的值列表。
 
-為特定參數指定一個**禁止的值**列表。
+**行为：**
+- 仅在参数存在时进行检查。
+- 如果值在列表中，则链接将被拒绝。
+- 优先级高于 `allowed_values`（优先检查）。
+- 比较不区分大小写。
+- 支持通配符 `"*"` — 禁止该参数的任何值。
 
-**行為：**
-- **僅在參數存在時**進行檢查。
-- 如果該值**在列表中**，該連結將被**拒絕**。
-- **優先於 `allowed_values`**（先進行此檢查）。
-- 比較是**不區分大小寫**的。
-- 支援**萬用字元** `"*"` — 表示禁止該參數的**任何**值。
-
-**範例：**
+**示例：**
 ```yaml
 vless:
   forbidden_values:
     security: ["none"]      # 禁止 security=none
-    authority: [""]         # 禁止空的 authority
+    authority: [""]         # 禁止 authority 为空
+
 trojan:
   forbidden_values:
-    flow: ["*"]             # 禁止所有 flow 值（該參數已被棄用）
+    flow: ["*"]             # 禁止所有 flow 值（参数已完全移除）
 ```
-**解讀：**
-- `security=none` 的 VLESS 將被拒絕。
-- 任何帶有 `flow` 值的 Trojan 都會被拒絕（該參數已在 Xray-core 2024+ 中棄用）。
+**解释：**
+- 带有 `security=none` 的 VLESS 将被拒绝。
+- 带有任何 `flow` 值的 Trojan 将被拒绝（该参数在 Xray-core 2024+ 中已弃用）。
 
-> ⚠️ **重要：** `forbidden_values` 具有**全域**作用域。若要允許例外情況（例如，僅對特定類型允許 `security=none`），請使用**條件規則** `conditional`。
+⚠️ **重要提示：** `forbidden_values` 具有全局作用域。要允许例外情况（例如，仅对特定类型允许 `security=none`），请使用 `conditional` 规则。
 
----
-## 4. `conditional` — 條件規則
+### 4. `conditional` — 条件规则
+仅在满足特定条件时才应用的规则。
 
-**僅在滿足特定條件時**才應用的規則。
-
-**結構：**
+**结构：**
 ```yaml
 conditional:
-  - when: { parameter: value }
-    require: [list_of_required_parameters]
+  - when: { 参数: 值 }
+    require: [必需参数列表]
 ```
-**行為：**
-- 在 `required_params`、`allowed_values` 和 `forbidden_values` **之後**進行檢查。
-- `when` 條件的作用如同邏輯 AND（所有條件都必須為真）。
-- 如果條件成立，`require` 中的參數將成為**必填項**。
+**行为：**
+- 在 `required_params`、`allowed_values` 和 `forbidden_values` 之后进行检查。
+- `when` 条件充当逻辑与（所有条件必须为真）。
+- 如果满足条件，则 `require` 中的参数将变为必需。
 
-**範例：**
+**示例：**
 ```yaml
 conditional:
-  # 如果 security=reality，則 pbk 是必填的
+  # 如果 security=reality，则 pbk 是必需的
   - when: { security: "reality" }
     require: ["pbk"]
-  # 如果 type=grpc，則 serviceName 是必填的
+
+  # 如果 type=grpc，则 serviceName 是必需的
   - when: { type: "grpc" }
     require: ["serviceName"]
-  # 如果 type=ws，則 path 是必填的
+
+  # 如果 type=ws，则 path 是必需的
   - when: { type: "ws" }
     require: ["path"]
 ```
-**解讀：**
-- `security=reality` 的 VLESS 必須包含 `pbk` 參數。
-- `type=grpc` 的 VLESS 必須包含 `serviceName` 參數。
-- `type=ws` 的 VLESS 必須包含 `path` 參數。
+**解释：**
+- 带有 `security=reality` 的 VLESS 必须包含 `pbk` 参数。
+- 带有 `type=grpc` 的 VLESS 必须包含 `serviceName` 参数。
+- 带有 `type=ws` 的 VLESS 必须包含 `path` 参数。
 
 ---
+
+## VLESS — 完整文档
+
+### 规则结构
+```yaml
+vless:
+  required_params:
+    - sni
+    # encryption 在 URI 中是可选的，但为了兼容性，建议明确指定 "none"。
+  forbidden_values:
+    security: ["none"]
+    authority: [""]
+  allowed_values:
+    security: ["tls", "reality"]
+    type: ["tcp", "ws", "httpupgrade", "grpc", "xhttp", "splithttp"]
+    flow:
+      - "xtls-rprx-vision"
+      - "xtls-rprx-vision-udp443"
+      - "xtls-rprx-vision-direct"
+    mode: ["gun", "multi"]
+  conditional:
+    - when: { security: "reality" }
+      require: ["pbk"]
+    - when: { type: "grpc" }
+      require: ["serviceName"]
+    - when: { type: "ws" }
+      require: ["path"]
+    - when: { type: "httpupgrade" }
+      require: ["path"]
+    - when: { type: "xhttp" }
+      require: ["path"]
+    - when: { type: "splithttp" }
+      require: ["path"]
+```
+
+### 必需参数
+| 参数           | 描述                      |
+|--------------|-------------------------|
+| `encryption` | 加密方法（可选，但建议明确指定 `none`） |
+| `sni`        | 服务器名称指示（TLS/REALITY 必需） |
+
+### 允许的参数
+| 参数         | 允许的值                                                                     | 描述                  |
+|------------|--------------------------------------------------------------------------|---------------------|
+| `security` | `tls`, `reality`                                                         | 安全类型。**禁止：** `none` |
+| `type`     | `tcp`, `ws`, `httpupgrade`, `grpc`, `xhttp`, `splithttp`                 | 传输类型                |
+| `flow`     | `xtls-rprx-vision`, `xtls-rprx-vision-udp443`, `xtls-rprx-vision-direct` | XTLS 流控（仅限 REALITY） |
+| `mode`     | `gun`, `multi`                                                           | gRPC 模式             |
+
+### 禁止的参数
+| 参数          | 禁止的值    | 原因         |
+|-------------|---------|------------|
+| `security`  | `none`  | 无安全性 — 不安全 |
+| `authority` | `""`（空） | 违反 gRPC 规范 |
+
+🔎 如果缺少 `security` 参数，它在 VLESS 解析器层将被自动视为 `none`，然后被 `forbidden_values` 规则拒绝。
+
+### 条件规则
+| 条件                 | 必需参数          | 描述                |
+|--------------------|---------------|-------------------|
+| `security=reality` | `pbk`         | REALITY 需要公钥      |
+| `type=grpc`        | `serviceName` | gRPC 需要服务名称       |
+| `type=ws`          | `path`        | WebSocket 需要路径    |
+| `type=httpupgrade` | `path`        | HTTP Upgrade 需要路径 |
+| `type=xhttp`       | `path`        | XHTTP 需要路径        |
+| `type=splithttp`   | `path`        | SplitHTTP 需要路径    |
+
+### 有效链接示例
+✅ **带有 TLS 的 VLESS TCP：**
+`vless://uuid@example.com:443?encryption=none&sni=example.com&security=tls&type=tcp`
+
+✅ **带有 REALITY 的 VLESS gRPC：**
+`vless://uuid@example.com:443?encryption=none&sni=example.com&security=reality&pbk=key&type=grpc&serviceName=service&mode=gun`
+
+✅ **VLESS WebSocket：**
+`vless://uuid@example.com:443?encryption=none&sni=example.com&security=tls&type=ws&path=/path`
+
 ---
 
-### **Trojan — 完整文件**
+## VMess — 完整文档
 
-#### 規則結構
+### 规则结构
+```yaml
+vmess:
+  required_params:
+    - uuid
+  forbidden_values:
+    security: ["none"]
+  allowed_values:
+    net: ["tcp", "ws", "grpc", "httpupgrade", "h2", "xhttp", "splithttp"]
+    security: ["auto", "aes-128-gcm", "chacha20-poly1305", "zero", "none"]
+  conditional:
+    - when: { net: "grpc" }
+      require: ["serviceName"]
+    - when: { net: "ws" }
+      require: ["path"]
+    - when: { net: "httpupgrade" }
+      require: ["path"]
+    - when: { net: "xhttp" }
+      require: ["path"]
+    - when: { net: "splithttp" }
+      require: ["path"]
+```
+
+### 必需参数
+| 参数     | 描述           |
+|--------|--------------|
+| `uuid` | 客户端 UUID（必需） |
+
+### 允许的参数
+| 参数         | 允许的值                                                           | 描述   |
+|------------|----------------------------------------------------------------|------|
+| `net`      | `tcp`, `ws`, `grpc`, `httpupgrade`, `h2`, `xhttp`, `splithttp` | 传输类型 |
+| `security` | `auto`, `aes-128-gcm`, `chacha20-poly1305`, `zero`, `none`     | 加密方法 |
+
+### 禁止的参数
+| 参数         | 禁止的值   | 原因        |
+|------------|--------|-----------|
+| `security` | `none` | 无加密 — 不安全 |
+
+⚠️ **注意：** 为了向后兼容，`zero` 和 `none` 安全值包含在 `allowed_values` 中，但被放入 `forbidden_values` 中进行拒绝 — 即它们在事实上是被禁止的。
+
+### 条件规则
+| 条件                | 必需参数          | 描述                |
+|-------------------|---------------|-------------------|
+| `net=grpc`        | `serviceName` | gRPC 需要服务名称       |
+| `net=ws`          | `path`        | WebSocket 需要路径    |
+| `net=httpupgrade` | `path`        | HTTP Upgrade 需要路径 |
+| `net=xhttp`       | `path`        | XHTTP 需要路径        |
+| `net=splithttp`   | `path`        | SplitHTTP 需要路径    |
+
+### 有效链接示例
+✅ **带有 AES-128-GCM 的 VMess TCP：**
+`vmess://uuid@example.com:10086?net=tcp&security=aes-128-gcm&tls=tls`
+
+✅ **VMess WebSocket：**
+`vmess://uuid@example.com:80?net=ws&security=auto&path=/api`
+
+---
+
+## Trojan — 完整文档
+
+### 规则结构
 ```yaml
 trojan:
   required_params:
     - password
   forbidden_values:
-    flow: ["*"]  # 任何 flow 值均被禁止（該參數已在 Xray-core 2024+ 中移除）
+    flow: ["*"]  # 禁止任何 flow 值（参数在 Xray-core 2024+ 中已移除）
   allowed_values:
     type: ["tcp", "ws", "grpc", "httpupgrade", "xhttp", "splithttp"]
     security: ["tls", "reality"]
@@ -183,53 +326,50 @@ trojan:
       require: ["path"]
 ```
 
-#### 必填參數
-| 參數       | 說明             |
-| ---------- | ---------------- |
-| `password` | 驗證密碼（必填） |
+### 必需参数
+| 参数         | 描述         |
+|------------|------------|
+| `password` | 身份验证密码（必需） |
 
-#### 允許的參數
-| 參數       | 允許的值                                                 | 說明      |
-| ---------- | -------------------------------------------------------- | --------- |
-| `type`     | `tcp`, `ws`, `grpc`, `httpupgrade`, `xhttp`, `splithttp` | 傳輸類型  |
-| `security` | `tls`, `reality`                                         | 安全類型  |
+### 允许的参数
+| 参数         | 允许的值                                                     | 描述      |
+|------------|----------------------------------------------------------|---------|
+| `type`     | `tcp`, `ws`, `grpc`, `httpupgrade`, `xhttp`, `splithttp` | 传输类型    |
+| `security` | `tls`, `reality`                                         | 安全类型    |
 | `mode`     | `gun`, `multi`                                           | gRPC 模式 |
 
-#### 🔴 禁止的參數
-| 參數   | 禁止的值                   | 原因                              |
-| ------ | -------------------------- | --------------------------------- |
-| `flow` | **所有**值（萬用字元 `*`） | ❌ **已在 Xray-core 2024+ 中移除** |
+### 🔴 禁止的参数
+| 参数     | 禁止的值         | 原因                       |
+|--------|--------------|--------------------------|
+| `flow` | 所有值（通配符 `*`） | ❌ 已在 Xray-core 2024+ 中移除 |
 
-> ⚠️ **嚴重警告：** `flow` 參數在現代版 Xray-core 中已**不再支援**。任何包含 `flow` 參數的 Trojan 設定都將在過濾時被**自動拒絕**。
+⚠️ **严重警告：** 现代版本的 Xray-core 不再支持 `flow` 参数。任何带有 `flow` 参数的 Trojan 配置将在过滤期间被自动拒绝。
 
-#### 條件規則
-| 條件               | 必填參數      | 說明                  |
-| ------------------ | ------------- | --------------------- |
-| `security=reality` | `pbk`         | REALITY 需要公鑰      |
-| `type=grpc`        | `serviceName` | gRPC 需要服務名稱     |
-| `type=ws`          | `path`        | WebSocket 需要路徑    |
-| `type=httpupgrade` | `path`        | HTTP Upgrade 需要路徑 |
-| `type=xhttp`       | `path`        | XHTTP 需要路徑        |
-| `type=splithttp`   | `path`        | SplitHTTP 需要路徑    |
+### 条件规则
+| 条件                 | 必需参数          | 描述                |
+|--------------------|---------------|-------------------|
+| `security=reality` | `pbk`         | REALITY 需要公钥      |
+| `type=grpc`        | `serviceName` | gRPC 需要服务名称       |
+| `type=ws`          | `path`        | WebSocket 需要路径    |
+| `type=httpupgrade` | `path`        | HTTP Upgrade 需要路径 |
+| `type=xhttp`       | `path`        | XHTTP 需要路径        |
+| `type=splithttp`   | `path`        | SplitHTTP 需要路径    |
 
-#### 有效連結範例
-✅ 使用 TLS 的 Trojan TCP：
-```
-trojan://password@example.com:443?security=tls&type=tcp
-```
-✅ Trojan gRPC：
-```
-trojan://password@example.com:443?security=tls&type=grpc&serviceName=service&mode=gun
-```
-❌ **無效** — 包含被禁止的 `flow` 參數：
-```
-trojan://password@example.com:443?flow=xtls-rprx-vision  ← 已拒絕
-```
+### 有效链接示例
+✅ **带有 TLS 的 Trojan TCP：**
+`trojan://password@example.com:443?security=tls&type=tcp`
+
+✅ **Trojan gRPC：**
+`trojan://password@example.com:443?security=tls&type=grpc&serviceName=service&mode=gun`
+
+❌ **无效 — 包含被禁止的 `flow` 参数：**
+`trojan://password@example.com:443?flow=xtls-rprx-vision` ← 被拒绝
 
 ---
-### **Shadowsocks (SS) — 完整文件**
 
-#### 規則結構
+## Shadowsocks (SS) — 完整文档
+
+### 规则结构
 ```yaml
 ss:
   required_params:
@@ -253,61 +393,58 @@ ss:
       - "none"
 ```
 
-#### 必填參數
-| 參數       | 說明             |
-| ---------- | ---------------- |
-| `password` | 驗證密碼（必填） |
-| `method`   | 加密方法（必填） |
+### 必需参数
+| 参数         | 描述         |
+|------------|------------|
+| `password` | 身份验证密码（必需） |
+| `method`   | 加密方法（必需）   |
 
-#### 允許的加密方法
-##### ✅ AEAD 方法（現代標準）
-| 方法                 | 建議                                      |
-| -------------------- | ----------------------------------------- |
-| `aes-128-gcm`        | ✅ 支援，但安全性低於 256 位元             |
-| `aes-256-gcm`        | ✅ **推薦** — 安全性與效能的良好平衡       |
-| `chacha20-poly1305`  | ✅ 支援，AES 的替代方案（符合 SP 800-38D） |
-| `xchacha20-poly1305` | ✅ 支援，ChaCha20 的強化版本               |
+### 允许的加密方法
+✅ **AEAD 加密（现代标准）**
+| 方法 | 建议 |
+| --- | --- |
+| `aes-128-gcm` | ✅ 支持，但安全性低于 256 位 |
+| `aes-256-gcm` | ✅ **推荐** — 安全性与性能的良好平衡 |
+| `chacha20-poly1305` | ✅ 支持，AES 的替代方案（对 CPU 友好） |
+| `xchacha20-poly1305` | ✅ 支持，ChaCha20 的增强版本 |
 
-##### ✅ Shadowsocks 2022（使用 Blake3 的新標準）
-| 方法                            | 建議                        |
-| ------------------------------- | --------------------------- |
-| `2022-blake3-aes-128-gcm`       | ✅ 支援（SS 2022 規格）      |
-| `2022-blake3-aes-256-gcm`       | ✅ **推薦** — 最安全且現代化 |
-| `2022-blake3-chacha20-poly1305` | ✅ 支援（SS 2022 規格）      |
+✅ **Shadowsocks 2022（带有 Blake3 的新标准）**
+| 方法 | 建议 |
+| --- | --- |
+| `2022-blake3-aes-128-gcm` | ✅ 支持（SS 2022 规范） |
+| `2022-blake3-aes-256-gcm` | ✅ **推荐** — 最安全且最现代 |
+| `2022-blake3-chacha20-poly1305` | ✅ 支持（SS 2022 规范） |
 
-##### ✅ 特殊方法
-| 方法   | 建議                                |
-| ------ | ----------------------------------- |
-| `none` | ⚠️ 無加密 — 很少使用，僅用於測試目的 |
+✅ **特殊方法**
+| 方法 | 建议 |
+| --- | --- |
+| `none` | ⚠️ 无加密 — 极少使用，仅用于测试 |
 
-#### 🔴 禁止的方法（已在 Xray-core 2024+ 中移除）
-| 方法          | 移除原因           |
-| ------------- | ------------------ |
-| `aes-128-cfb` | ❌ 過時的串流加密法 |
-| `aes-256-cfb` | ❌ 過時的串流加密法 |
-| `aes-128-ctr` | ❌ 過時的串流加密法 |
-| `aes-256-ctr` | ❌ 過時的串流加密法 |
+### 🔴 禁止的方法（已在 Xray-core 2024+ 中移除）
+| 方法            | 移除原因      |
+|---------------|-----------|
+| `aes-128-cfb` | ❌ 已弃用的流密码 |
+| `aes-256-cfb` | ❌ 已弃用的流密码 |
+| `aes-128-ctr` | ❌ 已弃用的流密码 |
+| `aes-256-ctr` | ❌ 已弃用的流密码 |
 
-> ⚠️ **嚴重警告：** CFB 和 CTR 方法在 Xray-core 2024+ 中已**不再實作**。任何使用這些方法的 Shadowsocks 設定都將在過濾時被**自動拒絕**。
+⚠️ **严重警告：** Xray-core 2024+ 不再实现 CFB 和 CTR 方法。任何带有这些方法的 Shadowsocks 配置将在过滤期间被自动拒绝。
 
-#### 有效連結範例
-✅ **推薦** — 使用 Blake3 的 SS 2022：
-```
-ss://2022-blake3-aes-256-gcm:password@example.com:8388
-```
-✅ 使用 AES-256-GCM 的 Shadowsocks：
-```
-ss://aes-256-gcm:password@example.com:8388
-```
-❌ **無效** — 包含過時的 CFB 方法：
-```
-ss://aes-256-cfb:password@example.com:8388  ← 已拒絕（方法已移除）
-```
+### 有效链接示例
+✅ **推荐 — 带有 Blake3 的 SS 2022：**
+`ss://2022-blake3-aes-256-gcm:password@example.com:8388`
+
+✅ **带有 AES-256-GCM 的 Shadowsocks：**
+`ss://aes-256-gcm:password@example.com:8388`
+
+❌ **无效 — 包含已弃用的 CFB 方法：**
+`ss://aes-256-cfb:password@example.com:8388` ← 被拒绝（方法已移除）
 
 ---
-### **Hysteria2 — 完整文件**
 
-#### 規則結構
+## Hysteria2 — 完整文档
+
+### 规则结构
 ```yaml
 hysteria2:
   required_params:
@@ -317,79 +454,69 @@ hysteria2:
     obfs: ["salamander"]
 ```
 
-#### 必填參數
-| 參數            | 說明             |
-| --------------- | ---------------- |
-| `obfs`          | 混淆方法（必填） |
-| `obfs-password` | 混淆密碼（必填） |
+### 必需参数
+| 参数              | 描述       |
+|-----------------|----------|
+| `obfs`          | 混淆方法（必需） |
+| `obfs-password` | 混淆密码（必需） |
 
-#### 允許的參數
-| 參數   | 允許的值     | 說明               |
-| ------ | ------------ | ------------------ |
-| `obfs` | `salamander` | 唯一支援的混淆方法 |
+### 允许的参数
+| 参数     | 允许的值         | 描述         |
+|--------|--------------|------------|
+| `obfs` | `salamander` | 唯一受支持的混淆方法 |
 
-#### 有效連結範例
-✅ 帶混淆的 Hysteria2：
-```
-hy2://password@example.com:443?obfs=salamander&obfs-password=secret
-```
+### 有效链接示例
+✅ **带有混淆的 Hysteria2：**
+`hy2://password@example.com:443?obfs=salamander&obfs-password=secret`
 
 ---
-### **重大變更（2026 年 2 月）**
 
-#### 🔴 Trojan：`flow` 參數已不再支援
-**變更內容：**
-- 在 Xray-core 2024+ 中，`flow` 參數已從 Trojan 協定中**移除**。
-- 在 `rules.yaml` 中，透過 `forbidden_values: { flow: ["*"] }` 強制執行。
-- 任何包含 `flow` 參數的 Trojan 設定都將被**拒絕**。
+## 关键变更 (2026年2月)
 
-**被拒絕的連結範例：**
-```
-❌ trojan://password@example.com:443?flow=xtls-rprx-vision
-❌ trojan://password@example.com:443?type=tcp&flow=xtls-rprx-vision-udp443
-```
+### 🔴 Trojan：不再支持 `flow` 参数
+**变更内容：**
+- 在 Xray-core 2024+ 中，`flow` 参数已从 Trojan 协议中移除。
+- 添加到 `rules.yaml`：`forbidden_values: { flow: ["*"] }`。
+- 任何带有 `flow` 参数的 Trojan 配置都将被拒绝。
 
-**應對措施：**
-1.  **更新您的設定：** 從 URL 中移除 `flow` 參數。
-2.  **正確的連結：**
-```
-✅ trojan://password@example.com:443?security=tls&type=tcp
-```
+**被拒绝的链接示例：**
+❌ `trojan://password@example.com:443?flow=xtls-rprx-vision`
+❌ `trojan://password@example.com:443?type=tcp&flow=xtls-rprx-vision-udp443`
 
----
-#### 🔴 Shadowsocks：CFB 和 CTR 方法已不再支援
-**變更內容：**
-- 在 Xray-core 2024+ 中，已移除 `aes-128-cfb`、`aes-256-cfb`、`aes-128-ctr` 和 `aes-256-ctr` 方法。
-- 在 `rules.yaml` 中，透過 `forbidden_values: { method: [aes-128-cfb, aes-256-cfb, aes-128-ctr, aes-256-ctr] }` 強制執行。
-- 任何使用這些方法的 Shadowsocks 設定都將被**拒絕**。
+**应对措施：**
+- 更新您的配置：从 URL 中删除 `flow` 参数。
+- **正确的链接：**
+  ✅ `trojan://password@example.com:443?security=tls&type=tcp`
 
-**被拒絕的連結範例：**
-```
-❌ ss://aes-128-cfb:password@example.com:8388
-❌ ss://aes-256-ctr:password@example.com:8388
-```
+### 🔴 Shadowsocks：不再支持 CFB 和 CTR 方法
+**变更内容：**
+- 在 Xray-core 2024+ 中，移除了 `aes-128-cfb`、`aes-256-cfb`、`aes-128-ctr` 和 `aes-256-ctr` 方法。
+- 添加到 `rules.yaml`：`forbidden_values: { method: [aes-128-cfb, aes-256-cfb, aes-128-ctr, aes-256-ctr] }`。
+- 任何带有这些方法的 Shadowsocks 配置都将被拒绝。
 
-**推薦方法：**
-- **最佳選擇：** `ss://2022-blake3-aes-256-gcm:password@example.com:8388`（現代標準）
-- **替代方案：** `ss://aes-256-gcm:password@example.com:8388`（傳統 AEAD）
+**被拒绝的链接示例：**
+❌ `ss://aes-128-cfb:password@example.com:8388`
+❌ `ss://aes-256-ctr:password@example.com:8388`
 
-**應對措施：**
-1.  **更新您的設定：** 替換加密方法。
-2.  **正確的連結：**
-```
-✅ ss://2022-blake3-aes-256-gcm:password@example.com:8388
-✅ ss://aes-256-gcm:password@example.com:8388
-✅ ss://chacha20-poly1305:password@example.com:8388
-```
+**推荐的方法：**
+- **最佳选择：** `ss://2022-blake3-aes-256-gcm:password@example.com:8388`（现代标准）
+- **替代方案：** `ss://aes-256-gcm:password@example.com:8388`（传统 AEAD）
+
+**应对措施：**
+- 更新您的配置：替换加密方法。
+- **正确的链接：**
+  ✅ `ss://2022-blake3-aes-256-gcm:password@example.com:8388`
+  ✅ `ss://aes-256-gcm:password@example.com:8388`
+  ✅ `ss://chacha20-poly1305:password@example.com:8388`
 
 ---
-### **其他資源**
-- **Xray-core 規格：** https://xtls.github.io/
-- **VLESS 規格：** https://github.com/XTLS/Xray-core/blob/main/features/inbound/vless/encoding.go
-- **Trojan 規格：** https://trojan-gfw.github.io/
-- **Shadowsocks 規格：** https://shadowsocks.org/
 
----
-**文件版本：** 2.1 (2026 年 2 月)
-**相容性：** Xray-core 2024+ (98%+)
-**最後更新日期：** 2026 年 2 月 4 日
+## 附加资源
+- **Xray-core 规范：** https://xtls.github.io/
+- **VLESS 规范：** https://github.com/XTLS/Xray-core/blob/main/features/inbound/vless/encoding.go
+- **Trojan 规范：** https://trojan-gfw.github.io/
+- **Shadowsocks 规范：** https://shadowsocks.org/
+
+*文档版本：2.1 (2026年5月)*
+*兼容性：Xray-core 2024+ (98%+)*
+*最后更新：2026年5月31日*

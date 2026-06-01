@@ -8,6 +8,7 @@ GoodCloud
 Happ
 Hiddify
 Hysteria
+Incy
 Karing
 LawnchairClash
 Lumos

@@ -1,6 +1,10 @@
 name: Release
 
+# Workflow для автоматизации релизов при создании тага v*.
+# Можно также запустить вручную через workflow_dispatch.
+
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*"
