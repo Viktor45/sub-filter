@@ -3,16 +3,17 @@
 This translation was made using AI.
 
 <!-- TOC -->
-  * [Documentation for `badwords.yaml`](#documentation-for-badwordsyaml)
+* [Documentation for `badwords.yaml`](#documentation-for-badwordsyaml)
   * [Purpose and Concept](#purpose-and-concept)
-    * [What is a "bad word"?](#what-is-a-bad-word)
-    * [Two Filtering Strategies](#two-filtering-strategies)
+  * [What is a "bad word"?](#what-is-a-bad-word)
+  * [Two Filtering Strategies](#two-filtering-strategies)
   * [File Structure](#file-structure)
-    * [Rule Fields](#rule-fields)
-    * [Minimal Example](#minimal-example)
+  * [Rule Fields](#rule-fields)
+  * [Minimal Example](#minimal-example)
   * [Action Types](#action-types)
     * [Action: `strip`](#action-strip)
     * [Action: `delete`](#action-delete)
+    * [Action: `replace`](#action-replace)
   * [Regular Expression Syntax](#regular-expression-syntax)
     * [Basic Constructs](#basic-constructs)
     * [Special Sequences](#special-sequences)
@@ -28,69 +29,62 @@ This translation was made using AI.
     * [✅ Best Practices](#-best-practices)
     * [⚠️ Common Mistakes](#-common-mistakes)
   * [Debugging and Testing](#debugging-and-testing)
-    * [YAML Syntax Validation](#yaml-syntax-validation)
-    * [Pattern Testing](#pattern-testing)
+    * [Checking YAML Syntax](#checking-yaml-syntax)
+    * [Testing Patterns](#testing-patterns)
     * [Troubleshooting](#troubleshooting)
   * [Organization Recommendations](#organization-recommendations)
     * [Rule Order](#rule-order)
-    * [YAML Comments](#yaml-comments)
+    * [Comments in YAML](#comments-in-yaml)
   * [Conclusion](#conclusion)
 <!-- TOC -->
 
 ---
 
-## Documentation for `badwords.yaml`
+# Documentation for `badwords.yaml`
 
 ## Purpose and Concept
+The `badwords.yaml` file is a set of rules for filtering and modifying proxy link names in the `sub-filter` program.
+Think of it as a dictionary of "bad words", not in the sense of censorship, but in the sense of removing useless, promotional, or dangerous information from server names.
 
-The `badwords.yaml` file is a **set of rules for filtering and modifying proxy link names** in the `sub-filter` program.
+## What is a "bad word"?
+A "bad word" is a pattern (a word, phrase, or regular expression) that appears in a proxy name and is undesirable in the final list. Examples:
+- `[TEST]` in the name → indicates a test server (not needed in the production list)
+- `[SPAM]` in the name → explicit spam marker
+- `192.168.x.x` in the name → private IP (sign of a parsing error)
+- `v1.2.3` in the name → version number (clutters the name)
 
-Think of it as a **dictionary of "bad words"**, but not in the sense of censorship—rather, **removing junk, spam, or dangerous information** from server names.
+## Two Filtering Strategies
+`sub-filter` supports two primary strategies for handling a matched pattern:
+- `strip` — remove only the matched pattern from the name, keep the string (server accepted, name cleaned).
+- `delete` — remove the entire line (server completely rejected).
 
-### What is a "bad word"?
-
-A **"bad word"** is a pattern (word, phrase, or regular expression) that appears in a proxy name and is undesirable in the final list. Examples:
-
-- **[TEST]** in the name → indicates a test server (not needed in production lists)
-- **[SPAM]** in the name → explicit spam marker
-- **192.168.x.x** in the name → private IP (sign of parsing error)
-- **v1.2.3** in the name → version number (clutters the name)
-
-### Two Filtering Strategies
-
-`sub-filter` supports **two processing strategies** when a pattern is found:
-
-1. **`strip`** — remove only the found pattern from the name, **keep the server** (server accepted, name cleaned)
-2. **`delete`** — remove the **entire line** (server completely rejected)
-
-**The choice of strategy** depends on **the importance of the filtered content**:
-
-- `strip` — for **minor junk** (versions, markers, demo versions)
-- `delete` — for **critical errors** (spam, malware, invalid parameters, local IPs)
-
----
+The choice of strategy depends on the importance of the filtered content:
+- `strip` — for minor junk (versions, markers, demo versions).
+- `delete` — for critical errors (spam, malware, invalid parameters, local IPs).
 
 ## File Structure
-
-The `badwords.yaml` file contains an **array of rules**. Each rule is an object with two fields:
+The `badwords.yaml` file contains an array of rules. Each rule is an object with the following fields:
 
 ```yaml
-- pattern: "your regular expression"
+- pattern: "your regular expression for stripping"
   action: "strip"
 
-- pattern: "another expression"
+- pattern: "another expression to delete the entire line"
   action: "delete"
+
+- pattern: "fp=chrome"
+  action: "replace"
+  replacement: "fp=firefox"
 ```
 
-### Rule Fields
+## Rule Fields
+| Field         | Type   | Required            | Description                                 |
+|---------------|--------|---------------------|---------------------------------------------|
+| `pattern`     | string | ✅ Yes               | Regular expression (Go `regexp` syntax)     |
+| `action`      | string | ✅ Yes               | `strip`, `delete`, or `replace`             |
+| `replacement` | string | ✅ Yes for `replace` | Replacement string when `action: "replace"` |
 
-| Field     | Type   | Required | Description                             |
-|-----------|--------|----------|-----------------------------------------|
-| `pattern` | string | ✅ yes    | Regular expression (Go `regexp` syntax) |
-| `action`  | string | ✅ yes    | `"strip"` or `"delete"`                 |
-
-### Minimal Example
-
+## Minimal Example
 ```yaml
 # Remove the word "test" from the name
 - pattern: "test"
@@ -101,65 +95,78 @@ The `badwords.yaml` file contains an **array of rules**. Each rule is an object 
   action: "delete"
 ```
 
----
-
 ## Action Types
 
 ### Action: `strip`
-
-**Behavior:** the matched substring is **removed from the name**, the server **remains in the list**.
-
+**Behavior:** The matched substring is removed from the name; the server remains in the list.
 **Process:**
-1. Find a match with the pattern in the server name
-2. Remove the found match
-3. Collapse multiple spaces into one
-4. Trim spaces at the beginning and end
-5. **Return the updated name**
+1. Find a match for the pattern in the server name.
+2. Remove the matched substring.
+3. Collapse multiple spaces into a single space.
+4. Trim leading and trailing whitespace.
+5. Return the updated name.
 
 **When to use:**
 - Removing versions (`v1.2.3`)
 - Removing test markers (`[TEST]`, `[DEMO]`)
-- Removing junk that doesn't affect functionality (`#1`, `@admin`, etc.)
+- Removing junk and ads that do not affect functionality (`#1`, `@admin`, etc.)
 
-**Example result:**
-```
-Input name:     "My [TEST] Server v1.2.3"
-Pattern 1:      "\[TEST\]" (strip)  →  "My  Server v1.2.3"
-Pattern 2:      "v\d+\.\d+\.\d+" (strip)  →  "My Server"
-Final name:     "My Server"
-Status:         ✅ ACCEPTED
-```
+**Example Result:**
+- Input name: `"My [TEST] Server v1.2.3"`
+- Pattern 1: `"\[TEST\]"` (strip) → `"My  Server v1.2.3"`
+- Pattern 2: `"v\d+\.\d+\.\d+"` (strip) → `"My Server"`
+- Final name: `"My Server"`
+- Status: ✅ ACCEPTED
 
 ### Action: `delete`
-
-**Behavior:** the matched substring **rejects the entire line**, the server is **completely excluded** from the list.
-
+**Behavior:** The matched substring rejects the entire line; the server is completely excluded from the list.
 **Process:**
-1. Find a match with the pattern in the server name
-2. If a match is found: **reject the server**
-3. If no matches: continue processing
+1. Find a match for the pattern in the server name.
+2. If a match is found: reject the server.
+3. If no match is found: continue processing.
 
 **When to use:**
 - Blocking dangerous content (`[SPAM]`, `[MALWARE]`)
-- Blocking private IPs (sign of parsing error)
-- Blocking non-working ports (`port: 99999`)
-- Blocking deprecated protocols
+- Blocking private IPs (sign of a parsing error)
+- Blocking invalid ports (`port: 99999`)
+- Blocking outdated protocols
 
-**Example result:**
-```
-Input name:     "Server [SPAM] in US"
-Pattern:        "\\[spam\\]" (delete, case-insensitive)
-Result:         ❌ REJECTED (entire line removed)
-```
+**Example Result:**
+- Input name: `"Server [SPAM] in US"`
+- Pattern: `"\\[spam\\]"` (delete, case-insensitive)
+- Result: ❌ REJECTED (entire line removed)
 
----
+### Action: `replace`
+**Behavior:** The matched substring is replaced with another string; the server remains in the list.
+**Rule Fields:**
+- `pattern` — regular expression to search for
+- `action: "replace"`
+- `replacement` — string to substitute instead of the matched value
+
+**Process:**
+1. Find a match for the pattern in the server name.
+2. Replace the match with the `replacement` value.
+3. Collapse multiple spaces into a single space.
+4. Trim leading and trailing whitespace.
+5. Return the updated name.
+
+**When to use:**
+- Fixing parameters that do not affect functionality but interfere with filtering.
+- Adjusting values inside link fragments without deleting the entire line.
+- Replacing outdated or unwanted tags with safe alternatives.
+
+**Example:**
+```yaml
+- pattern: "fp=chrome"
+  action: "replace"
+  replacement: "fp=firefox"
+```
+If the rule matches, `fp=chrome` will be replaced with `fp=firefox`, and the string will be preserved.
 
 ## Regular Expression Syntax
-
-`sub-filter` uses the **Go `regexp` package** (POSIX Extended Regular Expression syntax with Go extensions).
+`sub-filter` uses the Go `regexp` package (POSIX Extended Regular Expression syntax with Go extensions).
 
 ### Basic Constructs
-
 | Construct | Meaning                     | Example                      |
 |-----------|-----------------------------|------------------------------|
 | `.`       | Any character (except `\n`) | `a.c` → `abc`, `aXc`         |
@@ -173,315 +180,171 @@ Result:         ❌ REJECTED (entire line removed)
 | `\|`      | OR                          | `cat\|dog` → `cat` or `dog`  |
 
 ### Special Sequences
-
-| Sequence | Meaning                          |
-|----------|----------------------------------|
-| `\d`     | Any digit (0-9)                  |
-| `\D`     | Not a digit                      |
-| `\w`     | Letter, digit, underscore        |
-| `\W`     | Not letter, digit, underscore    |
-| `\s`     | Whitespace (space, tab, newline) |
-| `\S`     | Non-whitespace character         |
-| `^`      | Start of line                    |
-| `$`      | End of line                      |
-| `\b`     | Word boundary                    |
-| `\\`     | Escape special characters        |
+| Sequence | Meaning                         |
+|----------|---------------------------------|
+| `\d`     | Any digit (0-9)                 |
+| `\D`     | Not a digit                     |
+| `\w`     | Letter, digit, underscore       |
+| `\W`     | Not a letter, digit, underscore |
+| `\s`     | Space, tab, newline             |
+| `\S`     | Not a whitespace character      |
+| `^`      | Start of string                 |
+| `$`      | End of string                   |
+| `\b`     | Word boundary                   |
+| `\\`     | Escape special characters       |
 
 ### Modifiers
-
-**Go `regexp` uses built-in syntax flags:**
-
-| Flag   | Purpose                                          |
-|--------|--------------------------------------------------|
-| `(?i)` | Case-insensitive search (place at pattern start) |
-| `(?m)` | Multiline mode                                   |
+Go `regexp` uses inline syntax flags:
+| Flag | Purpose |
+| --- | --- |
+| `(?i)` | Case-insensitive search (include at the beginning of the pattern) |
+| `(?m)` | Multiline mode |
 
 **Examples:**
-```
+```regex
 (?i)test              # "test", "TEST", "Test" — all match
 (?i)\[demo\]          # "[DEMO]", "[demo]", "[Demo]" — all match
 ```
 
 ### Escaping Special Characters
+If you need to search for a literal special character (rather than its special meaning), escape it with a backslash:
 
-If you need to search for a **literal special character** (not its special meaning), escape it with a backslash:
+| Character | Escaping | Example                                                    |
+|-----------|----------|------------------------------------------------------------|
+| `.`       | `\.`     | `example\.com` → searches for `"example.com"` (with a dot) |
+| `[`       | `\[`     | `\[TEST\]` → searches for `"[TEST]"` (square brackets)     |
+| `(`       | `\(`     | `\(v1\)` → searches for `"(v1)"`                           |
+| `*`       | `\*`     | `\*plus\*` → searches for `"*plus*"`                       |
+| `\`       | `\\`     | `C:\\path\\to\\file` → searches for `"C:\path\to\file"`    |
 
-| Character | Escaping | Example                                           |
-|-----------|----------|---------------------------------------------------|
-| `.`       | `\.`     | `example\.com` → matches "example.com" (with dot) |
-| `[`       | `\[`     | `\[TEST\]` → matches "[TEST]" (brackets)          |
-| `(`       | `\(`     | `\(v1\)` → matches "(v1)"                         |
-| `*`       | `\*`     | `\*plus\*` → matches "*plus*"                     |
-| `\`       | `\\`     | `C:\\path\\to\\file` → matches "C:\path\to\file"  |
-
-**⚠️ Important in YAML**: YAML itself uses the backslash for escaping, so **double your backslashes**:
-
+⚠️ **Important in YAML:** YAML itself uses the backslash for escaping, so you must double the backslashes:
 ```yaml
-# WRONG (YAML will consume one backslash):
+# WRONG (YAML will consume one slash):
 pattern: "\[TEST\]"  # YAML reads this as "[TEST" — not what you want!
 
 # CORRECT:
 pattern: "\\[TEST\\]"  # YAML reads "\[TEST\]" → regex understands "[TEST]"
 ```
 
----
-
 ## Practical Examples
 
 ### Example 1: Removing Version Numbers
-
-**Task:** remove the version from "Server v1.2.3 Fast", keeping the server.
-
+**Task:** Remove the version from the name `"Server v1.2.3 Fast"`, keeping the server.
 ```yaml
 - pattern: '\bv\d+\.\d+(\.\d+)?\b'
   action: "strip"
   # Explanation:
   # \b — word boundary (to avoid matching "version")
   # v\d+\.\d+ — "v" + digits + "." + digits (v1.2)
-  # (\.\d+)? — optionally ".3"
+  # (\.\d+)? — optional ".3"
 ```
-
 **Result:**
-```
-Input name:    "Server v1.2.3 Fast"
-After strip:   "Server Fast"
-Status:        ✅ ACCEPTED with modified name
-```
+- Input name: `"Server v1.2.3 Fast"`
+- After strip: `"Server Fast"`
+- Status: ✅ ACCEPTED with modified name
 
 ### Example 2: Removing Quality/Status Markers
-
-**Task:** remove markers like `[DEMO]`, `(demo)`, `<demo>` from names—case-insensitive.
-
+**Task:** Remove markers like `[DEMO]`, `(demo)`, `<demo>` from names — case-insensitively.
 ```yaml
 - pattern: '(?i)\[demo\]|\(demo\)|<demo>'
   action: "strip"
-  # Explanation:
-  # (?i) — case-insensitive search (at pattern start)
-  # \[demo\] — "[demo]" (brackets escaped)
-  # | — OR
-  # \(demo\) — "(demo)"
-  # <demo> — "<demo>"
 ```
-
 **Result:**
-```
-"Server [DEMO] US"     →  "Server US"
-"My Proxy (demo)"      →  "My Proxy"
-"Test <demo> Japan"    →  "Test Japan"
-```
+- `"Server [DEMO] US"` → `"Server US"`
+- `"My Proxy (demo)"` → `"My Proxy"`
+- `"Test <demo> Japan"` → `"Test Japan"`
 
 ### Example 3: Blocking Private IPs (Parsing Error Indicator)
-
-**Task:** reject the entire line if the name contains a private IP (sign of incorrect parsing).
-
+**Task:** Reject the entire line if the name contains a private IP (sign of incorrect parsing).
 ```yaml
 - pattern: '(?i)(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[01])\.\d+\.\d+)'
   action: "delete"
-  # Explanation:
-  # localhost — special name
-  # 127\.0\.0\.1 — localhost IP (dots escaped)
-  # 192\.168\.\d+\.\d+ — network 192.168.0.0/16
-  # 10\.\d+\.\d+\.\d+ — network 10.0.0.0/8
-  # 172\.(1[6-9]|2[0-9]|3[01])\.\d+\.\d+ — network 172.16.0.0/12
 ```
-
 **Result:**
-```
-"Proxy 192.168.1.1"    →  ❌ REJECTED
-"Server 10.0.0.5"      →  ❌ REJECTED
-"Good Server US"       →  ✅ ACCEPTED
-```
+- `"Proxy 192.168.1.1"` → ❌ REJECTED
+- `"Server 10.0.0.5"` → ❌ REJECTED
+- `"Good Server US"` → ✅ ACCEPTED
 
 ### Example 4: Blocking Spam and Malware
-
-**Task:** reject a server if its name contains spam, fraud, or malware markers.
-
+**Task:** Reject the server if its name contains spam, fraud, or malware markers.
 ```yaml
 - pattern: '(?i)\[(spam|fraud|malware|phishing|scam)\]'
   action: "delete"
-  # Explanation:
-  # (?i) — case-insensitive
-  # \[ — opening bracket (escaped)
-  # (spam|fraud|malware|phishing|scam) — any of these words
-  # \] — closing bracket
-```
-
-**Result:**
-```
-"Server [SPAM] EU"     →  ❌ REJECTED
-"Good [fraud] Proxy"   →  ❌ REJECTED
-"Normal Server"        →  ✅ ACCEPTED
 ```
 
 ### Example 5: Blocking Invalid Ports
-
-**Task:** reject a server if its name contains a port outside the range 1-65535.
-
+**Task:** Reject the server if its name contains a port outside the 1-65535 range.
 ```yaml
 - pattern: ':(0|6553[6-9]|655[4-9][0-9]|65[6-9][0-9]{2}|6[6-9][0-9]{3}|[7-9][0-9]{4})'
   action: "delete"
-  # Explanation:
-  # : — colon (separates address from port)
-  # (0|...) — either 0 or numbers > 65535
 ```
-
-**Result:**
-```
-"Server:99999"         →  ❌ REJECTED
-"Server:0"             →  ❌ REJECTED
-"Server:443"           →  ✅ ACCEPTED
-```
-
----
 
 ## Pattern Writing Rules
 
 ### ✅ Best Practices
-
-1. **Use word boundary `\b` for whole words:**
-   ```yaml
-   # GOOD — matches "test" but not "testing"
-   pattern: '\btest\b'
-   action: "strip"
-   
-   # BAD — matches "test", "testing", and "atesting"
-   pattern: 'test'
-   action: "strip"
-   ```
-
-2. **Escape special characters in YAML (double your backslashes):**
-   ```yaml
-   # CORRECT
-   pattern: '\\[TEST\\]'
-   
-   # WRONG
-   pattern: '\[TEST\]'  # YAML will consume the backslashes!
-   ```
-
-3. **Use `(?i)` for case-insensitive search:**
-   ```yaml
-   # GOOD — matches "TEST", "test", "Test"
-   pattern: '(?i)\[demo\]'
-   
-   # BAD — matches only "[demo]"
-   pattern: '\[demo\]'
-   ```
-
-4. **Group alternatives in parentheses:**
-   ```yaml
-   # GOOD
-   pattern: '(?i)(spam|fraud|malware)'
-   
-   # BAD (may be ambiguous)
-   pattern: 'spam|fraud|malware'
-   ```
-
-5. **For delete rules be strict, for strip rules be careful:**
-   ```yaml
-   # GOOD — matches only standard version strings
-   - pattern: '\bv\d+\.\d+\.\d+\b'
-     action: "strip"
-   
-   # BAD — may accidentally delete something important
-   - pattern: '\d+'
-     action: "delete"
-   ```
+- **Use word boundaries `\b` for whole words:**
+  ```yaml
+  # GOOD — matches "test", but not "testing"
+  pattern: '\btest\b'
+  ```
+- **Escape special characters in YAML (double the backslashes):**
+  ```yaml
+  pattern: '\\[TEST\\]'
+  ```
+- **Use `(?i)` for case-insensitive search:**
+  ```yaml
+  pattern: '(?i)\[demo\]'
+  ```
+- **Group alternatives with parentheses:**
+  ```yaml
+  pattern: '(?i)(spam|fraud|malware)'
+  ```
+- **Be strict for `delete` rules, cautious for `strip` rules.**
 
 ### ⚠️ Common Mistakes
-
-| Mistake                             | Example                           | Fix                                      |
-|-------------------------------------|-----------------------------------|------------------------------------------|
-| Brackets not escaped                | `pattern: '[TEST]'`               | `pattern: '\\[TEST\\]'`                  |
-| Missing `(?i)` for case-insensitive | `pattern: '\[demo\]'`             | `pattern: '(?i)\\[demo\\]'`              |
-| Pattern too broad                   | `pattern: 'a'`                    | `pattern: '(?i)\\[a\\]'` (be specific)   |
-| No escaping in YAML                 | `pattern: "\[TEST\]"`             | `pattern: "\\[TEST\\]"` (double slashes) |
-| Word boundary in wrong place        | `pattern: 'test\b'` for "testing" | `pattern: '\btest\b'` (both sides)       |
-
----
+| Mistake                                | Example                             | Correction                               |
+|----------------------------------------|-------------------------------------|------------------------------------------|
+| Square brackets not escaped            | `pattern: '[TEST]'`                 | `pattern: '\\[TEST\\]'`                  |
+| Missing `(?i)` for case-insensitive    | `pattern: '\[demo\]'`               | `pattern: '(?i)\\[demo\\]'`              |
+| Pattern too broad                      | `pattern: 'a'`                      | `pattern: '(?i)\\[a\\]'` (more specific) |
+| Missing escaping in YAML               | `pattern: "\[TEST\]"`               | `pattern: "\\[TEST\\]"` (double slashes) |
+| Using word boundary in the wrong place | `pattern: 'test\b'` for `"testing"` | `pattern: '\btest\b'` (on both sides)    |
 
 ## Debugging and Testing
 
-### YAML Syntax Validation
-
-Make sure your `badwords.yaml` file is syntactically correct:
-
+### Checking YAML Syntax
+Ensure the `badwords.yaml` file is syntactically correct:
 ```bash
-# Try to load the config (the program will show parsing errors)
 ./sub-filter --cli
-
-# If config loads without YAML errors, it will output:
+# If the config loads without YAML errors, it will print:
 # "Configuration loaded successfully"
 ```
 
-### Pattern Testing
-
+### Testing Patterns
 **Method 1: Online regex tester**
-
 Visit [regex101.com](https://regex101.com):
-1. Select **"Go"** from the "Flavor" menu
-2. Paste your pattern in the "Regular Expression" field
-3. Paste test names in the "Test String" field
-4. Check the matches
-
-**Example:**
-```
-Flavor:        Go
-Pattern:       (?i)\[demo\]|\(demo\)|<demo>
-Test strings:  
-  My [DEMO] Server    ✅ matches
-  Test (demo) US      ✅ matches
-  Server <demo>       ✅ matches
-  Normal Server       ❌ does not match
-```
+1. Select "Go" in the "Flavor" menu.
+2. Paste your pattern into the "Regular Expression" field.
+3. Paste test names into the "Test String" field.
+4. Check the matches.
 
 ### Troubleshooting
-
 | Problem                                | Cause                                | Solution                                                            |
 |----------------------------------------|--------------------------------------|---------------------------------------------------------------------|
-| "Error: invalid pattern" on startup    | Syntax error in regex                | Check the pattern on regex101.com with Go flag                      |
+| `"Error: invalid pattern"` on startup  | Syntax error in regex                | Check the pattern on regex101.com with the Go flag                  |
 | Pattern doesn't match expected strings | Missing `(?i)` or incorrect escaping | Use `(?i)` for case-insensitive; check double slashes in YAML       |
-| Strip removes too much                 | Pattern too broad                    | Narrow it down (add `\b` or more specific characters)               |
-| Delete rejects good servers            | Pattern matches accidentally         | Make the pattern more specific (e.g., `\[SPAM\]` instead of `SPAM`) |
-
----
+| `strip` removes too much               | Pattern is too broad                 | Narrow the pattern (add `\b` or more specific characters)           |
+| `delete` rejects good servers          | Pattern matches accidentally         | Make the pattern more specific (e.g., `\[SPAM\]` instead of `SPAM`) |
 
 ## Organization Recommendations
 
 ### Rule Order
+It is recommended to order rules logically:
+1. **`strip` rules first** (cleaning up junk: versions, test markers, demo markers)
+2. **`delete` rules second** (rejecting critical issues: spam/malware, private IPs, invalid ports)
 
-It's recommended to **organize rules** logically:
-
-1. **Strip rules first** (cleanup)
-   - Versions
-   - Test markers
-   - Demo markers
-
-2. **Delete rules second** (rejection of critical issues)
-   - Spam/malware
-   - Private IPs
-   - Invalid ports
-
-```yaml
-# GOOD ORGANIZATION
-# === Strip rules (cleanup) ===
-- pattern: '\bv\d+\.\d+(\.\d+)?\b'
-  action: "strip"
-
-- pattern: '(?i)\[test(ing|ed|er)?\]'
-  action: "strip"
-
-# === Delete rules (blocking) ===
-- pattern: '(?i)\[(spam|fraud|malware)\]'
-  action: "delete"
-
-- pattern: '192\.168\.\d+\.\d+'
-  action: "delete"
-```
-
-### YAML Comments
-
+### Comments in YAML
 Use YAML comments for documentation:
-
 ```yaml
 # Remove version strings (v1.2.3, v2.0)
 - pattern: '\bv\d+\.\d+(\.\d+)?\b'
@@ -492,16 +355,14 @@ Use YAML comments for documentation:
   action: "delete"
 ```
 
----
-
 ## Conclusion
+The `badwords.yaml` file is a powerful tool for automatically cleaning and filtering subscriptions. 
+Proper configuration allows you to:
+- ✅ Keep useful servers (using `strip`)
+- ✅ Exclude spammed sources (using `delete`)
+- ✅ Ensure the cleanliness of the final list (automatic removal of versions, markers, errors)
 
-The `badwords.yaml` file is a powerful tool for **automatic cleanup and filtering** of subscriptions. Proper configuration allows you to:
+Start with simple patterns (exact words and phrases), then move on to more complex regular expressions as needed.
+If you have questions, use regex101.com for visual pattern testing.
 
-- ✅ **Keep useful servers** (using `strip`)
-- ✅ **Exclude spammed sources** (using `delete`)
-- ✅ **Ensure clean final lists** (automatic removal of versions, markers, errors)
-
-**Start with simple patterns** (exact words and phrases), then move to **more complex regular expressions** as needed.
-
-If you have questions — use **regex101.com** for visual pattern testing.
+---
