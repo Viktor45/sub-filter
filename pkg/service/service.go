@@ -102,7 +102,7 @@ type ProxyLink interface {
 
 // ServiceOptions содержит данные специфичные для приложения, требуемые для логики
 // фильтрации и слияния. Пакет main конструирует эту структуру при создании
-// сервиса чтобы избежать циклической зависимости.
+// сервиса, чтобы избежать циклической зависимости.
 type ServiceOptions struct {
 	Sources         map[string]*config.SafeSource
 	Rules           map[string]validator.Validator
@@ -122,7 +122,7 @@ type Service struct {
 	// Логгер
 	logger *logger.Logger
 
-	// Приложенческие данные, переданные из main
+	// Данные, переданные из main
 	sources         map[string]*config.SafeSource
 	rules           map[string]validator.Validator
 	badWordRules    []config.BadWordRule
@@ -193,7 +193,7 @@ func NewService(cfg *config.Config, log *logger.Logger, opts *ServiceOptions) (*
 				return &bytes.Buffer{}
 			},
 		},
-		builtinAllowedPrefixes: []string{"clash", "happ"},
+		builtinAllowedPrefixes: []string{"clash", "happ", "incy"},
 		validIDRe:              regexp.MustCompile(`^[a-zA-Z0-9_]+$`),
 		filenameCleanupRegex:   regexp.MustCompile(`[^a-zA-Z0-9._-]`),
 		validProfileNameRegex:  regexp.MustCompile(`^[a-zA-Z0-9._-]+\.txt$`),
@@ -227,7 +227,7 @@ func (s *Service) registerHandlers(mux *http.ServeMux) {
 
 // createProxyProcessors создает процессоры протоколов с использованием regex cache
 func (s *Service) createProxyProcessors() []ProxyLink {
-	// Компилиуем правила для ускорения
+	// Компилируем правила для ускорения
 	type compiledRule struct {
 		re          *regexp.Regexp
 		action      string
@@ -686,7 +686,7 @@ func (s *Service) parseCountryCodes(cParam string, countryMap map[string]utils.C
 	return validCodes, nil
 }
 
-// максимальная длина имени файла, совпадает с реализацией в main.go
+// Максимальная длина имени файла, совпадает с реализацией в main.go
 const MaxFilenameLength = 255
 
 // applyLimit возвращает первые lim строк из content, игнорируя строки-комментарии (#)
@@ -747,7 +747,6 @@ func streamProcessResponse(resp *http.Response, lineProcessor func(string) error
 	return scanner.Err()
 }
 
-// generateProfile выполняет полную логику processSource из main.go и возвращает контент
 // generateProfile выполняет полную логику processSource из main.go и возвращает контент
 func (s *Service) generateProfile(id string, countryCodes []string) (string, error) {
 	source, exists := s.sources[id]

@@ -21,7 +21,7 @@ import (
 	"sub-filter/internal/validator"
 )
 
-// SafeSource содержит URL источника и резолвнутый IP-адрес для подключения.
+// SafeSource содержит URL источника и разрешенный IP-адрес для подключения.
 type SafeSource struct {
 	URL string
 	IP  net.IP
@@ -301,7 +301,7 @@ func (c *Config) Validate() error {
 		c.Validation.CountriesFile = "./config/countries.yaml"
 	}
 
-	// Проверить наличие требуемых файлов
+	// Проверить наличие требуемых файлов.
 	// Проверяем только явно указанные файлы, не установленные по умолчанию
 	requiredFiles := []string{}
 	if c.Sources.File != "" {
