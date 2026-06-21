@@ -1,0 +1,29 @@
+# subfilter.container quadlet example
+# put in ~/.config/containers/systemd
+
+[Unit]
+Description=subfilter rootless podman container
+
+[Container]
+ContainerName=subfilter
+# Network=host
+Network=pasta:--map-gw
+PublishPort=8080:8080/udp
+CgroupsMode=no-conmon
+GroupAdd=keep-groups
+SecurityLabelDisable=true
+AutoUpdate=registry
+Image=ghcr.io/viktor45/sub-filter:latest
+# AutoUpdate=local
+# Image=localhost/my-subfilter:latest
+# NOTE: Make sure the config folder containing the configuration config.yaml exists.
+Volume=%h/sub-filter/config:/config:ro,z,shared
+Environment=SUBFILTER_CONFIG=/config/config.yaml
+Environment=SUBFILTER_PORT=8000
+Environment=LOG_LEVEL=info
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

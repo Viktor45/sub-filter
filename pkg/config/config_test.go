@@ -65,7 +65,6 @@ func TestLoggingConfig_Defaults(t *testing.T) {
 func TestLoad_WithoutFile(t *testing.T) {
 	// Test load without config file (should use defaults)
 	cfg, err := Load("nonexistent.yaml")
-
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -90,15 +89,14 @@ func TestLoad_WithoutFile(t *testing.T) {
 
 func TestLoad_EnvironmentVariables(t *testing.T) {
 	// Set environment variables
-	os.Setenv("SERVER_PORT", "9000")
+	os.Setenv("SUBFILTER_PORT", "9000")
 	os.Setenv("LOG_LEVEL", "debug")
 	defer func() {
-		os.Unsetenv("SERVER_PORT")
+		os.Unsetenv("SUBFILTER_PORT")
 		os.Unsetenv("LOG_LEVEL")
 	}()
 
 	cfg, err := Load("nonexistent.yaml")
-
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -112,11 +110,10 @@ func TestLoad_EnvironmentVariables(t *testing.T) {
 }
 
 func TestLoad_InvalidPort_InEnvironment(t *testing.T) {
-	os.Setenv("SERVER_PORT", "invalid")
-	defer os.Unsetenv("SERVER_PORT")
+	os.Setenv("SUBFILTER_PORT", "invalid")
+	defer os.Unsetenv("SUBFILTER_PORT")
 
 	cfg, err := Load("nonexistent.yaml")
-
 	// Should not error, just ignore invalid port
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -141,7 +138,6 @@ func TestValidate_Success(t *testing.T) {
 	}
 
 	err := cfg.Validate()
-
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}
@@ -212,7 +208,6 @@ func TestValidate_CreatesCacheDirectory(t *testing.T) {
 	}
 
 	err := cfg.Validate()
-
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}
@@ -238,7 +233,6 @@ func TestValidate_DefaultsCacheDirectory(t *testing.T) {
 	}
 
 	err := cfg.Validate()
-
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}
@@ -307,7 +301,6 @@ func TestValidate_DefaultsRulesFile(t *testing.T) {
 	}
 
 	err := cfg.Validate()
-
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -346,7 +339,6 @@ func TestFileExists(t *testing.T) {
 
 func TestConfig_AllDefaults(t *testing.T) {
 	cfg, err := Load("nonexistent.yaml")
-
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -428,7 +420,6 @@ cache:
 	}
 
 	cfg, err := Load(configFile)
-
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

@@ -30,14 +30,18 @@ func main() {
 	var (
 		cliMode         = flag.Bool("cli", false, "Run in CLI mode")
 		stdout          = flag.Bool("stdout", false, "Print results to stdout (CLI only)")
-		configPath      = flag.String("config", "", "Path to config file (YAML/JSON/TOML). Defaults to ./config/config.yaml if not specified.")
+		configPath      = flag.String("config", "", "Path to config file (YAML/JSON/TOML). Defaults to ./config/config.yaml or env SUBFILTER_CONFIG if not specified.")
 		countries       = flag.Bool("countries", false, "Generate ./config/countries.yaml from REST API (CLI only)")
 		countryCodesCLI = flag.String("country", "", "Filter by country codes (comma-separated, max 20), e.g. --country=AR,AE")
 		debugMode       = flag.Bool("debug", false, "Enable debug mode: verbose startup info and request logging")
 	)
 	flag.Parse()
 
-	defaultConfigPath := "./config/config.yaml"
+	defaultConfigPath := os.Getenv("SUBFILTER_CONFIG")
+	if defaultConfigPath == "" {
+		defaultConfigPath = "./config/config.yaml"
+	}
+
 	if *configPath == "" {
 		*configPath = defaultConfigPath
 	}

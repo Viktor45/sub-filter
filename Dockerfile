@@ -1,31 +1,36 @@
-# Build stage
-FROM golang:alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.4-alpine3.24 AS build
 
-# Установка зависимостей (для статической сборки с CGO=0)
-RUN apk --no-cache add ca-certificates upx binutils
+WORKDIR /src
+COPY . .
+RUN go mod download
+
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
+RUN set -eux; \
+    if [ "$TARGETARCH" = "arm" ]; then export GOARM="${TARGETVARIANT#v}"; fi; \
+    CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
+    go build -trimpath -ldflags="-s -w" -o /out/filter .
+
+FROM --platform=$BUILDPLATFORM alpine:3.24 AS certs
+
+RUN apk -U upgrade && apk add --no-cache ca-certificates \
+    && mkdir -p /app /config /tmp/cache
+
+FROM scratch
+
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=certs /app /app
+COPY --from=certs /config /config
+COPY --from=certs /tmp /tmp
+COPY --from=build /out/filter /app/filter
 
 WORKDIR /app
 
-# Копируем исходники
-COPY . .
+ENV SUBFILTER_CONFIG=/config/config.yaml
+ENV SUBFILTER_PORT=8000
+ENV LOG_LEVEL=info
 
-# Собираем статический бинарник (без CGO, с поддержкой часовых поясов)
-RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags '-w -s -extldflags "-static"' \
-    -tags timetzdata \
-    -o filter main.go
+EXPOSE 8000/tcp
 
-# Уменьшаем размер бинарника
-RUN strip --strip-all /app/filter 
-RUN upx /app/filter
-
-# Final stage
-FROM gcr.io/distroless/static-debian12
-
-# Копируем бинарник
-COPY --from=builder /app/filter /filter
-
-EXPOSE 8000
-
-# Точка входа — позволяет передавать аргументы при запуске
-ENTRYPOINT ["/filter"]
+ENTRYPOINT ["/app/filter"]

@@ -190,7 +190,7 @@ func Load(configPath string) (*Config, error) {
 	}
 
 	// Переопределить переменными окружения
-	if port := os.Getenv("SERVER_PORT"); port != "" {
+	if port := os.Getenv("SUBFILTER_PORT"); port != "" {
 		fmt.Sscanf(port, "%d", &cfg.Server.Port)
 	}
 	if level := os.Getenv("LOG_LEVEL"); level != "" {
