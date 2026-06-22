@@ -25,7 +25,6 @@
   - `/health` — GET only.
 - CLI:
   - `--cli --stdout --country=AR,AE`
-  - `--countries` генерирует `config/countries.yaml`.
 - `--country` применяется при CLI-обработке через `Service.ProcessCLI`.
 - User-Agent allowlist проверяется по встроенным префиксам и по файлу `validation.ua_file`.
 - Rate limiting на клиента (IP) жестко задано в `pkg/service/service.go`.

@@ -13,7 +13,6 @@ import (
 	"strings"
 	"syscall"
 
-	"sub-filter/internal/utils"
 	"sub-filter/pkg/config"
 	"sub-filter/pkg/logger"
 	"sub-filter/pkg/service"
@@ -31,7 +30,6 @@ func main() {
 		cliMode         = flag.Bool("cli", false, "Run in CLI mode")
 		stdout          = flag.Bool("stdout", false, "Print results to stdout (CLI only)")
 		configPath      = flag.String("config", "", "Path to config file (YAML/JSON/TOML). Defaults to ./config/config.yaml or env SUBFILTER_CONFIG if not specified.")
-		countries       = flag.Bool("countries", false, "Generate ./config/countries.yaml from REST API (CLI only)")
 		countryCodesCLI = flag.String("country", "", "Filter by country codes (comma-separated, max 20), e.g. --country=AR,AE")
 		debugMode       = flag.Bool("debug", false, "Enable debug mode: verbose startup info and request logging")
 	)
@@ -47,10 +45,6 @@ func main() {
 	}
 
 	if *cliMode {
-		if *countries {
-			utils.GenerateCountries()
-			return
-		}
 		cfg, err := config.Load(*configPath)
 		if err != nil {
 			log.Error("Failed to load configuration",
@@ -134,6 +128,7 @@ func main() {
 	if *debugMode {
 		// Количество правил в rules.yaml
 		rulesCount := len(cfg.Rules)
+		countriesCount := len(cfg.Countries)
 		// Количество badword правил по типам
 		stripCount := 0
 		deleteCount := 0
@@ -154,6 +149,7 @@ func main() {
 			"badword_replace", replaceCount,
 			"badword_delete", deleteCount,
 			"sources_count", len(cfg.SourcesMap),
+			"countries_count", countriesCount,
 		)
 	}
 
