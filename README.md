@@ -6,7 +6,7 @@
 _VLESS · VMess · Trojan · Shadowsocks · Hysteria2_
 
 [![GitHub Release](https://img.shields.io/github/v/release/viktor45/sub-filter?style=flat&color=blue)](https://github.com/viktor45/sub-filter/releases/latest)
-[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/viktor45/sub-filter/ko-container.yaml?style=flat)](https://github.com/Viktor45/sub-filter/actions/workflows/ko-container.yaml)
+[![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/viktor45/sub-filter/container.yaml?style=flat)](https://github.com/Viktor45/sub-filter/actions/workflows/container.yaml)
 [![License](https://img.shields.io/badge/License-AGPLv3-green.svg)](LICENSE)
 [![Docker Image](https://img.shields.io/badge/Docker-ghcr.io%2Fviktor45%2Fsub--filter-blue?logo=docker)](https://github.com/viktor45/sub-filter/pkgs/container/sub-filter)
 [![en](https://img.shields.io/badge/lang-en-blue)](https://github.com/viktor45/sub-filter/blob/main/docs/README_en.md)
@@ -38,7 +38,7 @@ The result is a ready-to-use subscription for **Clash, Sing-Box, routers, and ot
 ## 📚 Documentation
 
 | Topic                 | Links                                                                                      |
-|-----------------------|--------------------------------------------------------------------------------------------|
+| --------------------- | ------------------------------------------------------------------------------------------ |
 | **Main Guide**        | [EN](docs/README_en.md) · [RU](docs/README.md) · [ZH](docs/README_zh.md)                   |
 | **FAQ**               | [EN](docs/FAQ_en.md) · [RU](docs/FAQ.md) · [ZH](docs/FAQ_zh.md)                            |
 | **Validation Rules**  | [EN](docs/FILTER_RULES_en.md) · [RU](docs/FILTER_RULES.md) · [ZH](docs/FILTER_RULES_zh.md) |
