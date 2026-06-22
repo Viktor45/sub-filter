@@ -153,11 +153,11 @@ func Load(configPath string) (*Config, error) {
 				cfg.Validation.RulesFile = v
 			}
 			// старое имя без underscore
-			if v, ok := flat["badwords_file"].(string); ok && cfg.Validation.BadWordsFile == "" {
-				cfg.Validation.BadWordsFile = v
-			}
 			if v, ok := flat["bad_words_file"].(string); ok && cfg.Validation.BadWordsFile == "" {
 				cfg.Validation.BadWordsFile = v
+			}
+			if v, ok := flat["countries_file"].(string); ok && cfg.Validation.CountriesFile == "" {
+				cfg.Validation.CountriesFile = v
 			}
 			if v, ok := flat["uagent_file"].(string); ok && cfg.Validation.UAFile == "" {
 				cfg.Validation.UAFile = v
