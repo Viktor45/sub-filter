@@ -60,7 +60,7 @@ func (rc *RegexCache) Clear() {
 // Size возвращает количество кэшированных регулярных выражений
 func (rc *RegexCache) Size() int {
 	count := 0
-	rc.cache.Range(func(key, value interface{}) bool {
+	rc.cache.Range(func(key, value any) bool {
 		count++
 		return true
 	})

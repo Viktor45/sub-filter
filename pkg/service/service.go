@@ -16,6 +16,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -189,7 +190,7 @@ func NewService(cfg *config.Config, log *logger.Logger, opts *ServiceOptions) (*
 		debug:           opts.Debug,
 		regexCache:      cache.NewRegexCache(),
 		bufferPool: sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return &bytes.Buffer{}
 			},
 		},
@@ -470,13 +471,7 @@ func (s *Service) isValidUserAgent(ua string) bool {
 	}
 
 	// Проверяем по списку из конфига
-	for _, allowed := range s.cfg.Validation.AllowedUserAgents {
-		if ua == allowed {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(s.cfg.Validation.AllowedUserAgents, ua)
 }
 
 // handleHealth обрабатывает запросы на проверку здоровья сервиса
@@ -695,7 +690,7 @@ func applyLimit(content []byte, lim int) []byte {
 		return content
 	}
 	var out []byte
-	for _, line := range bytes.Split(content, []byte("\n")) {
+	for line := range bytes.SplitSeq(content, []byte("\n")) {
 		trim := bytes.TrimSpace(line)
 		if len(trim) == 0 || trim[0] == '#' {
 			continue
@@ -808,8 +803,8 @@ func (s *Service) generateProfile(id string, countryCodes []string) (string, err
 	var out []string
 	var rejectedLines []string
 	rejectedLines = append(rejectedLines, "## Source: "+source.URL)
-	lines := bytes.Split(origContent, []byte("\n"))
-	for _, lineBytes := range lines {
+	lines := bytes.SplitSeq(origContent, []byte("\n"))
+	for lineBytes := range lines {
 		originalLine := strings.TrimRight(string(lineBytes), "\r\n")
 		if originalLine == "" || strings.HasPrefix(originalLine, "#") {
 			continue
@@ -1044,10 +1039,7 @@ func (s *Service) Merge(ids []string, countryCodes []string, lim int) ([]byte, e
 	if len(countryCodes) > 0 {
 		profileName += "_" + strings.Join(countryCodes, "_")
 	}
-	updateInterval := int(s.cfg.Cache.TTL.Seconds() / 3600)
-	if updateInterval < 1 {
-		updateInterval = 1
-	}
+	updateInterval := max(int(s.cfg.Cache.TTL.Seconds()/3600), 1)
 	profileTitle := fmt.Sprintf("#profile-title: %s", profileName)
 	profileInterval := fmt.Sprintf("#profile-update-interval: %d", updateInterval)
 	finalContent := strings.Join(append([]string{profileTitle, profileInterval, ""}, finalLines...), "\n")
@@ -1146,7 +1138,7 @@ func (s *Service) processSourceToBuckets(id string, source *config.SafeSource, c
 
 // buildProfileHeader формирует заголовок профиля
 func buildProfileHeader(name, id string, countryCodes []string) string {
-	header := fmt.Sprintf("#profile-title: %s", name)
+	header := fmt.Sprintf("#profile-title: %s (%s)", name, id)
 	if len(countryCodes) > 0 {
 		header += " (" + strings.Join(countryCodes, ",") + ")"
 	}
@@ -1155,10 +1147,7 @@ func buildProfileHeader(name, id string, countryCodes []string) string {
 
 // buildProfileInterval формирует строку с указанием интервала обновления
 func buildProfileInterval(ttl time.Duration) string {
-	interval := int(ttl.Seconds() / 3600)
-	if interval < 1 {
-		interval = 1
-	}
+	interval := max(int(ttl.Seconds()/3600), 1)
 	return fmt.Sprintf("#profile-update-interval: %d", interval)
 }
 
@@ -1170,7 +1159,7 @@ func (s *Service) fetchSourceContent(id string, source *config.SafeSource, origC
 			if content, err := os.ReadFile(origCache); err == nil {
 				// Если lineProcessor предоставлен, обработаем кэшированный контент
 				if lineProcessor != nil {
-					for _, line := range strings.Split(strings.TrimSpace(string(content)), "\n") {
+					for line := range strings.SplitSeq(strings.TrimSpace(string(content)), "\n") {
 						if err := lineProcessor(line); err != nil {
 							return nil, err
 						}
@@ -1200,7 +1189,7 @@ func (s *Service) fetchSourceContent(id string, source *config.SafeSource, origC
 	client := createHTTPClientWithDialContext(parsedSource.Hostname(), dialFunc)
 
 	if lineProcessor != nil {
-		_, err, _ := s.fetchGroup.Do(id, func() (interface{}, error) {
+		_, err, _ := s.fetchGroup.Do(id, func() (any, error) {
 			req, err := http.NewRequest("GET", source.URL, nil)
 			if err != nil {
 				return nil, errors.NetworkError("create request", err).
@@ -1235,7 +1224,7 @@ func (s *Service) fetchSourceContent(id string, source *config.SafeSource, origC
 		return nil, err
 	}
 
-	result, err, _ := s.fetchGroup.Do(id, func() (interface{}, error) {
+	result, err, _ := s.fetchGroup.Do(id, func() (any, error) {
 		req, err := http.NewRequest("GET", source.URL, nil)
 		if err != nil {
 			return nil, errors.NetworkError("create request", err).
@@ -1367,7 +1356,7 @@ func parseIDs(rawIDs []string) []string {
 	var ids []string
 	seen := make(map[string]bool)
 	for _, raw := range rawIDs {
-		for _, part := range strings.Split(raw, ",") {
+		for part := range strings.SplitSeq(raw, ",") {
 			id := strings.TrimSpace(part)
 			if id == "" {
 				continue

@@ -33,7 +33,7 @@ func ParamsFromValues(vals url.Values) map[string]string {
 
 // ParamsFromInterface конвертирует map[string]interface{} в map[string]string.
 // Используется для структур типа JSON -> строковые параметры.
-func ParamsFromInterface(src map[string]interface{}) map[string]string {
+func ParamsFromInterface(src map[string]any) map[string]string {
 	if src == nil {
 		return map[string]string{}
 	}

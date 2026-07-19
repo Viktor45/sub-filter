@@ -11,7 +11,7 @@ We’re committed to building a community that is kind, respectful, inclusive, a
 ✅ Be kind and understanding  
 ✅ Respect people who think or act differently than you  
 ✅ Give helpful feedback—and accept it gracefully when it’s given to you  
-✅ Own up to mistakes, say sorry when needed, and learn from them  
+✅ Own up to mistakes, apologize when needed, and learn from them  
 ✅ Think about what’s best for the whole community, not just yourself
 
 ## What’s Not Okay

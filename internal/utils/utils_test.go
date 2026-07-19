@@ -331,7 +331,7 @@ func TestCompareAndSelectBetter(t *testing.T) {
 			Host:   fmt.Sprintf("%s:%d", host, port),
 		}
 		q := u.Query()
-		for i := 0; i < params; i++ {
+		for i := range params {
 			q.Set(fmt.Sprintf("param%d", i), fmt.Sprintf("value%d", i))
 		}
 		u.RawQuery = q.Encode()

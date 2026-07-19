@@ -63,7 +63,7 @@ func (v *VMessLink) Process(s string) (string, string) {
 	if err != nil {
 		return "", "invalid VMess base64 encoding"
 	}
-	var vm map[string]interface{}
+	var vm map[string]any
 	if err := json.Unmarshal(decoded, &vm); err != nil {
 		return "", "invalid VMess JSON format"
 	}

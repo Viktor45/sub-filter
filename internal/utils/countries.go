@@ -180,8 +180,8 @@ func GetCountryFilterStrings(countryCode string, countryMap map[string]CountryIn
 		searchTerms = append(searchTerms, info.Name)
 	}
 	if info.Native != "" {
-		parts := strings.Split(info.Native, "|")
-		for _, part := range parts {
+		parts := strings.SplitSeq(info.Native, "|")
+		for part := range parts {
 			if part != "" {
 				searchTerms = append(searchTerms, part)
 			}

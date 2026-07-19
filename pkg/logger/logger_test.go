@@ -112,7 +112,7 @@ func TestLogger_ErrorWithContext(t *testing.T) {
 	var buf bytes.Buffer
 	logger := NewTextLogger(&buf, slog.LevelError)
 
-	fields := map[string]interface{}{
+	fields := map[string]any{
 		"sourceID": "source1",
 		"url":      "http://example.com",
 	}
@@ -130,7 +130,7 @@ func TestLogger_InfoWithContext(t *testing.T) {
 	var buf bytes.Buffer
 	logger := NewTextLogger(&buf, slog.LevelInfo)
 
-	fields := map[string]interface{}{
+	fields := map[string]any{
 		"operation": "fetch",
 		"duration":  "100ms",
 	}
@@ -147,7 +147,7 @@ func TestLogger_DebugWithContext(t *testing.T) {
 	var buf bytes.Buffer
 	logger := NewTextLogger(&buf, slog.LevelDebug)
 
-	fields := map[string]interface{}{
+	fields := map[string]any{
 		"step": "parsing",
 		"line": 42,
 	}
@@ -277,7 +277,7 @@ func TestLogger_MultipleFields(t *testing.T) {
 	var buf bytes.Buffer
 	logger := NewTextLogger(&buf, slog.LevelInfo)
 
-	fields := map[string]interface{}{
+	fields := map[string]any{
 		"sourceID": "src1",
 		"url":      "http://example.com",
 		"status":   200,

@@ -43,13 +43,13 @@ const (
 
 // FilterError - основной тип ошибки, используемый во всём приложении
 type FilterError struct {
-	Code      ErrorCode              // Категория ошибки
-	Category  string                 // Тип ошибки, например "Parse", "HTTP", "Cache"
-	Message   string                 // Человекочитаемое сообщение об ошибке
-	Err       error                  // Обёрнутая ошибка (может быть nil)
-	Severity  Severity               // Уровень серьёзности ошибки
-	Timestamp time.Time              // Время возникновения ошибки
-	Context   map[string]interface{} // Дополнительный контекст (sourceID, URL и т.д.)
+	Code      ErrorCode      // Категория ошибки
+	Category  string         // Тип ошибки, например "Parse", "HTTP", "Cache"
+	Message   string         // Человекочитаемое сообщение об ошибке
+	Err       error          // Обёрнутая ошибка (может быть nil)
+	Severity  Severity       // Уровень серьёзности ошибки
+	Timestamp time.Time      // Время возникновения ошибки
+	Context   map[string]any // Дополнительный контекст (sourceID, URL и т.д.)
 }
 
 // Error реализует интерфейс error
@@ -73,7 +73,7 @@ func NewFilterError(code ErrorCode, category, message string) *FilterError {
 		Message:   message,
 		Severity:  SeverityError,
 		Timestamp: time.Now(),
-		Context:   make(map[string]interface{}),
+		Context:   make(map[string]any),
 	}
 }
 
@@ -84,7 +84,7 @@ func (e *FilterError) WithCause(err error) *FilterError {
 }
 
 // WithContext добавляет контекстную информацию
-func (e *FilterError) WithContext(key string, value interface{}) *FilterError {
+func (e *FilterError) WithContext(key string, value any) *FilterError {
 	e.Context[key] = value
 	return e
 }

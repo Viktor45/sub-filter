@@ -431,11 +431,11 @@ func TestRateLimiterConcurrency(t *testing.T) {
 
 	done := make(chan bool, numGoroutines)
 
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		go func(id int) {
 			// Simulate concurrent rate limiter access
 			// In actual code, getLimiter() would return a rate limiter for this IP
-			for j := 0; j < numRequests; j++ {
+			for j := range numRequests {
 				_ = j // Placeholder for actual rate limit check
 			}
 			done <- true
@@ -445,7 +445,7 @@ func TestRateLimiterConcurrency(t *testing.T) {
 	// Wait for all goroutines to complete
 	timeout := time.After(5 * time.Second)
 	completed := 0
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		select {
 		case <-done:
 			completed++

@@ -191,7 +191,7 @@ func TestService_ValidateClientRequest_RateLimit(t *testing.T) {
 	// Проверяем, что по крайней мереหนึ่ง запрос будет ограничен rate limiter'ом.
 	allowed := 0
 	limited := 0
-	for i := 0; i < 25; i++ {
+	for i := range 25 {
 		req := httptest.NewRequest("GET", "/test", nil)
 		req.Header.Set("User-Agent", "test-agent")
 		req.RemoteAddr = "192.168.1.1:12345"

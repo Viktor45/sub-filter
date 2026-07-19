@@ -144,7 +144,7 @@ func Load(configPath string) (*Config, error) {
 		}
 
 		// Поддержка legacy плоского формата ключей (sources_file, rules_file и т.д.)
-		var flat map[string]interface{}
+		var flat map[string]any
 		if err := yaml.Unmarshal(data, &flat); err == nil {
 			if v, ok := flat["sources_file"].(string); ok && cfg.Sources.File == "" {
 				cfg.Sources.File = v

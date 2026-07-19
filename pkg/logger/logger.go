@@ -69,8 +69,8 @@ func ParseLevel(s string) slog.Level {
 // Методы удобства для часто используемых паттернов
 
 // ErrorWithContext логирует ошибку с контекстной информацией
-func (l *Logger) ErrorWithContext(msg string, err error, fields map[string]interface{}) {
-	args := []interface{}{slog.Any("error", err)}
+func (l *Logger) ErrorWithContext(msg string, err error, fields map[string]any) {
+	args := []any{slog.Any("error", err)}
 	for k, v := range fields {
 		args = append(args, slog.Any(k, v))
 	}
@@ -78,8 +78,8 @@ func (l *Logger) ErrorWithContext(msg string, err error, fields map[string]inter
 }
 
 // InfoWithContext логирует информацию с контекстной информацией
-func (l *Logger) InfoWithContext(msg string, fields map[string]interface{}) {
-	args := []interface{}{}
+func (l *Logger) InfoWithContext(msg string, fields map[string]any) {
+	args := []any{}
 	for k, v := range fields {
 		args = append(args, slog.Any(k, v))
 	}
@@ -87,8 +87,8 @@ func (l *Logger) InfoWithContext(msg string, fields map[string]interface{}) {
 }
 
 // DebugWithContext логирует отладку с контекстной информацией
-func (l *Logger) DebugWithContext(msg string, fields map[string]interface{}) {
-	args := []interface{}{}
+func (l *Logger) DebugWithContext(msg string, fields map[string]any) {
+	args := []any{}
 	for k, v := range fields {
 		args = append(args, slog.Any(k, v))
 	}
