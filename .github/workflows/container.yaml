@@ -85,7 +85,7 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/arm/v7
 
       - name: Attest
-        uses: actions/attest@v4.2.0
+        uses: actions/attest@v4.2.2
         id: attest
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
