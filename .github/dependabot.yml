@@ -9,11 +9,22 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    ignore:
+      - dependency-name: "*"
+        versions: ["*rc*", "*beta*", "*alpha*"]
+
   - package-ecosystem: "github-actions"
     directory: "/" # workflow files
     schedule:
       interval: "weekly"
+    ignore:
+      - dependency-name: "*"
+        versions: ["*rc*", "*beta*", "*alpha*"]
+
   - package-ecosystem: "docker"
     directory: "/" # Dockerfile at repo root
     schedule:
       interval: "weekly"
+    ignore:
+      - dependency-name: "*"
+        versions: ["*rc*", "*beta*", "*alpha*"]
