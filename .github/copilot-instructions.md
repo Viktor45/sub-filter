@@ -2,6 +2,11 @@
 
 Короткие, практичные указания для агент-ассистентов, работающих в этом репозитории.
 
+**Требуется:** Go 1.26.0 или выше  
+**Команда тестов:** `go test ./...`  
+**Сборка:** `go build -o sub-filter .`  
+**Запуск:** `./sub-filter` или с флагом `--cli` для CLI-режима
+
 ## Коротко о проекте
 
 - Язык: Go (module `sub-filter`). Сборка/зависимости через `go mod`.
@@ -38,10 +43,14 @@
 
 ## Что менять с осторожностью
 
-- Не менять `isValidUserAgent` и связанные User-Agent правила без проверки — это защита от ботов.
-- Не менять параметры rate limiter (`limiterBurst`, `limiterEvery`) без реального тестирования.
+- ⚠️ **Не менять `isValidUserAgent` и связанные User-Agent правила без проверки** — это критическая защита от ботов.
+- ⚠️ **Не менять параметры rate limiter** (`limiterBurst`, `limiterEvery`) без реального тестирования.
 - Не нарушать синхронизацию схемы config и документации.
 - Изменения в дедупликации должны учитывать `internal/utils.NormalizeLinkKey` и `CompareAndSelectBetter`.
+
+## Go стандарты разработки
+
+См. [.github/instructions/go.instructions.md](.github/instructions/go.instructions.md) для идиоматичного Go, соглашений об именах и стандартов code review используемых в проекте.
 
 ## PR формат
 

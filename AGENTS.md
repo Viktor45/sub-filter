@@ -2,6 +2,11 @@
 
 Repository guidance for coding agents working in `sub-filter`.
 
+**Required:** Go 1.26.0 or higher
+**Test Command:** `go test ./...`
+**Build:** `go build -o sub-filter .`
+**Run:** `./sub-filter` or with `--cli` flag for CLI mode
+
 ## Purpose
 
 `sub-filter` is a Go CLI/service application that fetches proxy subscription sources, validates and normalizes proxy links, filters bad words, applies optional country filtering, deduplicates and merges subscriptions, and exposes results via HTTP endpoints or CLI output.
@@ -55,11 +60,11 @@ Primary behaviors:
 - `/merge`
 - `/health`
 
-Request protections:
+Request protections (⚠️ **Security-Critical**):
 
-- User-Agent allowlist
-- per-IP rate limiting
-- strict source ID validation (`^[a-zA-Z0-9_]+$`, max length 64)
+- **User-Agent allowlist** — validates requests against built-in prefixes and optional file; do not weaken without security review
+- **per-IP rate limiting** — prevents abuse; configurable but defaults are intentional
+- **strict source ID validation** — enforces `^[a-zA-Z0-9_]+$`, max length 64
 
 ## CLI Surface
 
@@ -112,9 +117,14 @@ Important nested fields:
 
 ## Tests
 
-- `go test ./...`
-- `go test ./pkg/service ./pkg/config ./internal/validator`
-- `go test ./ss ./vless ./vmess ./trojan ./hysteria2`
+- `go test ./...` — run all tests
+- `go test ./pkg/service ./pkg/config ./internal/validator` — test core packages
+- `go test ./ss ./vless ./vmess ./trojan ./hysteria2` — test protocol implementations
+- `go test -race ./...` — test for race conditions
+
+## Go Development Standards
+
+Refer to [.github/instructions/go.instructions.md](.github/instructions/go.instructions.md) for idiomatic Go practices, naming conventions, and code review standards used in this project.
 
 ## Files worth reading first
 
