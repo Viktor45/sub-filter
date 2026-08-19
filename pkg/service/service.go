@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -498,6 +500,725 @@ func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// formatContent преобразует содержимое в требуемый формат (yaml, base64 или обычный текст).
+// Возвращает ошибку при недопустимом значении format.
+func formatContent(content []byte, formatStr string) ([]byte, string, error) {
+	// формат может быть: yaml, base64, yaml+base64, base64+yaml или пусто (по умолчанию)
+	format := strings.ToLower(strings.TrimSpace(formatStr))
+	if format == "" {
+		return content, "text/plain; charset=utf-8", nil
+	}
+
+	// Валидация: допускаются только токены yaml и base64, разделённые "+"
+	for _, token := range strings.Split(format, "+") {
+		token = strings.TrimSpace(token)
+		if token != "yaml" && token != "base64" {
+			return nil, "", fmt.Errorf("invalid format %q: allowed values are yaml, base64 or their combination (e.g. yaml+base64)", formatStr)
+		}
+	}
+
+	var result []byte
+	contentType := "text/plain; charset=utf-8"
+
+	// Проверяем наличие yaml формата
+	if strings.Contains(format, "yaml") {
+		result = contentToYAML(content)
+		contentType = "application/x-yaml; charset=utf-8"
+	} else {
+		result = content
+	}
+
+	// Проверяем наличие base64 кодирования
+	if strings.Contains(format, "base64") {
+		result = []byte(base64.StdEncoding.EncodeToString(result))
+		contentType = "application/octet-stream"
+	}
+
+	return result, contentType, nil
+}
+
+// contentToYAML преобразует список прокси-ссылок в YAML формат для Clash/Mihomo.
+// Игнорирует комментарии, пустые строки и неподдерживаемые схемы.
+func contentToYAML(content []byte) []byte {
+	lines := bytes.Split(bytes.TrimSpace(content), []byte("\n"))
+
+	var result bytes.Buffer
+	result.WriteString("proxies:\n")
+
+	proxyIndex := 0
+	for _, line := range lines {
+		line = bytes.TrimSpace(line)
+
+		// Пропускаем пустые строки и комментарии
+		if len(line) == 0 || bytes.HasPrefix(line, []byte("#")) {
+			continue
+		}
+
+		yamlBlock := parseProxyToYAML(string(line), proxyIndex)
+		if yamlBlock != "" {
+			result.WriteString(yamlBlock)
+			proxyIndex++
+		}
+	}
+
+	// Если нет прокси, возвращаем минимальный YAML
+	if proxyIndex == 0 {
+		return []byte("proxies: []")
+	}
+
+	return result.Bytes()
+}
+
+// parseProxyToYAML парсит прокси URL и создает YAML блок для Clash/Meta.
+// Возвращает пустую строку для комментариев, невалидных URL и неподдерживаемых схем.
+func parseProxyToYAML(proxyURL string, index int) string {
+	proxyURL = strings.TrimSpace(proxyURL)
+	if proxyURL == "" || strings.HasPrefix(proxyURL, "#") {
+		return ""
+	}
+
+	u, err := url.Parse(proxyURL)
+	if err != nil {
+		return ""
+	}
+
+	scheme := strings.ToLower(u.Scheme)
+	params := u.Query()
+
+	// Поддерживаются только известные протоколы; остальные пропускаются,
+	// чтобы не искажать профиль фиктивными записями.
+	switch scheme {
+	case "ss", "vless", "vmess", "trojan", "hy2", "hysteria2":
+	default:
+		return ""
+	}
+
+	name := extractProxyName(proxyURL, index)
+	var sb strings.Builder
+	sb.WriteString("  - name: ")
+	sb.WriteString(yamlQuote(name))
+	sb.WriteString("\n    type: ")
+
+	switch scheme {
+	case "ss":
+		return buildSSYAML(&sb, u, params)
+	case "vless":
+		return buildVLESSYAML(&sb, u, params)
+	case "vmess":
+		return buildVMESSYAML(&sb, proxyURL)
+	case "trojan":
+		return buildTrojanYAML(&sb, u, params)
+	default: // hy2, hysteria2
+		return buildHysteria2YAML(&sb, u, params)
+	}
+}
+
+// yamlQuote экранирует строку для безопасной вставки в YAML в двойных кавычках.
+func yamlQuote(s string) string {
+	var sb strings.Builder
+	sb.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '"':
+			sb.WriteString(`\"`)
+		case '\\':
+			sb.WriteString(`\\`)
+		case '\n':
+			sb.WriteString(`\n`)
+		case '\r':
+			sb.WriteString(`\r`)
+		case '\t':
+			sb.WriteString(`\t`)
+		default:
+			sb.WriteRune(r)
+		}
+	}
+	sb.WriteByte('"')
+	return sb.String()
+}
+
+// buildSSYAML создает YAML для Shadowsocks прокси.
+// Нормализатор ss/ss.go кодирует userinfo как base64(cipher:password),
+// поэтому userinfo необходимо декодировать.
+func buildSSYAML(sb *strings.Builder, u *url.URL, params url.Values) string {
+	sb.WriteString("ss\n")
+
+	// Декодируем userinfo (base64 от cipher:password)
+	var cipher, password string
+	if userinfo := u.User.String(); userinfo != "" {
+		if decoded, err := utils.DecodeUserInfo(userinfo); err == nil {
+			if parts := strings.SplitN(string(decoded), ":", 2); len(parts) == 2 {
+				cipher, password = parts[0], parts[1]
+			}
+		}
+	}
+
+	sb.WriteString("    server: ")
+	sb.WriteString(yamlQuote(u.Hostname()))
+	sb.WriteString("\n")
+
+	if port := u.Port(); port != "" {
+		sb.WriteString("    port: ")
+		sb.WriteString(port)
+		sb.WriteString("\n")
+	}
+
+	if cipher != "" {
+		sb.WriteString("    cipher: ")
+		sb.WriteString(cipher)
+		sb.WriteString("\n")
+	}
+
+	if password != "" {
+		sb.WriteString("    password: ")
+		sb.WriteString(yamlQuote(password))
+		sb.WriteString("\n")
+	}
+
+	// Опциональные параметры
+	if obfs := params.Get("obfs"); obfs != "" {
+		sb.WriteString("    plugin: obfs\n")
+		sb.WriteString("    plugin-opts:\n")
+		sb.WriteString("      mode: ")
+		sb.WriteString(obfs)
+		sb.WriteString("\n")
+	}
+
+	if udp := params.Get("udp"); udp == "1" || udp == "true" {
+		sb.WriteString("    udp: true\n")
+	}
+
+	return sb.String()
+}
+
+// buildVLESSYAML создает YAML для VLESS прокси.
+// Поддерживает TLS/REALITY и транспорты ws/grpc/httpupgrade.
+func buildVLESSYAML(sb *strings.Builder, u *url.URL, params url.Values) string {
+	sb.WriteString("vless\n")
+
+	sb.WriteString("    server: ")
+	sb.WriteString(yamlQuote(u.Hostname()))
+	sb.WriteString("\n")
+
+	if port := u.Port(); port != "" {
+		sb.WriteString("    port: ")
+		sb.WriteString(port)
+		sb.WriteString("\n")
+	}
+
+	// UUID из userinfo
+	if uuid := u.User.Username(); uuid != "" {
+		sb.WriteString("    uuid: ")
+		sb.WriteString(yamlQuote(uuid))
+		sb.WriteString("\n")
+	}
+
+	// Определяем network: канонический параметр Xray — type, network — запасной
+	network := params.Get("type")
+	if network == "" {
+		network = params.Get("network")
+	}
+	if network == "" {
+		network = "tcp"
+	}
+	sb.WriteString("    network: ")
+	sb.WriteString(network)
+	sb.WriteString("\n")
+
+	// TLS и REALITY
+	switch security := params.Get("security"); security {
+	case "tls":
+		sb.WriteString("    tls: true\n")
+		if sni := params.Get("sni"); sni != "" {
+			sb.WriteString("    servername: ")
+			sb.WriteString(yamlQuote(sni))
+			sb.WriteString("\n")
+		}
+	case "reality":
+		sb.WriteString("    tls: true\n")
+		if sni := params.Get("sni"); sni != "" {
+			sb.WriteString("    servername: ")
+			sb.WriteString(yamlQuote(sni))
+			sb.WriteString("\n")
+		}
+		sb.WriteString("    reality-opts:\n")
+		if pbk := params.Get("pbk"); pbk != "" {
+			sb.WriteString("      public-key: ")
+			sb.WriteString(yamlQuote(pbk))
+			sb.WriteString("\n")
+		}
+		if sid := params.Get("sid"); sid != "" {
+			sb.WriteString("      short-id: ")
+			sb.WriteString(yamlQuote(sid))
+			sb.WriteString("\n")
+		}
+		if fp := params.Get("fp"); fp != "" {
+			sb.WriteString("    client-fingerprint: ")
+			sb.WriteString(fp)
+			sb.WriteString("\n")
+		}
+	}
+
+	// ALPN
+	writeALPN(sb, params)
+
+	// Flow (XTLS)
+	if flow := params.Get("flow"); flow != "" {
+		sb.WriteString("    flow: ")
+		sb.WriteString(yamlQuote(flow))
+		sb.WriteString("\n")
+	}
+
+	// Параметры транспорта
+	writeTransportOpts(sb, network, params)
+
+	if udp := params.Get("udp"); udp == "1" || udp == "true" {
+		sb.WriteString("    udp: true\n")
+	}
+
+	return sb.String()
+}
+
+// writeTransportOpts добавляет опции транспорта (ws/httpupgrade, grpc, xhttp) в YAML блок.
+func writeTransportOpts(sb *strings.Builder, network string, params url.Values) {
+	switch network {
+	case "ws", "httpupgrade":
+		pathVal := params.Get("path")
+		hostVal := params.Get("host")
+		if pathVal == "" && hostVal == "" {
+			return
+		}
+		sb.WriteString("    ws-opts:\n")
+		if pathVal != "" {
+			sb.WriteString("      path: ")
+			sb.WriteString(yamlQuote(pathVal))
+			sb.WriteString("\n")
+		}
+		if hostVal != "" {
+			sb.WriteString("      headers:\n")
+			sb.WriteString("        Host: ")
+			sb.WriteString(yamlQuote(hostVal))
+			sb.WriteString("\n")
+		}
+	case "grpc":
+		if sn := params.Get("serviceName"); sn != "" {
+			sb.WriteString("    grpc-opts:\n")
+			sb.WriteString("      grpc-service-name: ")
+			sb.WriteString(yamlQuote(sn))
+			sb.WriteString("\n")
+		}
+	case "xhttp":
+		pathVal := params.Get("path")
+		hostVal := params.Get("host")
+		if pathVal == "" && hostVal == "" {
+			return
+		}
+		sb.WriteString("    xhttp-opts:\n")
+		if pathVal != "" {
+			sb.WriteString("      path: ")
+			sb.WriteString(yamlQuote(pathVal))
+			sb.WriteString("\n")
+		}
+		if hostVal != "" {
+			sb.WriteString("      extra-headers:\n")
+			sb.WriteString("        Host: ")
+			sb.WriteString(yamlQuote(hostVal))
+			sb.WriteString("\n")
+		}
+	}
+}
+
+// writeALPN добавляет список ALPN-протоколов в YAML блок.
+func writeALPN(sb *strings.Builder, params url.Values) {
+	alpn := params.Get("alpn")
+	if alpn == "" {
+		return
+	}
+	var list []string
+	for _, v := range strings.Split(alpn, ",") {
+		if v = strings.TrimSpace(v); v != "" {
+			list = append(list, v)
+		}
+	}
+	if len(list) == 0 {
+		return
+	}
+	sb.WriteString("    alpn:\n")
+	for _, v := range list {
+		sb.WriteString("      - ")
+		sb.WriteString(yamlQuote(v))
+		sb.WriteString("\n")
+	}
+}
+
+// isInsecureFlag проверяет legacy-флаги пропуска проверки сертификата
+// (insecure/allowInsecure в разных регистрах).
+func isInsecureFlag(params url.Values) bool {
+	for _, key := range []string{"insecure", "allowInsecure", "allowinsecure"} {
+		if v := params.Get(key); v == "1" || strings.EqualFold(v, "true") {
+			return true
+		}
+	}
+	return false
+}
+
+// vmessPayload возвращает base64-payload VMess-ссылки без префикса схемы и фрагмента.
+func vmessPayload(proxyURL string) string {
+	payload := strings.TrimPrefix(proxyURL, "vmess://")
+	if idx := strings.IndexByte(payload, '#'); idx != -1 {
+		payload = payload[:idx]
+	}
+	return payload
+}
+
+// buildVMESSYAML создает YAML для VMess прокси.
+// Нормализатор vmess/vmess.go отдает vmess://BASE64(JSON) (v2rayN-формат),
+// поэтому конфигурация извлекается из декодированного JSON payload.
+func buildVMESSYAML(sb *strings.Builder, proxyURL string) string {
+	decoded, err := utils.DecodeUserInfo(vmessPayload(proxyURL))
+	if err != nil {
+		return ""
+	}
+	var vm map[string]any
+	if err := json.Unmarshal(decoded, &vm); err != nil {
+		return ""
+	}
+
+	sb.WriteString("vmess\n")
+
+	// Адрес сервера
+	add, _ := vm["add"].(string)
+	sb.WriteString("    server: ")
+	sb.WriteString(yamlQuote(add))
+	sb.WriteString("\n")
+
+	// Порт может быть числом или строкой
+	switch p := vm["port"].(type) {
+	case float64:
+		sb.WriteString("    port: ")
+		sb.WriteString(strconv.Itoa(int(p)))
+		sb.WriteString("\n")
+	case string:
+		if port, err := strconv.Atoi(p); err == nil {
+			sb.WriteString("    port: ")
+			sb.WriteString(strconv.Itoa(port))
+			sb.WriteString("\n")
+		}
+	}
+
+	// UUID
+	if id, _ := vm["id"].(string); id != "" {
+		sb.WriteString("    uuid: ")
+		sb.WriteString(yamlQuote(id))
+		sb.WriteString("\n")
+	}
+
+	// Alter ID (по умолчанию 0)
+	alterID := 0
+	switch a := vm["aid"].(type) {
+	case float64:
+		alterID = int(a)
+	case string:
+		if v, err := strconv.Atoi(a); err == nil {
+			alterID = v
+		}
+	}
+	sb.WriteString("    alterId: ")
+	sb.WriteString(strconv.Itoa(alterID))
+	sb.WriteString("\n")
+
+	// Шифрование (по умолчанию auto)
+	cipher, _ := vm["scy"].(string)
+	if cipher == "" {
+		cipher = "auto"
+	}
+	sb.WriteString("    cipher: ")
+	sb.WriteString(cipher)
+	sb.WriteString("\n")
+
+	// Транспорт
+	network, _ := vm["net"].(string)
+	if network != "" {
+		sb.WriteString("    network: ")
+		sb.WriteString(network)
+		sb.WriteString("\n")
+	}
+
+	// TLS
+	if tlsVal, _ := vm["tls"].(string); tlsVal == "tls" {
+		sb.WriteString("    tls: true\n")
+		if sni, _ := vm["sni"].(string); sni != "" {
+			sb.WriteString("    servername: ")
+			sb.WriteString(yamlQuote(sni))
+			sb.WriteString("\n")
+		}
+	}
+
+	// Параметры транспорта
+	switch network {
+	case "ws", "httpupgrade":
+		pathVal, _ := vm["path"].(string)
+		hostVal, _ := vm["host"].(string)
+		if pathVal != "" || hostVal != "" {
+			sb.WriteString("    ws-opts:\n")
+			if pathVal != "" {
+				sb.WriteString("      path: ")
+				sb.WriteString(yamlQuote(pathVal))
+				sb.WriteString("\n")
+			}
+			if hostVal != "" {
+				sb.WriteString("      headers:\n")
+				sb.WriteString("        Host: ")
+				sb.WriteString(yamlQuote(hostVal))
+				sb.WriteString("\n")
+			}
+		}
+	case "grpc":
+		if sn, _ := vm["serviceName"].(string); sn != "" {
+			sb.WriteString("    grpc-opts:\n")
+			sb.WriteString("      grpc-service-name: ")
+			sb.WriteString(yamlQuote(sn))
+			sb.WriteString("\n")
+		}
+	case "h2":
+		pathVal, _ := vm["path"].(string)
+		hostVal, _ := vm["host"].(string)
+		if pathVal != "" || hostVal != "" {
+			sb.WriteString("    h2-opts:\n")
+			if pathVal != "" {
+				sb.WriteString("      path: ")
+				sb.WriteString(yamlQuote(pathVal))
+				sb.WriteString("\n")
+			}
+			if hostVal != "" {
+				sb.WriteString("      host:\n")
+				sb.WriteString("        - ")
+				sb.WriteString(yamlQuote(hostVal))
+				sb.WriteString("\n")
+			}
+		}
+	}
+
+	return sb.String()
+}
+
+// buildTrojanYAML создает YAML для Trojan прокси.
+// Поддерживает TLS/REALITY и транспорты ws/grpc/httpupgrade.
+func buildTrojanYAML(sb *strings.Builder, u *url.URL, params url.Values) string {
+	sb.WriteString("trojan\n")
+
+	sb.WriteString("    server: ")
+	sb.WriteString(yamlQuote(u.Hostname()))
+	sb.WriteString("\n")
+
+	if port := u.Port(); port != "" {
+		sb.WriteString("    port: ")
+		sb.WriteString(port)
+		sb.WriteString("\n")
+	}
+
+	// Password из userinfo
+	if password := u.User.Username(); password != "" {
+		sb.WriteString("    password: ")
+		sb.WriteString(yamlQuote(password))
+		sb.WriteString("\n")
+	}
+
+	// SNI
+	sni := params.Get("sni")
+	if sni == "" {
+		sni = u.Hostname()
+	}
+	if sni != "" {
+		sb.WriteString("    sni: ")
+		sb.WriteString(yamlQuote(sni))
+		sb.WriteString("\n")
+	}
+
+	// REALITY
+	if params.Get("security") == "reality" {
+		sb.WriteString("    reality-opts:\n")
+		if pbk := params.Get("pbk"); pbk != "" {
+			sb.WriteString("      public-key: ")
+			sb.WriteString(yamlQuote(pbk))
+			sb.WriteString("\n")
+		}
+		if sid := params.Get("sid"); sid != "" {
+			sb.WriteString("      short-id: ")
+			sb.WriteString(yamlQuote(sid))
+			sb.WriteString("\n")
+		}
+		if fp := params.Get("fp"); fp != "" {
+			sb.WriteString("    client-fingerprint: ")
+			sb.WriteString(fp)
+			sb.WriteString("\n")
+		}
+	}
+
+	// Skip cert verify (включая legacy-флаг allowInsecure)
+	if skip := params.Get("skip-cert-verify"); skip == "1" || skip == "true" || isInsecureFlag(params) {
+		sb.WriteString("    skip-cert-verify: true\n")
+	} else {
+		sb.WriteString("    skip-cert-verify: false\n")
+	}
+
+	// ALPN
+	writeALPN(sb, params)
+
+	// Транспорт: канонический параметр Xray — type, network — запасной
+	network := params.Get("type")
+	if network == "" {
+		network = params.Get("network")
+	}
+	if network != "" {
+		sb.WriteString("    network: ")
+		sb.WriteString(network)
+		sb.WriteString("\n")
+	}
+
+	// Параметры транспорта
+	writeTransportOpts(sb, network, params)
+
+	if udp := params.Get("udp"); udp == "1" || udp == "true" {
+		sb.WriteString("    udp: true\n")
+	}
+
+	return sb.String()
+}
+
+// buildHysteria2YAML создает YAML для Hysteria2 прокси.
+// Пароль берется из userinfo либо из параметра obfs-password (стандарт hy2);
+// параметр obfs задает только тип обфускации.
+func buildHysteria2YAML(sb *strings.Builder, u *url.URL, params url.Values) string {
+	sb.WriteString("hysteria2\n")
+
+	sb.WriteString("    server: ")
+	sb.WriteString(yamlQuote(u.Hostname()))
+	sb.WriteString("\n")
+
+	if port := u.Port(); port != "" {
+		sb.WriteString("    port: ")
+		sb.WriteString(port)
+		sb.WriteString("\n")
+	}
+
+	// Password из userinfo или параметра obfs-password
+	password := u.User.Username()
+	if password == "" {
+		password = params.Get("obfs-password")
+	}
+	if password != "" {
+		sb.WriteString("    password: ")
+		sb.WriteString(yamlQuote(password))
+		sb.WriteString("\n")
+	}
+
+	// Обфускация (только тип; пароль — отдельно в obfs-password)
+	if obfs := params.Get("obfs"); obfs == "salamander" {
+		sb.WriteString("    obfs: ")
+		sb.WriteString(obfs)
+		sb.WriteString("\n")
+	}
+
+	// SNI
+	if sni := params.Get("sni"); sni != "" {
+		sb.WriteString("    sni: ")
+		sb.WriteString(yamlQuote(sni))
+		sb.WriteString("\n")
+	}
+
+	// Пропуск проверки сертификата (включая legacy-флаг allowInsecure)
+	if isInsecureFlag(params) {
+		sb.WriteString("    skip-cert-verify: true\n")
+	}
+
+	// Скоростные лимиты: канонические для hy2 — upmbps/downmbps, up/down — запасные
+	up := params.Get("upmbps")
+	if up == "" {
+		up = params.Get("up")
+	}
+	if up != "" {
+		sb.WriteString("    up: ")
+		sb.WriteString(yamlQuote(up))
+		sb.WriteString("\n")
+	}
+	down := params.Get("downmbps")
+	if down == "" {
+		down = params.Get("down")
+	}
+	if down != "" {
+		sb.WriteString("    down: ")
+		sb.WriteString(yamlQuote(down))
+		sb.WriteString("\n")
+	}
+
+	if udp := params.Get("udp"); udp == "1" || udp == "true" {
+		sb.WriteString("    udp: true\n")
+	}
+
+	return sb.String()
+}
+
+// extractProxyName извлекает имя прокси из URL или генерирует стандартное
+func extractProxyName(proxyURL string, index int) string {
+	u, err := url.Parse(proxyURL)
+	if err != nil {
+		return fmt.Sprintf("proxy-%d", index)
+	}
+
+	// VMess: имя берется из поля ps декодированного JSON payload,
+	// при его отсутствии — из фрагмента URL
+	if strings.ToLower(u.Scheme) == "vmess" {
+		if decoded, err := utils.DecodeUserInfo(vmessPayload(proxyURL)); err == nil {
+			var vm map[string]any
+			if json.Unmarshal(decoded, &vm) == nil {
+				if ps, _ := vm["ps"].(string); ps != "" {
+					return ps
+				}
+			}
+		}
+		if u.Fragment != "" {
+			return u.Fragment
+		}
+		return fmt.Sprintf("vmess-%d", index)
+	}
+
+	// Пытаемся получить имя из фрагмента (#name=...)
+	if fragment := u.Fragment; fragment != "" {
+		if strings.Contains(fragment, "name=") {
+			parts := strings.Split(fragment, "&")
+			for _, part := range parts {
+				if strings.HasPrefix(part, "name=") {
+					name := strings.TrimPrefix(part, "name=")
+					if name != "" {
+						return name
+					}
+				}
+			}
+		}
+		// Если фрагмент есть, используем его как имя
+		if fragment != "" {
+			return fragment
+		}
+	}
+
+	// Попытка получить имя из параметров query
+	params := u.Query()
+	if remark := params.Get("remark"); remark != "" {
+		return remark
+	}
+	if desc := params.Get("desc"); desc != "" {
+		return desc
+	}
+
+	// Используем хост или "proxy-N"
+	if u.Hostname() != "" {
+		return fmt.Sprintf("%s-%d", u.Hostname(), index)
+	}
+
+	return fmt.Sprintf("proxy-%d", index)
+}
+
 // handleFilter обрабатывает запросы на фильтрацию подписок
 func (s *Service) handleFilter(w http.ResponseWriter, r *http.Request) {
 	// Debug: log incoming request data
@@ -528,6 +1249,7 @@ func (s *Service) handleFilter(w http.ResponseWriter, r *http.Request) {
 	}
 	// Ограничиваем число отдаваемых строк для слабых клиентов (iOS), чтобы избежать их перегрузки при больших профилях
 	lim := parseLimit(r.URL.Query().Get("lim"))
+	format := r.URL.Query().Get("format")
 
 	content, err := s.Filter(id, countryCodes, lim)
 	if err != nil {
@@ -539,7 +1261,14 @@ func (s *Service) handleFilter(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Source not found", http.StatusInternalServerError)
 		return
 	}
-	s.serveFile(w, content, source.URL, id)
+
+	// Применяем форматирование если указано
+	formattedContent, contentType, err := formatContent(content, format)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	s.serveFile(w, formattedContent, source.URL, id, format, contentType)
 }
 
 // handleMerge обрабатывает запросы на слияние подписок
@@ -594,17 +1323,25 @@ func (s *Service) handleMerge(w http.ResponseWriter, r *http.Request) {
 	}
 	// Ограничиваем число отдаваемых строк для слабых клиентов (iOS), чтобы избежать их перегрузки при больших профилях
 	lim := parseLimit(r.URL.Query().Get("lim"))
+	format := r.URL.Query().Get("format")
 
 	content, err := s.Merge(sortedIDs, countryCodes, lim)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Processing error: %v", err), http.StatusInternalServerError)
 		return
 	}
-	s.serveFile(w, content, "merged_sources", strings.Join(sortedIDs, "_"))
+
+	// Применяем форматирование если указано
+	formattedContent, contentType, err := formatContent(content, format)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	s.serveFile(w, formattedContent, "merged_sources", strings.Join(sortedIDs, "_"), format, contentType)
 }
 
 // serveFile отвечает клиенту результатом фильтрации/слияния с безопасными заголовками
-func (s *Service) serveFile(w http.ResponseWriter, content []byte, sourceURL, id string) {
+func (s *Service) serveFile(w http.ResponseWriter, content []byte, sourceURL, id, format, contentType string) {
 	filename := "filtered_" + id + ".txt"
 	if u, err := url.Parse(sourceURL); err == nil {
 		base := path.Base(u.Path)
@@ -613,16 +1350,30 @@ func (s *Service) serveFile(w http.ResponseWriter, content []byte, sourceURL, id
 		}
 	}
 	filename = s.filenameCleanupRegex.ReplaceAllString(filename, "_")
-	if !strings.HasSuffix(strings.ToLower(filename), ".txt") {
-		filename += ".txt"
+
+	// Определяем расширение файла на основе формата
+	normalizedFormat := strings.ToLower(strings.TrimSpace(format))
+	if strings.Contains(normalizedFormat, "yaml") {
+		if !strings.HasSuffix(strings.ToLower(filename), ".yaml") && !strings.HasSuffix(strings.ToLower(filename), ".yml") {
+			filename = strings.TrimSuffix(filename, ".txt") + ".yaml"
+		}
+	} else if strings.Contains(normalizedFormat, "base64") {
+		if !strings.HasSuffix(strings.ToLower(filename), ".b64") {
+			filename = strings.TrimSuffix(filename, ".txt") + ".b64"
+		}
+	} else {
+		if !strings.HasSuffix(strings.ToLower(filename), ".txt") {
+			filename += ".txt"
+		}
 	}
+
 	filename = filepath.Base(filename)
 	if len(filename) > MaxFilenameLength {
 		filename = filename[:MaxFilenameLength]
 	}
 	encoded := EncodeRFC5987(filename)
 
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename*=%s", encoded))
 	w.Header().Set("Content-Length", strconv.Itoa(len(content)))
 	w.Header().Set("X-Content-Type-Options", "nosniff")

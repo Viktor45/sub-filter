@@ -3,31 +3,30 @@
 This translation was made using AI.
 
 <!-- TOC -->
-* [sub-filter](#sub-filter)
-  * [✨ Features](#-features)
-  * [🛠️ Build Instructions](#-build-instructions)
-    * [Architecture](#architecture)
-  * [▶️ Usage](#-usage)
-    * [Configuration format](#configuration-format)
-    * [1. HTTP Server Mode (Dynamic Filtering)](#1-http-server-mode-dynamic-filtering)
-      * [Syntax:](#syntax)
-      * [Examples:](#examples)
-      * [Endpoints:](#endpoints)
-    * [2. CLI Mode (One-time Processing)](#2-cli-mode-one-time-processing)
-      * [Syntax:](#syntax-1)
-      * [Flags:](#flags)
-      * [Examples:](#examples-1)
-  * [🌍 Country Filtering](#-country-filtering)
-    * [Country Data Format](#country-data-format)
-  * [🔤 Parameter Reference](#-parameter-reference)
-  * [🖥️ CLI Flags](#-cli-flags)
-  * [✅ Quick Test](#-quick-test)
-    * [Server](#server)
-    * [CLI](#cli)
-  * [📲 Client Integration](#-client-integration)
-  * [🐳 Docker](#-docker)
-    * [Run Server](#run-server)
-    * [CLI in Docker](#cli-in-docker)
+- [✨ Features](#-features)
+- [🛠️ Build Instructions](#️-build-instructions)
+  - [Architecture](#architecture)
+- [▶️ Usage](#️-usage)
+  - [Configuration format](#configuration-format)
+  - [1. HTTP Server Mode (Dynamic Filtering)](#1-http-server-mode-dynamic-filtering)
+    - [Syntax:](#syntax)
+    - [Examples:](#examples)
+    - [Endpoints:](#endpoints)
+  - [2. CLI Mode (One-time Processing)](#2-cli-mode-one-time-processing)
+    - [Syntax:](#syntax-1)
+    - [Flags:](#flags)
+    - [Examples:](#examples-1)
+- [🌍 Country Filtering](#-country-filtering)
+  - [Country Data Format](#country-data-format)
+- [🔤 Parameter Reference](#-parameter-reference)
+- [🖥️ CLI Flags](#️-cli-flags)
+- [✅ Quick Test](#-quick-test)
+  - [Server](#server)
+  - [CLI](#cli)
+- [📲 Client Integration](#-client-integration)
+- [🐳 Docker](#-docker)
+  - [Run Server](#run-server)
+  - [CLI in Docker](#cli-in-docker)
 <!-- TOC --> sub-filter
 
 A smart proxy subscription filter for **VLESS, VMess, Trojan, Shadowsocks, and Hysteria2**.
@@ -139,12 +138,18 @@ Starts a server that filters subscriptions on-the-fly.
 - `ids` — comma-separated line numbers (max 20, for `/merge`)
 - `c` — [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes) country codes (max 20)
 - `lim` — maximum number of links in the result (for `/filter` and `/merge`)
+- `format` — output format: `yaml` (for Clash/Mihomo), `base64`, or combination like `yaml+base64` (optional)
 
 **Examples:**
 
 - `/filter?id=1` → filter the first subscription
 - `/filter?id=1&c=DE` → filter by Germany
+- `/filter?id=1&format=yaml` → filter as YAML (for Clash/Mihomo)
+- `/filter?id=1&format=base64` → base64-encoded plain text
 - `/merge?ids=1,2,3&c=US,CA` → merge three subscriptions, keep only US/CA servers
+- `/merge?ids=1,2,3&format=yaml` → merge and return as YAML format
+
+See [FORMAT_PARAMETER_en.md](./FORMAT_PARAMETER_en.md) for detailed format documentation.
 
 ---
 

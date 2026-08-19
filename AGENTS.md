@@ -39,6 +39,7 @@ Primary behaviors:
 
 - `pkg/service`: HTTP handlers, request validation, filtering, merge, CLI processing.
 - `pkg/config`: config loading, validation, file path resolution.
+- `pkg/cache`: compiled-regex cache (`RegexCache`) with hit/miss stats; used by bad-word filtering.
 - `internal/validator`: generic rule engine and validation policies.
 - `internal/utils`: URL normalization, host/port validation, country lookup, dedupe helpers.
 - `vless`, `vmess`, `trojan`, `ss`, `hysteria2`: protocol-specific parsing/normalization.
@@ -60,6 +61,8 @@ Primary behaviors:
 - `/merge`
 - `/health`
 
+Both `/filter` and `/merge` accept a `format=` query parameter (see `docs/FORMAT_PARAMETER_en.md`): plain text (default), `yaml` (Clash/Mihomo proxy list), `base64`, or combinations (e.g. `yaml+base64`). Formatting happens in `formatContent`/`contentToYAML` in `pkg/service/service.go` after filtering/merge; `serveFile` adjusts filename extension and Content-Type accordingly.
+
 Request protections (⚠️ **Security-Critical**):
 
 - **User-Agent allowlist** — validates requests against built-in prefixes and optional file; do not weaken without security review
@@ -73,10 +76,10 @@ Flags live in `main.go`.
 - `--cli`
 - `--stdout`
 - `--config`
-- `--countries`
 - `--country`
+- `--debug`
 
-CLI accepts source IDs as positional args or processes all configured sources if none are passed.
+CLI accepts source IDs as positional args or processes all configured sources if none are passed. In server mode, a single positional arg is treated as the port.
 
 ## Config Reality
 
@@ -87,6 +90,7 @@ Important nested fields:
 - `sources.file`
 - `cache.directory`
 - `cache.ttl`
+- `cache.merge_buckets` (shard count for disk-based streaming merge; more shards = lower peak memory, more temp files)
 - `validation.rules_file`
 - `validation.bad_words_file`
 - `validation.countries_file`
@@ -124,7 +128,9 @@ Important nested fields:
 
 ## Go Development Standards
 
-Refer to [.github/instructions/go.instructions.md](.github/instructions/go.instructions.md) for idiomatic Go practices, naming conventions, and code review standards used in this project.
+Refer to [.github/instructions/go.instructions.md](.github/instructions/go.instructions.md) for idiomatic Go practices, naming conventions, and code review standards used in this project. Sibling files `docker.instructions.md`, `md.instructions.md`, and `actions.instructions.md` cover Dockerfiles, documentation, and GitHub Actions changes respectively.
+
+Note: code comments and some docs (e.g. `config/config.yaml`) are written in Russian; keep that convention when editing those files.
 
 ## Files worth reading first
 
@@ -138,3 +144,4 @@ Refer to [.github/instructions/go.instructions.md](.github/instructions/go.instr
 - `docs/README_en.md`
 - `docs/FILTER_RULES_en.md`
 - `docs/BADWORDS_en.md`
+- `docs/FORMAT_PARAMETER_en.md`
