@@ -9,6 +9,7 @@ import (
 	"flag"
 	"os"
 	"os/signal"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -57,9 +58,22 @@ func main() {
 		// Парсим коды стран
 		var parsedCountryCodes []string
 		if *countryCodesCLI != "" {
-			parsedCountryCodes = strings.Split(*countryCodesCLI, ",")
-			for i, code := range parsedCountryCodes {
-				parsedCountryCodes[i] = strings.TrimSpace(code)
+			rawCodes := strings.Split(*countryCodesCLI, ",")
+			if len(rawCodes) > cfg.Validation.MaxCountries {
+				log.Error("Too many country codes", "count", len(rawCodes), "max", 20)
+				os.Exit(1)
+			}
+			for _, code := range rawCodes {
+				code = strings.TrimSpace(code)
+				if code == "" {
+					continue
+				}
+				// Validate ISO 3166-1 alpha-2 format (uppercase, exactly 2 letters)
+				if len(code) != 2 || !regexp.MustCompile(`^[A-Z]{2}$`).MatchString(strings.ToUpper(code)) {
+					log.Error("Invalid country code format", "code", code)
+					os.Exit(1)
+				}
+				parsedCountryCodes = append(parsedCountryCodes, strings.ToUpper(code))
 			}
 		}
 
