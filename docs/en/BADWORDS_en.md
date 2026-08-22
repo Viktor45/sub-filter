@@ -1,4 +1,4 @@
-[EN](BADWORDS_en.md) / [RU](BADWORDS.md) / [ZH](BADWORDS_zh.md)
+[EN](BADWORDS_en.md) / [RU](../BADWORDS.md) / [ZH](../zh/BADWORDS_zh.md)
 
 This translation was made using AI.
 
@@ -78,8 +78,8 @@ The `badwords.yaml` file contains an array of rules. Each rule is an object with
 ```
 
 ## Rule Fields
-| Field         | Type   | Required            | Description                                 |
-|---------------|--------|---------------------|---------------------------------------------|
+| Field         |  Type  | Required             | Description                                 |
+|:--------------|:------:|:---------------------|:--------------------------------------------|
 | `pattern`     | string | ✅ Yes               | Regular expression (Go `regexp` syntax)     |
 | `action`      | string | ✅ Yes               | `strip`, `delete`, or `replace`             |
 | `replacement` | string | ✅ Yes for `replace` | Replacement string when `action: "replace"` |

@@ -1,4 +1,4 @@
-[EN](FILTER_RULES_en.md) / [RU](FILTER_RULES.md) / [ZH](FILTER_RULES_zh.md)
+[EN](FILTER_RULES_en.md) / [RU](../FILTER_RULES.md) / [ZH](../zh/FILTER_RULES_zh.md)
 
 This translation was made using AI.
 
@@ -195,13 +195,13 @@ vless:
 
 ### Mandatory Parameters
 | Parameter    | Description                                                                   |
-|--------------|-------------------------------------------------------------------------------|
+|:-------------|:------------------------------------------------------------------------------|
 | `encryption` | Encryption method (optional, but explicitly specifying `none` is recommended) |
 | `sni`        | Server Name Indication (mandatory for TLS/REALITY)                            |
 
 ### Permitted Parameters
 | Parameter  | Allowed Values                                                           | Description                           |
-|------------|--------------------------------------------------------------------------|---------------------------------------|
+|:-----------|:-------------------------------------------------------------------------|:--------------------------------------|
 | `security` | `tls`, `reality`                                                         | Security type. **Prohibited:** `none` |
 | `type`     | `tcp`, `ws`, `httpupgrade`, `grpc`, `xhttp`, `splithttp`                 | Transport type                        |
 | `flow`     | `xtls-rprx-vision`, `xtls-rprx-vision-udp443`, `xtls-rprx-vision-direct` | XTLS flow (REALITY only)              |
@@ -209,7 +209,7 @@ vless:
 
 ### Prohibited Parameters
 | Parameter   | Prohibited Values | Reason                       |
-|-------------|-------------------|------------------------------|
+|:------------|:------------------|:-----------------------------|
 | `security`  | `none`            | No security — insecure       |
 | `authority` | `""` (empty)      | Violates gRPC specifications |
 
@@ -217,7 +217,7 @@ vless:
 
 ### Conditional Rules
 | Condition          | Mandatory Parameter | Description                   |
-|--------------------|---------------------|-------------------------------|
+|:-------------------|:--------------------|:------------------------------|
 | `security=reality` | `pbk`               | REALITY requires a public key |
 | `type=grpc`        | `serviceName`       | gRPC requires a service name  |
 | `type=ws`          | `path`              | WebSocket requires a path     |
@@ -264,25 +264,25 @@ vmess:
 
 ### Mandatory Parameters
 | Parameter | Description             |
-|-----------|-------------------------|
+|:----------|:------------------------|
 | `uuid`    | Client UUID (mandatory) |
 
 ### Permitted Parameters
 | Parameter  | Allowed Values                                                 | Description       |
-|------------|----------------------------------------------------------------|-------------------|
+|:-----------|:---------------------------------------------------------------|:------------------|
 | `net`      | `tcp`, `ws`, `grpc`, `httpupgrade`, `h2`, `xhttp`, `splithttp` | Transport type    |
 | `security` | `auto`, `aes-128-gcm`, `chacha20-poly1305`, `zero`, `none`     | Encryption method |
 
 ### Prohibited Parameters
 | Parameter  | Prohibited Values | Reason                   |
-|------------|-------------------|--------------------------|
+|:-----------|:------------------|:-------------------------|
 | `security` | `none`            | No encryption — insecure |
 
 ⚠️ **Note:** The values `zero` and `none` for security are included in `allowed_values` for backward compatibility but are placed in `forbidden_values` for rejection — i.e., they are de facto prohibited.
 
 ### Conditional Rules
 | Condition         | Mandatory Parameter | Description                  |
-|-------------------|---------------------|------------------------------|
+|:------------------|:--------------------|:-----------------------------|
 | `net=grpc`        | `serviceName`       | gRPC requires a service name |
 | `net=ws`          | `path`              | WebSocket requires a path    |
 | `net=httpupgrade` | `path`              | HTTP Upgrade requires a path |
@@ -327,27 +327,27 @@ trojan:
 ```
 
 ### Mandatory Parameters
-| Parameter  | Description                         |
-|------------|-------------------------------------|
-| `password` | Authentication password (mandatory) |
+| Parameter  | Description                          |
+|:-----------|:-------------------------------------|
+| `password` | Authentication password (mandatory)  |
 
 ### Permitted Parameters
 | Parameter  | Allowed Values                                           | Description    |
-|------------|----------------------------------------------------------|----------------|
+|:-----------|:---------------------------------------------------------|:---------------|
 | `type`     | `tcp`, `ws`, `grpc`, `httpupgrade`, `xhttp`, `splithttp` | Transport type |
 | `security` | `tls`, `reality`                                         | Security type  |
 | `mode`     | `gun`, `multi`                                           | Mode for gRPC  |
 
 ### 🔴 Prohibited Parameters
-| Parameter | Prohibited Values         | Reason                       |
-|-----------|---------------------------|------------------------------|
+| Parameter | Prohibited Values         | Reason                        |
+|:----------|:--------------------------|:------------------------------|
 | `flow`    | ALL values (wildcard `*`) | ❌ REMOVED in Xray-core 2024+ |
 
 ⚠️ **CRITICAL:** The `flow` parameter is no longer supported in modern versions of Xray-core. Any Trojan configuration with the `flow` parameter will be automatically rejected during filtering.
 
 ### Conditional Rules
 | Condition          | Mandatory Parameter | Description                   |
-|--------------------|---------------------|-------------------------------|
+|:-------------------|:--------------------|:------------------------------|
 | `security=reality` | `pbk`               | REALITY requires a public key |
 | `type=grpc`        | `serviceName`       | gRPC requires a service name  |
 | `type=ws`          | `path`              | WebSocket requires a path     |
@@ -395,34 +395,37 @@ ss:
 
 ### Mandatory Parameters
 | Parameter  | Description                         |
-|------------|-------------------------------------|
+|:-----------|:------------------------------------|
 | `password` | Authentication password (mandatory) |
 | `method`   | Encryption method (mandatory)       |
 
 ### Permitted Encryption Methods
 ✅ **AEAD Ciphers (Modern Standard)**
-| Method | Recommendation |
-| --- | --- |
-| `aes-128-gcm` | ✅ Supported, but less secure than 256-bit |
-| `aes-256-gcm` | ✅ **RECOMMENDED** — good balance of security and performance |
-| `chacha20-poly1305` | ✅ Supported, alternative to AES (CPU-friendly) |
-| `xchacha20-poly1305` | ✅ Supported, enhanced version of ChaCha20 |
+
+| Method               | Recommendation                                                |
+|:---------------------|:--------------------------------------------------------------|
+| `aes-128-gcm`        | ✅ Supported, but less secure than 256-bit                    |
+| `aes-256-gcm`        | ✅ **RECOMMENDED** — good balance of security and performance |
+| `chacha20-poly1305`  | ✅ Supported, alternative to AES (CPU-friendly)               |
+| `xchacha20-poly1305` | ✅ Supported, enhanced version of ChaCha20                    |
 
 ✅ **Shadowsocks 2022 (New Standard with Blake3)**
-| Method | Recommendation |
-| --- | --- |
-| `2022-blake3-aes-128-gcm` | ✅ Supported (SS 2022 specification) |
-| `2022-blake3-aes-256-gcm` | ✅ **RECOMMENDED** — most secure and modern |
-| `2022-blake3-chacha20-poly1305` | ✅ Supported (SS 2022 specification) |
+
+| Method                          | Recommendation                              |
+|:--------------------------------|:--------------------------------------------|
+| `2022-blake3-aes-128-gcm`       | ✅ Supported (SS 2022 specification)        |
+| `2022-blake3-aes-256-gcm`       | ✅ **RECOMMENDED** — most secure and modern |
+| `2022-blake3-chacha20-poly1305` | ✅ Supported (SS 2022 specification)        |
 
 ✅ **Special Method**
-| Method | Recommendation |
-| --- | --- |
+
+| Method | Recommendation                                   |
+|:-------|:-------------------------------------------------|
 | `none` | ⚠️ No encryption — rarely used, only for testing |
 
 ### 🔴 Prohibited Methods (REMOVED in Xray-core 2024+)
-| Method        | Reason for Removal         |
-|---------------|----------------------------|
+| Method        | Reason for Removal          |
+|:--------------|:----------------------------|
 | `aes-128-cfb` | ❌ Deprecated stream cipher |
 | `aes-256-cfb` | ❌ Deprecated stream cipher |
 | `aes-128-ctr` | ❌ Deprecated stream cipher |
@@ -456,13 +459,13 @@ hysteria2:
 
 ### Mandatory Parameters
 | Parameter       | Description                      |
-|-----------------|----------------------------------|
+|:----------------|:---------------------------------|
 | `obfs`          | Obfuscation method (mandatory)   |
 | `obfs-password` | Obfuscation password (mandatory) |
 
 ### Permitted Parameters
 | Parameter | Allowed Values | Description                           |
-|-----------|----------------|---------------------------------------|
+|:----------|:---------------|:--------------------------------------|
 | `obfs`    | `salamander`   | The only supported obfuscation method |
 
 ### Examples of Valid Links

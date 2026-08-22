@@ -9,9 +9,9 @@ _VLESS · VMess · Trojan · Shadowsocks · Hysteria2_
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/viktor45/sub-filter/container.yaml?style=flat)](https://github.com/Viktor45/sub-filter/actions/workflows/container.yaml)
 [![License](https://img.shields.io/badge/License-AGPLv3-green.svg)](LICENSE)
 [![Docker Image](https://img.shields.io/badge/Docker-ghcr.io%2Fviktor45%2Fsub--filter-blue?logo=docker)](https://github.com/viktor45/sub-filter/pkgs/container/sub-filter)
-[![en](https://img.shields.io/badge/lang-en-blue)](https://github.com/viktor45/sub-filter/blob/main/docs/README_en.md)
+[![en](https://img.shields.io/badge/lang-en-blue)](https://github.com/viktor45/sub-filter/blob/main/docs/en/README_en.md)
 [![ru](https://img.shields.io/badge/lang-ru-red)](https://github.com/viktor45/sub-filter/blob/main/docs/README.md)
-[![zh](https://img.shields.io/badge/lang-zh-blue)](https://github.com/viktor45/sub-filter/blob/main/docs/README_zh.md)
+[![zh](https://img.shields.io/badge/lang-zh-blue)](https://github.com/viktor45/sub-filter/blob/main/docs/zh/README_zh.md)
 
 **Removes junk. Keeps only secure servers.**
 
@@ -37,19 +37,19 @@ The result is a ready-to-use subscription for **Clash, Sing-Box, routers, and ot
 
 ## 📚 Documentation
 
-| Topic                 | Links                                                                                      |
-| --------------------- | ------------------------------------------------------------------------------------------ |
-| **Main Guide**        | [EN](docs/README_en.md) · [RU](docs/README.md) · [ZH](docs/README_zh.md)                   |
-| **FAQ**               | [EN](docs/FAQ_en.md) · [RU](docs/FAQ.md) · [ZH](docs/FAQ_zh.md)                            |
-| **Validation Rules**  | [EN](docs/FILTER_RULES_en.md) · [RU](docs/FILTER_RULES.md) · [ZH](docs/FILTER_RULES_zh.md) |
-| **Bad words filters** | [EN](docs/BADWORDS_en.md) · [RU](docs/BADWORDS.md) · [ZH](docs/BADWORDS_zh.md)             |
-| **Configuration**     | [config/config.yaml](config/config.yaml)                                                   |
-| **Rules Example**     | [config/rules.yaml](config/rules.yaml)                                                     |
-| **Bad words Example** | [config/badwords.yaml](config/badwords.yaml)                                               |
-| Example configuration | [./config](./config)                                                                       |
+| Topic                 | Links                                                                                            |
+|-----------------------|--------------------------------------------------------------------------------------------------|
+| **Main Guide**        | [EN](docs/en/README_en.md) · [RU](docs/README.md) · [ZH](docs/zh/README_zh.md)                   |
+| **FAQ**               | [EN](docs/en/FAQ_en.md) · [RU](docs/FAQ.md) · [ZH](docs/zh/FAQ_zh.md)                            |
+| **Validation Rules**  | [EN](docs/en/FILTER_RULES_en.md) · [RU](docs/FILTER_RULES.md) · [ZH](docs/zh/FILTER_RULES_zh.md) |
+| **Bad words filters** | [EN](docs/en/BADWORDS_en.md) · [RU](docs/BADWORDS.md) · [ZH](docs/zh/BADWORDS_zh.md)             |
+| **Configuration**     | [config/config.yaml](config/config.yaml)                                                         |
+| **Rules Example**     | [config/rules.yaml](config/rules.yaml)                                                           |
+| **Bad words Example** | [config/badwords.yaml](config/badwords.yaml)                                                     |
+| Example configuration | [./config](./config)                                                                             |
 | for developers:       |
-| Extending             | [EN](docs/EXTENDING_en.md) · [RU](docs/EXTENDING.md) · [ZH](docs/EXTENDING_zh.md)          |
-| Error Types           | [EN](docs/ERROR_TYPES_en.md) · [RU](docs/ERROR_TYPES.md) · [ZH](docs/ERROR_TYPES_zh.md)    |
+| Extending             | [EN](docs/en/EXTENDING_en.md) · [RU](docs/EXTENDING.md) · [ZH](docs/zh/EXTENDING_zh.md)          |
+| Error Types           | [EN](docs/en/ERROR_TYPES_en.md) · [RU](docs/ERROR_TYPES.md) · [ZH](docs/zh/ERROR_TYPES_zh.md)    |
 
 
 ---

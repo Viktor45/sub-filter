@@ -1,4 +1,4 @@
-[EN](README_en.md) / [RU](README.md) / [ZH](README_zh.md)
+[EN](README_en.md) / [RU](../README.md) / [ZH](../zh/README_zh.md)
 
 This translation was made using AI.
 

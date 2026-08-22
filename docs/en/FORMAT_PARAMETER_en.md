@@ -1,4 +1,4 @@
-[EN](FORMAT_PARAMETER_en.md) / [RU](FORMAT_PARAMETER.md) / [ZH](FORMAT_PARAMETER_zh.md)
+[EN](FORMAT_PARAMETER_en.md) / [RU](../FORMAT_PARAMETER.md) / [ZH](../zh/FORMAT_PARAMETER_zh.md)
 
 This translation was made using AI.
 

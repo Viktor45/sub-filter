@@ -1,4 +1,4 @@
-[EN](FAQ_en.md) / [RU](FAQ.md) / [ZH](FAQ_zh.md)
+[EN](FAQ_en.md) / [RU](../FAQ.md) / [ZH](../zh/FAQ_zh.md)
 
 This translation was made using AI.
 

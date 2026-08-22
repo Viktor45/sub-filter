@@ -1,4 +1,4 @@
-[EN](FAQ_en.md) / [RU](FAQ.md) / [ZH](FAQ_zh.md)
+[EN](en/FAQ_en.md) / [RU](FAQ.md) / [ZH](zh/FAQ_zh.md)
 
 <!-- TOC -->
 * [Ответы на вопросы](#ответы-на-вопросы)

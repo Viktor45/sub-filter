@@ -61,7 +61,14 @@ Primary behaviors:
 - `/merge`
 - `/health`
 
-Both `/filter` and `/merge` accept a `format=` query parameter (see `docs/FORMAT_PARAMETER_en.md`): plain text (default), `yaml` (Clash/Mihomo proxy list), `base64`, or combinations (e.g. `yaml+base64`). Formatting happens in `formatContent`/`contentToYAML` in `pkg/service/service.go` after filtering/merge; `serveFile` adjusts filename extension and Content-Type accordingly.
+Both `/filter` and `/merge` accept a `format=` query parameter (see `docs/en/FORMAT_PARAMETER_en.md`): plain text (default), `yaml` (Clash/Mihomo proxy list), `base64`, or combinations (e.g. `yaml+base64`). Invalid values return `400 Bad Request`. Formatting happens in `formatContent`/`contentToYAML` in `pkg/service/service.go` after filtering/merge; `serveFile` adjusts filename extension and Content-Type accordingly.
+
+YAML conversion gotchas (⚠️ easy to break):
+
+- Builders (`buildSSYAML`, `buildVLESSYAML`, `buildVMESSYAML`, `buildTrojanYAML`, `buildHysteria2YAML`) must parse the **normalized** link forms the protocol packages emit: SS userinfo is base64 (`utils.DecodeUserInfo`), VMess is `vmess://BASE64(JSON)` with the `#fragment` stripped via `vmessPayload()`.
+- Canonical Xray transport param is `type` (`network` is a fallback); REALITY fields are `pbk`/`sid`/`fp`; hy2 password comes from userinfo or `obfs-password` (never from `obfs`); legacy `allowInsecure` maps to `skip-cert-verify`; speed limits are `upmbps`/`downmbps`.
+- Unknown schemes are skipped, never converted to fake `http` proxies. All string values go through `yamlQuote` (escaping).
+- `TestFormatYAML_RealFile_NoLostParams` in `pkg/service/format_yaml_file_test.go` guards against parameter loss using the real subscription sample `tmp/test.txt` (test skips if the file is absent).
 
 Request protections (⚠️ **Security-Critical**):
 
@@ -114,9 +121,10 @@ Important nested fields:
 
 ## Change guidance
 
-- New protocol: implement `ProxyLink`, add tests, register in `createProxyProcessors()`.
+- New protocol: implement `ProxyLink`, add tests, register in `createProxyProcessors()`, and add a YAML builder in `parseProxyToYAML` plus a case in `format_yaml_file_test.go`.
 - Validation behavior: update `config/rules.yaml`, protocol tests, and relevant docs.
 - Config schema changes: update `pkg/config/config.go`, docs, and examples together.
+- Docs live in three languages: Russian (default) in `docs/`, English in `docs/en/`, Chinese in `docs/zh/`. Keep all three in sync when changing documented behavior; each file has a language switcher line at the top.
 - Preserve rate limiter and User-Agent protections unless there is a security justification.
 
 ## Tests
@@ -125,6 +133,7 @@ Important nested fields:
 - `go test ./pkg/service ./pkg/config ./internal/validator` — test core packages
 - `go test ./ss ./vless ./vmess ./trojan ./hysteria2` — test protocol implementations
 - `go test -race ./...` — test for race conditions
+- `go test ./pkg/service/ -bench=. -benchmem -run='^$'` — benchmarks for parsing, YAML conversion, base64, bad-word filtering (`bench_format_test.go`)
 
 ## Go Development Standards
 
@@ -141,7 +150,7 @@ Note: code comments and some docs (e.g. `config/config.yaml`) are written in Rus
 - `internal/utils/utils.go`
 - `config/rules.yaml`
 - `config/badwords.yaml`
-- `docs/README_en.md`
-- `docs/FILTER_RULES_en.md`
-- `docs/BADWORDS_en.md`
-- `docs/FORMAT_PARAMETER_en.md`
+- `docs/en/README_en.md`
+- `docs/en/FILTER_RULES_en.md`
+- `docs/en/BADWORDS_en.md`
+- `docs/en/FORMAT_PARAMETER_en.md`
