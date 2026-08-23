@@ -1,540 +1,206 @@
-[EN](en/BADWORDS_en.md) / [RU](BADWORDS.md) / [ZH](zh/BADWORDS_zh.md)
+[EN](BADWORDS.md) / [RU](ru/BADWORDS.md) / [ZH](zh/BADWORDS.md)
 
 <!-- TOC -->
-  * [Документация для `badwords.yaml`](#документация-для-badwordsyaml)
-  * [Назначение и концепция](#назначение-и-концепция)
-    * [Что такое "bad word"?](#что-такое-bad-word)
-    * [Две стратегии фильтрации](#две-стратегии-фильтрации)
-  * [Структура файла](#структура-файла)
-    * [Поля правила](#поля-правила)
-    * [Минимальный пример](#минимальный-пример)
-  * [Типы действий](#типы-действий)
-    * [Action: `strip`](#action-strip)
-    * [Action: `delete`](#action-delete)
-    * [Action: `replace`](#action-replace)
-  * [Синтаксис регулярных выражений](#синтаксис-регулярных-выражений)
-    * [Базовые конструкции](#базовые-конструкции)
-    * [Специальные последовательности](#специальные-последовательности)
-    * [Модификаторы](#модификаторы)
-    * [Экранирование специальных символов](#экранирование-специальных-символов)
-  * [Практические примеры](#практические-примеры)
-    * [Пример 1: Удаление номеров версий](#пример-1-удаление-номеров-версий)
-    * [Пример 2: Удаление маркеров качества/статуса](#пример-2-удаление-маркеров-качествастатуса)
-    * [Пример 3: Блокировка приватных IPs (индикатор ошибки парсинга)](#пример-3-блокировка-приватных-ips-индикатор-ошибки-парсинга)
-    * [Пример 4: Блокировка спама и вредоноса](#пример-4-блокировка-спама-и-вредоноса)
-    * [Пример 5: Блокировка неправильных портов](#пример-5-блокировка-неправильных-портов)
-  * [Правила написания паттернов](#правила-написания-паттернов)
-    * [✅ Лучшие практики](#-лучшие-практики)
-    * [⚠️ Частые ошибки](#-частые-ошибки)
-  * [Отладка и тестирование](#отладка-и-тестирование)
-    * [Проверка синтаксиса YAML](#проверка-синтаксиса-yaml)
-    * [Тестирование паттернов](#тестирование-паттернов)
-    * [Диагностика проблем](#диагностика-проблем)
-  * [Рекомендации по организации](#рекомендации-по-организации)
-    * [Порядок правил](#порядок-правил)
-    * [Комментарии в YAML](#комментарии-в-yaml)
-  * [Заключение](#заключение)
+* [Bad-word rules (`badwords.yaml`)](#bad-word-rules-badwordsyaml)
+  * [What is a "bad word"?](#what-is-a-bad-word)
+  * [File structure](#file-structure)
+  * [Actions](#actions)
+    * [strip](#strip)
+    * [delete](#delete)
+    * [replace](#replace)
+  * [Where rules are applied](#where-rules-are-applied)
+  * [Safety limits](#safety-limits)
+  * [Regular expressions](#regular-expressions)
+    * [YAML escaping](#yaml-escaping)
+    * [Case-insensitive matching](#case-insensitive-matching)
+  * [Practical examples](#practical-examples)
+  * [Pattern writing tips](#pattern-writing-tips)
+  * [Debugging](#debugging)
 <!-- TOC -->
 
----
+# Bad-word rules (`badwords.yaml`)
 
-## Документация для `badwords.yaml`
+The file [`config/badwords.yaml`](../config/badwords.yaml) contains rules for
+cleaning proxy **names** (link fragments) and, for `replace`, the whole link.
+Think of it as a dictionary of "bad words" — not for censorship, but for
+removing useless, promotional, or dangerous information from server names.
 
-## Назначение и концепция
+## What is a "bad word"?
 
-Файл `badwords.yaml` — это **набор правил для фильтрации и модификации названий прокси-ссылок** в программе `sub-filter`.
+A pattern (word, phrase, or regular expression) that appears in a proxy name
+and is undesirable in the final list. Examples:
 
-Думайте о нём как о **словаре "плохих слов"**, но не в смысле цензуры, а в смысле **удаления бесполезной, рекламной, или опасной информации** из названий серверов.
+- `[TEST]` — marks a test server
+- `[SPAM]` — an explicit spam marker
+- `192.168.x.x` — a private IP, a sign of a parsing error
+- `v1.2.3` — a version number that clutters the name
 
-### Что такое "bad word"?
+## File structure
 
-**"Bad word"** — это паттерн (слово, фраза или регулярное выражение), который появляется в названии прокси и нежелателен в финальном списке. Примеры:
-
-- **[TEST]** в имени → указывает на тестовый сервер (не нужен в боевом списке)
-- **[SPAM]** в имени → явный маркер спама
-- **192.168.x.x** в имени → приватный IP (признак ошибки парсинга)
-- **v1.2.3** в имени → номер версии (загромождает имя)
-
-### Две стратегии фильтрации
-
-`sub-filter` поддерживает **две стратегии обработки** найденного паттерна:
-
-1. **`strip`** — удалить только найденный паттерн из имени, **оставить строку** (сервер принят, имя очищено)
-2. **`delete`** — удалить **всю строку целиком** (сервер полностью отклонен)
-
-**Выбор стратегии** зависит от **важности фильтруемого контента**:
-
-- `strip` — для **незначительного мусора** (версии, маркеры, демо-версии)
-- `delete` — для **критических ошибок** (спам, вредонос, недействительные параметры, локальные IPs)
-
----
-
-## Структура файла
-
-Файл `badwords.yaml` содержит **массив правил**. Каждое правило — это объект с тремя полями:
+The file is a YAML array of rules:
 
 ```yaml
-- pattern: "ваше регулярное выражение для вырезания"
-  action: "strip"
+- pattern: "regex to cut out of the name"
+  action: strip
 
-- pattern: "ещё одно выражение для удаления всей строки"
-  action: "delete"
+- pattern: "regex that rejects the whole line"
+  action: delete
 
 - pattern: "fp=chrome"
-  action: "replace"
+  action: replace
   replacement: "fp=firefox"
 ```
 
-### Поля правила
+| Field         | Type   | Required        | Description                              |
+| ------------- | ------ | --------------- | ---------------------------------------- |
+| `pattern`     | string | ✅ yes          | Regular expression (Go `regexp` syntax)  |
+| `action`      | string | ✅ yes          | `strip`, `delete`, or `replace`          |
+| `replacement` | string | for `replace`   | Replacement string                       |
+| `comment`     | string | no              | Free-form note (ignored by the program)  |
 
-| Поле          | Тип    | Обязательное        | Описание                                     |
-|---------------|--------|---------------------|----------------------------------------------|
-| `pattern`     | строка | ✅ да               | Регулярное выражение (Go `regexp` синтаксис) |
-| `action`      | строка | ✅ да               | `strip`, `delete` или `replace`              |
-| `replacement` | строка | ✅ да для `replace` | Строка замены при `action: "replace"`        |
+An unknown or missing `action` is treated as `delete`.
 
-### Минимальный пример
+## Actions
 
-```yaml
-# Удалить слово "test" из имени
-- pattern: "test"
-  action: "strip"
+### strip
 
-# Отклонить весь сервер, если в имени есть "spam"
-- pattern: "\\[spam\\]"
-  action: "delete"
-```
+Removes the matched substring from the name; the server **stays** in the list.
+After removal, extra spaces are collapsed and the name is trimmed.
 
----
-
-## Типы действий
-
-### Action: `strip`
-
-**Поведение:** найденная подстрока **удаляется из имени**, сервер **остаётся в списке**.
-
-**Процесс:**
-1. Найти совпадение с паттерном в имени сервера
-2. Удалить найденное совпадение
-3. Сжать несколько пробелов в один
-4. Обрезать пробелы в начале и конце
-5. **Вернуть обновлённое имя**
-
-**Когда использовать:**
-- Удаление версий (`v1.2.3`)
-- Удаление тестовых маркеров (`[TEST]`, `[DEMO]`)
-- Удаление мусора и рекламы, не влияющего на функциональность (`#1`, `@admin`, etc.)
-
-**Пример результата:**
-```
-Входное имя:    "My [TEST] Server v1.2.3"
-Паттерн 1:      "\[TEST\]" (strip)  →  "My  Server v1.2.3"
-Паттерн 2:      "v\d+\.\d+\.\d+" (strip)  →  "My Server"
-Финальное имя:  "My Server"
-Статус:         ✅ ПРИНЯТ
-```
-
-### Action: `delete`
-
-**Поведение:** найденная подстрока **отвергает всю строку целиком**, сервер **полностью исключается** из списка.
-
-**Процесс:**
-1. Найти совпадение с паттерном в имени сервера
-2. Если совпадение найдено: **отклонить сервер**
-3. Если совпадений нет: продолжить обработку
-
-**Когда использовать:**
-- Блокировка опасного контента (`[SPAM]`, `[MALWARE]`)
-- Блокировка приватных IPs (признак ошибки парсинга)
-- Блокировка неработающих портов (`port: 99999`)
-- Блокировка устаревших протоколов
-
-**Пример результата:**
-```
-Входное имя:    "Server [SPAM] in US"
-Паттерн:        "\\[spam\\]" (delete, регистронезависимый)
-Результат:      ❌ ОТКЛОНЕНО (вся строка удалена)
-```
-
-### Action: `replace`
-
-**Поведение:** найденная подстрока **заменяется на другую**, сервер остаётся в списке.
-
-**Поля правила:**
-- `pattern` — регулярное выражение для поиска
-- `action: "replace"`
-- `replacement` — строка, которая подставляется вместо найденного совпадения
-
-**Процесс:**
-1. Найти совпадение с паттерном в имени сервера
-2. Заменить совпадение на значение `replacement`
-3. Сжать несколько пробелов в один
-4. Обрезать пробелы в начале и конце
-5. Вернуть обновлённое имя
-
-**Когда использовать:**
-- Исправление параметров, которые не влияют на работу, но мешают фильтрации
-- Корректировка значений внутри фрагментов ссылки без удаления всей строки
-- Замена устаревших или нежелательных меток на безопасные альтернативы
-
-**Пример:**
-```yaml
-- pattern: "fp=chrome"
-  action: "replace"
-  replacement: "fp=firefox"
-```
-
->>Если правило совпало, `fp=chrome` будет заменено на `fp=firefox`, а строка сохранится.
----
-
-## Синтаксис регулярных выражений
-
-`sub-filter` использует **Go `regexp` пакет** (синтаксис POSIX Extended Regular Expression с расширениями Go).
-
-### Базовые конструкции
-
-| Конструкция | Значение                  | Пример                       |
-|-------------|---------------------------|------------------------------|
-| `.`         | Любой символ (кроме `\n`) | `a.c` → `abc`, `aXc`         |
-| `*`         | 0 или больше              | `ab*c` → `ac`, `abc`, `abbc` |
-| `+`         | 1 или больше              | `ab+c` → `abc`, `abbc`       |
-| `?`         | 0 или 1                   | `ab?c` → `ac`, `abc`         |
-| `[abc]`     | Один из символов          | `[aeiou]` → любой гласный    |
-| `[^abc]`    | Не один из символов       | `[^0-9]` → не цифра          |
-| `[a-z]`     | Диапазон                  | `[0-9]` → любая цифра        |
-| `(...)`     | Группировка               | `(ab)+` → `ab`, `abab`       |
-| `\|`        | ИЛИ                       | `cat\|dog` → `cat` или `dog` |
-
-### Специальные последовательности
-
-| Последовательность | Значение                        |
-|--------------------|---------------------------------|
-| `\d`               | Любая цифра (0-9)               |
-| `\D`               | Не цифра                        |
-| `\w`               | Буква, цифра, подчёркивание     |
-| `\W`               | Не буква, цифра, подчёркивание  |
-| `\s`               | Пробел, табуляция, новая строка |
-| `\S`               | Не пробельный символ            |
-| `^`                | Начало строки                   |
-| `$`                | Конец строки                    |
-| `\b`               | Граница слова                   |
-| `\\`               | Экранирование спецсимволов      |
-
-### Модификаторы
-
-**Go `regexp` использует встроенные флаги синтаксиса:**
-
-| Флаг   | Назначение                                            |
-|--------|-------------------------------------------------------|
-| `(?i)` | Регистронезависимый поиск (include в начало паттерна) |
-| `(?m)` | Многострочный режим                                   |
-
-**Примеры:**
-```
-(?i)test              # "test", "TEST", "Test" — все совпадают
-(?i)\[demo\]          # "[DEMO]", "[demo]", "[Demo]" — все совпадают
-```
-
-### Экранирование специальных символов
-
-Если вам нужно искать **буквальный спецсимвол** (а не его особый смысл), экранируйте его обратной косой чертой:
-
-| Символ | Экранирование | Пример                                         |
-|--------|---------------|------------------------------------------------|
-| `.`    | `\.`          | `example\.com` → ищет "example.com" (с точкой) |
-| `[`    | `\[`          | `\[TEST\]` → ищет "[TEST]" (квадратные скобки) |
-| `(`    | `\(`          | `\(v1\)` → ищет "(v1)"                         |
-| `*`    | `\*`          | `\*plus\*` → ищет "*plus*"                     |
-| `\`    | `\\`          | `C:\\path\\to\\file` → ищет "C:\path\to\file"  |
-
-**⚠️ Важно в YAML**: YAML сам использует обратную косую черту для экранирования, поэтому **удваивайте обратные косые**:
-
-```yaml
-# НЕПРАВИЛЬНО (YAML поглотит одну косую):
-pattern: "\[TEST\]"  # YAML прочитает это как "[TEST" — не то!
-
-# ПРАВИЛЬНО:
-pattern: "\\[TEST\\]"  # YAML прочитает "\[TEST\]" → regex поймёт "[TEST]"
-```
-
----
-
-## Практические примеры
-
-### Пример 1: Удаление номеров версий
-
-**Задача:** из имени "Server v1.2.3 Fast" удалить версию, оставив сервер.
+Use for minor junk: versions (`v1.2.3`), test/demo markers, ad tails.
 
 ```yaml
 - pattern: '\bv\d+\.\d+(\.\d+)?\b'
-  action: "strip"
-  # Объяснение:
-  # \b — граница слова (чтобы не совпадать "version")
-  # v\d+\.\d+ — "v" + цифры + "." + цифры (v1.2)
-  # (\.\d+)? — опционально ".3"
+  action: strip
 ```
 
-**Результат:**
-```
-Входное имя:   "Server v1.2.3 Fast"
-После strip:   "Server Fast"
-Статус:        ✅ ПРИНЯТ с изменённым именем
-```
+`"Server v1.2.3 Fast"` → `"Server Fast"` ✅ accepted
 
-### Пример 2: Удаление маркеров качества/статуса
+### delete
 
-**Задача:** удалить из имён маркеры типа `[DEMO]`, `(demo)`, `<demo>` — регистронезависимо.
+Rejects the **entire line**; the server is excluded from the list and recorded
+in `rejected_*.txt` with the matching rule as the reason.
 
-```yaml
-- pattern: '(?i)\[demo\]|\(demo\)|<demo>'
-  action: "strip"
-  # Объяснение:
-  # (?i) — регистронезависимый поиск (включён в начало)
-  # \[demo\] — "[demo]" (скобки экранированы)
-  # | — ИЛИ
-  # \(demo\) — "(demo)"
-  # <demo> — "<demo>"
-```
-
-**Результат:**
-```
-"Server [DEMO] US"     →  "Server US"
-"My Proxy (demo)"      →  "My Proxy"
-"Test <demo> Japan"    →  "Test Japan"
-```
-
-### Пример 3: Блокировка приватных IPs (индикатор ошибки парсинга)
-
-**Задача:** отклонить всю строку, если в имени есть приватный IP (признак некорректного парсинга).
-
-```yaml
-- pattern: '(?i)(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[01])\.\d+\.\d+)'
-  action: "delete"
-  # Объяснение:
-  # localhost — специальное имя
-  # 127\.0\.0\.1 — localhost IP (точки экранированы)
-  # 192\.168\.\d+\.\d+ — сеть 192.168.0.0/16
-  # 10\.\d+\.\d+\.\d+ — сеть 10.0.0.0/8
-  # 172\.(1[6-9]|2[0-9]|3[01])\.\d+\.\d+ — сеть 172.16.0.0/12
-```
-
-**Результат:**
-```
-"Proxy 192.168.1.1"    →  ❌ ОТКЛОНЕНО
-"Server 10.0.0.5"      →  ❌ ОТКЛОНЕНО
-"Good Server US"       →  ✅ ПРИНЯТО
-```
-
-### Пример 4: Блокировка спама и вредоноса
-
-**Задача:** отклонить сервер, если его имя содержит маркеры спама, мошенничества или вредоноса.
+Use for critical problems: spam/malware markers, private IPs, invalid ports.
 
 ```yaml
 - pattern: '(?i)\[(spam|fraud|malware|phishing|scam)\]'
-  action: "delete"
-  # Объяснение:
-  # (?i) — регистронезависимый
-  # \[ — открывающая скобка (экранирована)
-  # (spam|fraud|malware|phishing|scam) — любое из этих слов
-  # \] — закрывающая скобка
+  action: delete
 ```
 
-**Результат:**
-```
-"Server [SPAM] EU"     →  ❌ ОТКЛОНЕНО
-"Good [fraud] Proxy"   →  ❌ ОТКЛОНЕНО
-"Normal Server"        →  ✅ ПРИНЯТО
-```
+`"Server [SPAM] in US"` → ❌ rejected
 
-### Пример 5: Блокировка неправильных портов
+### replace
 
-**Задача:** отклонить сервер, если его имя содержит порт вне диапазона 1-65535.
+Replaces the match with the `replacement` string; the server stays in the list.
+Unlike `strip`/`delete` (which operate on the decoded name), `replace` is
+applied to the **whole normalized link**, so it can fix parameters anywhere in
+the URL.
 
 ```yaml
-- pattern: ':(0|6553[6-9]|655[4-9][0-9]|65[6-9][0-9]{2}|6[6-9][0-9]{3}|[7-9][0-9]{4})'
-  action: "delete"
-  # Объяснение:
-  # : — двоеточие (отделяет адрес от порта)
-  # (0|...) — либо 0, либо числа > 65535
+- pattern: "fp=chrome"
+  action: replace
+  replacement: "fp=firefox"
 ```
 
-**Результат:**
-```
-"Server:99999"         →  ❌ ОТКЛОНЕНО
-"Server:0"             →  ❌ ОТКЛОНЕНО
-"Server:443"           →  ✅ ПРИНЯТО
-```
+## Where rules are applied
 
----
+- `strip` and `delete` run against the **URL-decoded fragment** (the `#name`
+  part) of each link during protocol processing.
+- `replace` runs against the **full normalized link** after protocol
+  processing and before country filtering.
 
-## Правила написания паттернов
+## Safety limits
 
-### ✅ Лучшие практики
+Patterns are compiled once at startup with protective limits:
 
-1. **Используйте граница слова `\b` для целых слов:**
-   ```yaml
-   # ХОРОШО — совпадает "test", но не "testing"
-   pattern: '\btest\b'
-   action: "strip"
-   
-   # ПЛОХО — совпадает и "test", и "testing", и "atesting"
-   pattern: 'test'
-   action: "strip"
-   ```
+- at most **20 patterns** are used (excess is ignored with a warning);
+- a pattern longer than **100 characters** is skipped;
+- patterns with nested quantifiers prone to ReDoS (e.g. `(.*)+`) or more than
+  3 capture groups are rejected;
+- invalid regexes are skipped (logged).
 
-2. **Экранируйте специальные символы в YAML (удваивайте обратные косые):**
-   ```yaml
-   # ПРАВИЛЬНО
-   pattern: '\\[TEST\\]'
-   
-   # НЕПРАВИЛЬНО
-   pattern: '\[TEST\]'  # YAML съест косые!
-   ```
+## Regular expressions
 
-3. **Используйте `(?i)` для регистронезависимого поиска:**
-   ```yaml
-   # ХОРОШО — совпадает "TEST", "test", "Test"
-   pattern: '(?i)\[demo\]'
-   
-   # ПЛОХО — совпадает только "[demo]"
-   pattern: '\[demo\]'
-   ```
+`sub-filter` uses Go's `regexp` package (RE2 syntax).
 
-4. **Группируйте альтернативы скобками:**
-   ```yaml
-   # ХОРОШО
-   pattern: '(?i)(spam|fraud|malware)'
-   
-   # ПЛОХО (может быть неоднозначно)
-   pattern: 'spam|fraud|malware'
-   ```
+### YAML escaping
 
-5. **Для delete-правил будьте строги, для strip-правил — осторожны:**
-   ```yaml
-   # ХОРОШО — удаляет только стандартные версионные строки
-   - pattern: '\bv\d+\.\d+\.\d+\b'
-     action: "strip"
-   
-   # ПЛОХО — может удалить что-то важное
-   - pattern: '\d+'
-     action: "delete"
-   ```
-
-### ⚠️ Частые ошибки
-
-| Ошибка                                           | Пример                            | Исправление                             |
-|--------------------------------------------------|-----------------------------------|-----------------------------------------|
-| Не экранированы квадратные скобки                | `pattern: '[TEST]'`               | `pattern: '\\[TEST\\]'`                 |
-| Отсутствует `(?i)` для case-insensitive          | `pattern: '\[demo\]'`             | `pattern: '(?i)\\[demo\\]'`             |
-| Слишком широкий паттерн                          | `pattern: 'a'`                    | `pattern: '(?i)\\[a\\]'` (конкретнее)   |
-| Отсутствует экранирование в YAML                 | `pattern: "\[TEST\]"`             | `pattern: "\\[TEST\\]"` (двойные слэши) |
-| Использование граници слова в неправильном месте | `pattern: 'test\b'` для "testing" | `pattern: '\btest\b'` (с обеих сторон)  |
-
----
-
-## Отладка и тестирование
-
-### Проверка синтаксиса YAML
-
-Убедитесь, что файл `badwords.yaml` синтаксически корректен:
-
-```bash
-# Попробуйте загрузить конфиг (программа покажет ошибки парсинга)
-./sub-filter --cli
-
-# Если конфиг загружен без ошибок YAML, выведется:
-# "Configuration loaded successfully"
-```
-
-### Тестирование паттернов
-
-**Способ 1: Online regex тестер**
-
-Посетите [regex101.com](https://regex101.com):
-1. Выберите **"Go"** в меню "Flavor"
-2. Вставьте ваш паттерн в поле "Regular Expression"
-3. Вставьте тестовые имена в поле "Test String"
-4. Проверьте совпадения
-
-**Пример:**
-```
-Flavor:        Go
-Pattern:       (?i)\[demo\]|\(demo\)|<demo>
-Test strings:  
-  My [DEMO] Server    ✅ совпадает
-  Test (demo) US      ✅ совпадает
-  Server <demo>       ✅ совпадает
-  Normal Server       ❌ не совпадает
-```
-
-### Диагностика проблем
-
-| Проблема                                   | Причина                                           | Решение                                                                 |
-|--------------------------------------------|---------------------------------------------------|-------------------------------------------------------------------------|
-| "Error: invalid pattern" при запуске       | Синтаксическая ошибка в regex                     | Проверьте паттерн на regex101.com с флагом Go                           |
-| Паттерн не совпадает с ожидаемыми строками | Отсутствует `(?i)` или неправильное экранирование | Используйте `(?i)` для case-insensitive; проверьте двойные слэши в YAML |
-| Strip удаляет слишком много                | Паттерн слишком широкий                           | Сузьте паттерн (добавьте `\b` или более конкретные символы)             |
-| Delete отклоняет хорошие серверы           | Паттерн совпадает случайно                        | Сделайте паттерн более конкретным (например, `\[SPAM\]` вместо `SPAM`)  |
-
----
-
-## Рекомендации по организации
-
-### Порядок правил
-
-Рекомендуется **упорядочить правила** по логике:
-
-1. **Strip-правила первыми** (очистка мусора)
-   - Версии
-   - Тестовые маркеры
-   - Демо-маркеры
-
-2. **Delete-правила вторыми** (отклонение критических)
-   - Спам/вредонос
-   - Приватные IPs
-   - Неверные порты
+YAML itself interprets backslashes in double-quoted strings, so either double
+them or use single quotes:
 
 ```yaml
-# ХОРОШАЯ ОРГАНИЗАЦИЯ
-# === Strip правила (очистка) ===
+# WRONG — YAML consumes one backslash:
+pattern: "\[TEST\]"
+
+# CORRECT — doubled backslashes:
+pattern: "\\[TEST\\]"
+
+# CORRECT — single-quoted, no YAML escaping:
+pattern: '\[TEST\]'
+```
+
+### Case-insensitive matching
+
+Add the inline flag `(?i)` at the start of the pattern:
+
+```yaml
+- pattern: '(?i)\[demo\]'   # matches [DEMO], [demo], [Demo]
+  action: strip
+```
+
+## Practical examples
+
+Remove version numbers:
+
+```yaml
 - pattern: '\bv\d+\.\d+(\.\d+)?\b'
-  action: "strip"
-
-- pattern: '(?i)\[test(ing|ed|er)?\]'
-  action: "strip"
-
-# === Delete правила (блокировка) ===
-- pattern: '(?i)\[(spam|fraud|malware)\]'
-  action: "delete"
-
-- pattern: '192\.168\.\d+\.\d+'
-  action: "delete"
+  action: strip
 ```
 
-### Комментарии в YAML
-
-Используйте YAML-комментарии для документирования:
+Remove demo markers in any bracket style:
 
 ```yaml
-# Удаление версионных строк (v1.2.3, v2.0)
-- pattern: '\bv\d+\.\d+(\.\d+)?\b'
-  action: "strip"
-
-# Блокировка серверов, помеченных как спам
-- pattern: '(?i)\[spam\]'
-  action: "delete"
+- pattern: '(?i)\[demo\]|\(demo\)|<demo>'
+  action: strip
 ```
 
----
+Reject lines with private IPs (parsing-error indicator):
 
-## Заключение
+```yaml
+- pattern: '(?i)(localhost|127\.0\.0\.1|192\.168\.|10\.|172\.1[6-9]\.|172\.2[0-9]\.|172\.3[01]\.)'
+  action: delete
+```
 
-Файл `badwords.yaml` — мощный инструмент для **автоматической очистки и фильтрации** подписок. Правильная конфигурация позволяет:
+Reject spam/fraud/malware markers:
 
-- ✅ **Сохранить полезные серверы** (используя `strip`)
-- ✅ **Исключить заспамленные источники** (используя `delete`)
-- ✅ **Обеспечить чистоту финального списка** (автоматическое удаление версий, маркеров, ошибок)
+```yaml
+- pattern: '(?i)\[(spam|fraud|malware|phishing|scam)\]'
+  action: delete
+```
 
-**Начните с простых паттернов** (точные слова и фразы), затем переходите на **более сложные регулярные выражения** по мере необходимости.
+Reject invalid ports (0 or > 65535):
 
-При возникновении вопросов — используйте **regex101.com** для визуального тестирования паттернов.
+```yaml
+- pattern: ':(?:0|6553[6-9]|655[4-9]\d|65[6-9]\d{2}|6[6-9]\d{3}|[7-9]\d{4}|[1-9]\d{5,})'
+  action: delete
+```
+
+## Pattern writing tips
+
+- Use word boundaries for whole words: `\btest\b` matches `test` but not
+  `testing`.
+- Escape special characters: `\[TEST\]`, `example\.com`.
+- Prefer `(?i)` over listing every case variant.
+- Group alternatives: `(?i)(spam|fraud|malware)`.
+- Be strict with `delete` rules and cautious with `strip` rules — a too-broad
+  `delete` pattern silently removes good servers.
+- Order rules logically: `strip` (cleanup) first, `delete` (blocking) second.
+
+## Debugging
+
+- Test patterns at [regex101.com](https://regex101.com) with the **Go** flavor.
+- Run `./sub-filter --cli` — if the file parses, the config loads; invalid
+  patterns are reported in the log and skipped.
+- Check `rejected_<id>.txt` in the cache directory: every rejected line is
+  stored there with its reason, including the bad-word rule that matched.

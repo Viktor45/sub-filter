@@ -61,7 +61,7 @@ Primary behaviors:
 - `/merge`
 - `/health`
 
-Both `/filter` and `/merge` accept a `format=` query parameter (see `docs/en/FORMAT_PARAMETER_en.md`): plain text (default), `yaml` (Clash/Mihomo proxy list), `base64`, or combinations (e.g. `yaml+base64`). Invalid values return `400 Bad Request`. Formatting happens in `formatContent`/`contentToYAML` in `pkg/service/service.go` after filtering/merge; `serveFile` adjusts filename extension and Content-Type accordingly.
+Both `/filter` and `/merge` accept a `format=` query parameter (see `docs/FORMAT_PARAMETER.md`): plain text (default), `yaml` (Clash/Mihomo proxy list), `base64`, or combinations (e.g. `yaml+base64`; note `+` decodes to a space, and `formatContent` accepts both). Invalid values return `400 Bad Request`. Formatting happens in `formatContent`/`contentToYAML` in `pkg/service/service.go` after filtering/merge; `serveFile` adjusts filename extension and Content-Type accordingly.
 
 YAML conversion gotchas (⚠️ easy to break):
 
@@ -124,7 +124,7 @@ Important nested fields:
 - New protocol: implement `ProxyLink`, add tests, register in `createProxyProcessors()`, and add a YAML builder in `parseProxyToYAML` plus a case in `format_yaml_file_test.go`.
 - Validation behavior: update `config/rules.yaml`, protocol tests, and relevant docs.
 - Config schema changes: update `pkg/config/config.go`, docs, and examples together.
-- Docs live in three languages: Russian (default) in `docs/`, English in `docs/en/`, Chinese in `docs/zh/`. Keep all three in sync when changing documented behavior; each file has a language switcher line at the top.
+- Docs live in three languages: English (primary) in `docs/`, Russian in `docs/ru/`, Chinese in `docs/zh/`. Keep all three in sync when changing documented behavior; each file has a language switcher line at the top. `docs/DEVELOPMENT.md` (and its translations) covers typed errors and adding new protocols.
 - Preserve rate limiter and User-Agent protections unless there is a security justification.
 
 ## Tests
@@ -150,7 +150,7 @@ Note: code comments and some docs (e.g. `config/config.yaml`) are written in Rus
 - `internal/utils/utils.go`
 - `config/rules.yaml`
 - `config/badwords.yaml`
-- `docs/en/README_en.md`
-- `docs/en/FILTER_RULES_en.md`
-- `docs/en/BADWORDS_en.md`
-- `docs/en/FORMAT_PARAMETER_en.md`
+- `docs/README.md`
+- `docs/FILTER_RULES.md`
+- `docs/BADWORDS.md`
+- `docs/FORMAT_PARAMETER.md`

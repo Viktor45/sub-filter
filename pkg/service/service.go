@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -18,7 +19,6 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,6 +42,8 @@ import (
 	"sub-filter/vmess"
 )
 
+// Ограничения на количество и длину шаблонов регулярных выражений
+// для защиты от переполнения памяти и ReDoS-атак.
 const (
 	MaxRegexPatterns = 20
 	MaxRegexLength   = 100
@@ -145,13 +147,15 @@ type Service struct {
 	bufferPool sync.Pool
 
 	// Глобальные переменные, перемещенные из main.go
-	ipLimiter              sync.Map // map[string]*rate.Limiter
-	ipLastSeen             sync.Map // map[string]time.Time
+	ipLimiter              sync.Map // карта IP -> *rate.Limiter
+	ipLastSeen             sync.Map // карта IP -> time.Time последнего обращения
 	fetchGroup             singleflight.Group
 	builtinAllowedPrefixes []string
 	validIDRe              *regexp.Regexp
 	filenameCleanupRegex   *regexp.Regexp
 	validProfileNameRegex  *regexp.Regexp
+	uaRegexps              []*regexp.Regexp      // скомпилированные regex-шаблоны для проверки User-Agent
+	replaceRules           []compiledReplaceRule // прекомпилированные replace-правила bad-слов
 
 	// HTTP сервер
 	server *http.Server
@@ -197,12 +201,35 @@ func NewService(cfg *config.Config, log *logger.Logger, opts *ServiceOptions) (*
 			},
 		},
 		builtinAllowedPrefixes: []string{"clash", "happ", "incy"},
+		uaRegexps:              make([]*regexp.Regexp, 0),
 		validIDRe:              regexp.MustCompile(`^[a-zA-Z0-9_]+$`),
 		filenameCleanupRegex:   regexp.MustCompile(`[^a-zA-Z0-9._-]`),
 		validProfileNameRegex:  regexp.MustCompile(`^[a-zA-Z0-9._-]+\.txt$`),
 		ctx:                    ctx,
 		cancel:                 cancel,
 	}
+
+	// Компилируем regex-шаблоны User-Agent из конфигурации
+	if svc.cfg != nil && cfg.Validation.AllowedUserAgents != nil {
+		for _, pattern := range cfg.Validation.AllowedUserAgents {
+			if pattern == "" {
+				continue
+			}
+			compiled, err := regexp.Compile(pattern)
+			if err != nil {
+				svc.logger.Error("Invalid regex in User-Agent pattern, skipping",
+					"pattern", pattern,
+					"error", err,
+				)
+				continue
+			}
+			svc.uaRegexps = append(svc.uaRegexps, compiled)
+		}
+	}
+
+	// Прекомпилируем replace-правила bad-слов один раз, чтобы не повторять
+	// проверки и компиляцию на каждой обрабатываемой строке.
+	svc.replaceRules = svc.compileReplaceRules()
 
 	// Создаем proxy processors с использованием regex cache
 	svc.proxyProcessors = svc.createProxyProcessors()
@@ -216,7 +243,11 @@ func NewService(cfg *config.Config, log *logger.Logger, opts *ServiceOptions) (*
 		Handler:      mux,
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
+		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
+
+	// Фоновая очистка неактивных rate limiter'ов
+	svc.startLimiterCleanup()
 
 	return svc, nil
 }
@@ -326,10 +357,16 @@ func (s *Service) createProxyProcessors() []ProxyLink {
 	}
 }
 
-func (s *Service) applyReplaceBadWords(line string) string {
-	if line == "" {
-		return line
-	}
+// compiledReplaceRule — прекомпилированное replace-правило bad-слов.
+type compiledReplaceRule struct {
+	re          *regexp.Regexp
+	replacement string
+}
+
+// compileReplaceRules компилирует replace-правила bad-слов один раз при старте.
+// Невалидные или небезопасные паттерны пропускаются (с логированием).
+func (s *Service) compileReplaceRules() []compiledReplaceRule {
+	out := make([]compiledReplaceRule, 0, len(s.badWordRules))
 	for _, br := range s.badWordRules {
 		if strings.ToLower(strings.TrimSpace(br.Action)) != "replace" {
 			continue
@@ -337,14 +374,37 @@ func (s *Service) applyReplaceBadWords(line string) string {
 		if br.Pattern == "" || br.Replacement == "" {
 			continue
 		}
+		if len(br.Pattern) > MaxRegexLength {
+			s.logger.Warn("Replace badword pattern too long, skipping",
+				"length", len(br.Pattern),
+				"max", MaxRegexLength,
+			)
+			continue
+		}
 		if !IsRegexSafe(br.Pattern) {
+			s.logger.Warn("Dangerous replace badword pattern rejected", "pattern", br.Pattern)
 			continue
 		}
 		re, err := s.regexCache.Get(br.Pattern)
 		if err != nil {
+			s.logger.Warn("Failed to compile replace badword pattern",
+				"pattern", br.Pattern,
+				"error", err,
+			)
 			continue
 		}
-		line = re.ReplaceAllString(line, br.Replacement)
+		out = append(out, compiledReplaceRule{re: re, replacement: br.Replacement})
+	}
+	return out
+}
+
+// applyReplaceBadWords применяет прекомпилированные replace-правила к строке.
+func (s *Service) applyReplaceBadWords(line string) string {
+	if line == "" || len(s.replaceRules) == 0 {
+		return line
+	}
+	for _, rr := range s.replaceRules {
+		line = rr.re.ReplaceAllString(line, rr.replacement)
 	}
 	return line
 }
@@ -416,7 +476,7 @@ func (s *Service) ValidateClientRequest(r *http.Request) (int, string) {
 		return http.StatusBadRequest, "Invalid User-Agent"
 	}
 
-	return 0, "" // OK
+	return 0, "" // запрос прошёл проверки
 }
 
 // getClientIP извлекает IP адрес клиента из запроса
@@ -445,40 +505,117 @@ func (s *Service) getClientIP(r *http.Request) string {
 	// и валидации IP адреса прокси.
 }
 
+// Параметры rate limiter'а. Значения подобраны намеренно:
+// burst=5, устойчивая скорость 10 запросов/сек на IP.
+const (
+	limiterBurst       = 5
+	limiterEvery       = 100 * time.Millisecond
+	limiterIdleTimeout = 5 * time.Minute // лимитеры без активности удаляются
+	limiterCleanupTick = 1 * time.Minute // период фоновой очистки
+	maxTrackedIPs      = 100000          // жёсткий потолок карты лимитеров
+)
+
 // GetLimiter возвращает rate limiter для указанного IP адреса
 func (s *Service) GetLimiter(ip string) *rate.Limiter {
-	const limiterBurst = 5
-	const limiterEvery = 100 * time.Millisecond
+	s.ipLastSeen.Store(ip, time.Now())
 
 	val, _ := s.ipLimiter.LoadOrStore(ip, rate.NewLimiter(rate.Every(limiterEvery), limiterBurst))
 	limiter, ok := val.(*rate.Limiter)
 	if !ok || limiter == nil {
-		// Fallback: create new limiter (defensive programming)
+		// Резервный вариант: создаём новый лимитер (защитное программирование)
 		limiter = rate.NewLimiter(rate.Every(limiterEvery), limiterBurst)
 	}
 	return limiter
 }
 
-// isValidUserAgent проверяет User-Agent на допустимость
+// startLimiterCleanup запускает фоновую очистку неактивных rate limiter'ов.
+// Без неё карта лимитеров растёт неограниченно (утечка памяти и DoS-вектор:
+// атакующий может исчерпать память запросами с разных IP).
+func (s *Service) startLimiterCleanup() {
+	go func() {
+		ticker := time.NewTicker(limiterCleanupTick)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-s.ctx.Done():
+				return
+			case <-ticker.C:
+				s.cleanupStaleLimiters()
+			}
+		}
+	}()
+}
+
+// cleanupStaleLimiters удаляет лимитеры и записи lastSeen для IP,
+// не проявлявших активность дольше limiterIdleTimeout.
+func (s *Service) cleanupStaleLimiters() {
+	now := time.Now()
+	s.ipLastSeen.Range(func(key, value any) bool {
+		lastSeen, ok := value.(time.Time)
+		if !ok || now.Sub(lastSeen) > limiterIdleTimeout {
+			s.ipLastSeen.Delete(key)
+			s.ipLimiter.Delete(key)
+		}
+		return true
+	})
+
+	// Защита от взрывного роста: если карта всё равно превышает потолок,
+	// принудительно удаляем самые старые записи.
+	count := 0
+	s.ipLastSeen.Range(func(_, _ any) bool {
+		count++
+		return true
+	})
+	if count <= maxTrackedIPs {
+		return
+	}
+	type entry struct {
+		ip   any
+		seen time.Time
+	}
+	entries := make([]entry, 0, count)
+	s.ipLastSeen.Range(func(key, value any) bool {
+		if t, ok := value.(time.Time); ok {
+			entries = append(entries, entry{ip: key, seen: t})
+		}
+		return true
+	})
+	sort.Slice(entries, func(i, j int) bool { return entries[i].seen.Before(entries[j].seen) })
+	excess := count - maxTrackedIPs
+	for i := 0; i < excess && i < len(entries); i++ {
+		s.ipLastSeen.Delete(entries[i].ip)
+		s.ipLimiter.Delete(entries[i].ip)
+	}
+}
+
+// isValidUserAgent проверяет User-Agent по списку разрешённых.
+// Каждая строка uagent.txt трактуется как Go regex-шаблон, сопоставляемый со строкой UA.
+// Встроенные префиксы сопоставляются буквально. Некорректные regex-шаблоны отбрасываются.
 func (s *Service) isValidUserAgent(ua string) bool {
 	if ua == "" {
 		return false
 	}
 
-	// Проверяем встроенные префиксы
+	// Проверяем встроенные префиксы (буквальное совпадение начала строки)
 	for _, prefix := range s.builtinAllowedPrefixes {
 		if len(ua) >= len(prefix) && ua[:len(prefix)] == prefix {
 			return true
 		}
 	}
 
-	// Проверяем по списку из конфига
-	return slices.Contains(s.cfg.Validation.AllowedUserAgents, ua)
+	// Проверяем regex-шаблоны, скомпилированные из uagent.txt
+	for _, re := range s.uaRegexps {
+		if re.MatchString(ua) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // handleHealth обрабатывает запросы на проверку здоровья сервиса
 func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {
-	// Debug: log incoming request data
+	// Отладка: логируем данные входящего запроса
 	if s.debug {
 		clientIP := s.getClientIP(r)
 		ua := r.Header.Get("User-Agent")
@@ -509,8 +646,11 @@ func formatContent(content []byte, formatStr string) ([]byte, string, error) {
 		return content, "text/plain; charset=utf-8", nil
 	}
 
-	// Валидация: допускаются только токены yaml и base64, разделённые "+"
-	for _, token := range strings.Split(format, "+") {
+	// Валидация: допускаются только токены yaml и base64, разделённые "+" или пробелом.
+	// Примечание: в query-строке "+" декодируется как пробел, поэтому принимаем оба варианта.
+	for _, token := range strings.FieldsFunc(format, func(r rune) bool {
+		return r == '+' || r == ' '
+	}) {
 		token = strings.TrimSpace(token)
 		if token != "yaml" && token != "base64" {
 			return nil, "", fmt.Errorf("invalid format %q: allowed values are yaml, base64 or their combination (e.g. yaml+base64)", formatStr)
@@ -540,17 +680,21 @@ func formatContent(content []byte, formatStr string) ([]byte, string, error) {
 // contentToYAML преобразует список прокси-ссылок в YAML формат для Clash/Mihomo.
 // Игнорирует комментарии, пустые строки и неподдерживаемые схемы.
 func contentToYAML(content []byte) []byte {
-	lines := bytes.Split(bytes.TrimSpace(content), []byte("\n"))
+	content = bytes.TrimSpace(content)
 
 	var result bytes.Buffer
+	// YAML-представление обычно больше исходного; предвыделяем с запасом,
+	// чтобы избежать повторных реаллокаций буфера.
+	result.Grow(len(content) + len(content)/2 + 16)
 	result.WriteString("proxies:\n")
 
 	proxyIndex := 0
-	for _, line := range lines {
+	// SplitSeq не выделяет срез всех строк заранее.
+	for line := range bytes.SplitSeq(content, []byte("\n")) {
 		line = bytes.TrimSpace(line)
 
 		// Пропускаем пустые строки и комментарии
-		if len(line) == 0 || bytes.HasPrefix(line, []byte("#")) {
+		if len(line) == 0 || line[0] == '#' {
 			continue
 		}
 
@@ -593,7 +737,17 @@ func parseProxyToYAML(proxyURL string, index int) string {
 		return ""
 	}
 
-	name := extractProxyName(proxyURL, index)
+	// VMess: декодируем base64+JSON payload один раз и переиспользуем
+	// для извлечения имени и построения YAML-блока (избегаем двойного парсинга).
+	var vmessMap map[string]any
+	if scheme == "vmess" {
+		vmessMap = decodeVMESSPayload(proxyURL)
+		if vmessMap == nil {
+			return ""
+		}
+	}
+
+	name := extractProxyName(u, params, proxyURL, scheme, index, vmessMap)
 	var sb strings.Builder
 	sb.WriteString("  - name: ")
 	sb.WriteString(yamlQuote(name))
@@ -605,17 +759,34 @@ func parseProxyToYAML(proxyURL string, index int) string {
 	case "vless":
 		return buildVLESSYAML(&sb, u, params)
 	case "vmess":
-		return buildVMESSYAML(&sb, proxyURL)
+		return buildVMESSYAML(&sb, vmessMap)
 	case "trojan":
 		return buildTrojanYAML(&sb, u, params)
-	default: // hy2, hysteria2
+	default: // hy2 и hysteria2
 		return buildHysteria2YAML(&sb, u, params)
 	}
 }
 
 // yamlQuote экранирует строку для безопасной вставки в YAML в двойных кавычках.
+// Экранируются кавычки, обратный слеш и все управляющие символы (включая
+// разделители строк U+2028/U+2029), чтобы значение не могло сломать структуру YAML.
 func yamlQuote(s string) string {
+	// Быстрый путь: строка без символов, требующих экранирования.
+	// Большинство значений (хосты, UUID, простые имена) попадают сюда.
+	needsEscape := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c < 0x20 || c == '"' || c == '\\' || c == 0x7F {
+			needsEscape = true
+			break
+		}
+	}
+	if !needsEscape && !strings.ContainsAny(s, "\u0085\u00A0\u2028\u2029") {
+		return `"` + s + `"`
+	}
+
 	var sb strings.Builder
+	sb.Grow(len(s) + 8)
 	sb.WriteByte('"')
 	for _, r := range s {
 		switch r {
@@ -629,8 +800,37 @@ func yamlQuote(s string) string {
 			sb.WriteString(`\r`)
 		case '\t':
 			sb.WriteString(`\t`)
+		case 0x00:
+			sb.WriteString(`\0`)
+		case 0x07:
+			sb.WriteString(`\a`)
+		case 0x08:
+			sb.WriteString(`\b`)
+		case 0x0B:
+			sb.WriteString(`\v`)
+		case 0x0C:
+			sb.WriteString(`\f`)
+		case 0x1B:
+			sb.WriteString(`\e`)
+		case 0x85:
+			sb.WriteString(`\N`)
+		case 0xA0:
+			sb.WriteString(`\_`)
+		case 0x2028:
+			sb.WriteString(`\L`)
+		case 0x2029:
+			sb.WriteString(`\P`)
 		default:
-			sb.WriteRune(r)
+			// Остальные управляющие символы экранируем в hex-форме \xNN / \uNNNN
+			if r < 0x20 || r == 0x7F || (r >= 0x80 && r <= 0x9F) {
+				if r <= 0xFF {
+					sb.WriteString(fmt.Sprintf(`\x%02x`, r))
+				} else {
+					sb.WriteString(fmt.Sprintf(`\u%04x`, r))
+				}
+			} else {
+				sb.WriteRune(r)
+			}
 		}
 	}
 	sb.WriteByte('"')
@@ -665,7 +865,7 @@ func buildSSYAML(sb *strings.Builder, u *url.URL, params url.Values) string {
 
 	if cipher != "" {
 		sb.WriteString("    cipher: ")
-		sb.WriteString(cipher)
+		sb.WriteString(yamlQuote(cipher))
 		sb.WriteString("\n")
 	}
 
@@ -680,7 +880,7 @@ func buildSSYAML(sb *strings.Builder, u *url.URL, params url.Values) string {
 		sb.WriteString("    plugin: obfs\n")
 		sb.WriteString("    plugin-opts:\n")
 		sb.WriteString("      mode: ")
-		sb.WriteString(obfs)
+		sb.WriteString(yamlQuote(obfs))
 		sb.WriteString("\n")
 	}
 
@@ -722,7 +922,7 @@ func buildVLESSYAML(sb *strings.Builder, u *url.URL, params url.Values) string {
 		network = "tcp"
 	}
 	sb.WriteString("    network: ")
-	sb.WriteString(network)
+	sb.WriteString(yamlQuote(network))
 	sb.WriteString("\n")
 
 	// TLS и REALITY
@@ -754,15 +954,15 @@ func buildVLESSYAML(sb *strings.Builder, u *url.URL, params url.Values) string {
 		}
 		if fp := params.Get("fp"); fp != "" {
 			sb.WriteString("    client-fingerprint: ")
-			sb.WriteString(fp)
+			sb.WriteString(yamlQuote(fp))
 			sb.WriteString("\n")
 		}
 	}
 
-	// ALPN
+	// Список ALPN-протоколов
 	writeALPN(sb, params)
 
-	// Flow (XTLS)
+	// Flow (XTLS-транспорт)
 	if flow := params.Get("flow"); flow != "" {
 		sb.WriteString("    flow: ")
 		sb.WriteString(yamlQuote(flow))
@@ -871,16 +1071,24 @@ func vmessPayload(proxyURL string) string {
 	return payload
 }
 
-// buildVMESSYAML создает YAML для VMess прокси.
-// Нормализатор vmess/vmess.go отдает vmess://BASE64(JSON) (v2rayN-формат),
-// поэтому конфигурация извлекается из декодированного JSON payload.
-func buildVMESSYAML(sb *strings.Builder, proxyURL string) string {
+// decodeVMESSPayload декодирует base64+JSON payload VMess-ссылки один раз.
+// Возвращает nil при ошибке декодирования или парсинга JSON.
+func decodeVMESSPayload(proxyURL string) map[string]any {
 	decoded, err := utils.DecodeUserInfo(vmessPayload(proxyURL))
 	if err != nil {
-		return ""
+		return nil
 	}
 	var vm map[string]any
 	if err := json.Unmarshal(decoded, &vm); err != nil {
+		return nil
+	}
+	return vm
+}
+
+// buildVMESSYAML создает YAML для VMess прокси из уже декодированного JSON payload.
+// Нормализатор vmess/vmess.go отдает vmess://BASE64(JSON) (v2rayN-формат).
+func buildVMESSYAML(sb *strings.Builder, vm map[string]any) string {
+	if vm == nil {
 		return ""
 	}
 
@@ -906,7 +1114,7 @@ func buildVMESSYAML(sb *strings.Builder, proxyURL string) string {
 		}
 	}
 
-	// UUID
+	// UUID из поля id
 	if id, _ := vm["id"].(string); id != "" {
 		sb.WriteString("    uuid: ")
 		sb.WriteString(yamlQuote(id))
@@ -933,18 +1141,18 @@ func buildVMESSYAML(sb *strings.Builder, proxyURL string) string {
 		cipher = "auto"
 	}
 	sb.WriteString("    cipher: ")
-	sb.WriteString(cipher)
+	sb.WriteString(yamlQuote(cipher))
 	sb.WriteString("\n")
 
 	// Транспорт
 	network, _ := vm["net"].(string)
 	if network != "" {
 		sb.WriteString("    network: ")
-		sb.WriteString(network)
+		sb.WriteString(yamlQuote(network))
 		sb.WriteString("\n")
 	}
 
-	// TLS
+	// Настройки TLS
 	if tlsVal, _ := vm["tls"].(string); tlsVal == "tls" {
 		sb.WriteString("    tls: true\n")
 		if sni, _ := vm["sni"].(string); sni != "" {
@@ -1024,7 +1232,7 @@ func buildTrojanYAML(sb *strings.Builder, u *url.URL, params url.Values) string 
 		sb.WriteString("\n")
 	}
 
-	// SNI
+	// SNI: берём из параметра, при отсутствии — из хоста
 	sni := params.Get("sni")
 	if sni == "" {
 		sni = u.Hostname()
@@ -1035,7 +1243,7 @@ func buildTrojanYAML(sb *strings.Builder, u *url.URL, params url.Values) string 
 		sb.WriteString("\n")
 	}
 
-	// REALITY
+	// Параметры REALITY
 	if params.Get("security") == "reality" {
 		sb.WriteString("    reality-opts:\n")
 		if pbk := params.Get("pbk"); pbk != "" {
@@ -1050,7 +1258,7 @@ func buildTrojanYAML(sb *strings.Builder, u *url.URL, params url.Values) string 
 		}
 		if fp := params.Get("fp"); fp != "" {
 			sb.WriteString("    client-fingerprint: ")
-			sb.WriteString(fp)
+			sb.WriteString(yamlQuote(fp))
 			sb.WriteString("\n")
 		}
 	}
@@ -1062,7 +1270,7 @@ func buildTrojanYAML(sb *strings.Builder, u *url.URL, params url.Values) string 
 		sb.WriteString("    skip-cert-verify: false\n")
 	}
 
-	// ALPN
+	// Список ALPN-протоколов
 	writeALPN(sb, params)
 
 	// Транспорт: канонический параметр Xray — type, network — запасной
@@ -1072,7 +1280,7 @@ func buildTrojanYAML(sb *strings.Builder, u *url.URL, params url.Values) string 
 	}
 	if network != "" {
 		sb.WriteString("    network: ")
-		sb.WriteString(network)
+		sb.WriteString(yamlQuote(network))
 		sb.WriteString("\n")
 	}
 
@@ -1116,11 +1324,11 @@ func buildHysteria2YAML(sb *strings.Builder, u *url.URL, params url.Values) stri
 	// Обфускация (только тип; пароль — отдельно в obfs-password)
 	if obfs := params.Get("obfs"); obfs == "salamander" {
 		sb.WriteString("    obfs: ")
-		sb.WriteString(obfs)
+		sb.WriteString(yamlQuote(obfs))
 		sb.WriteString("\n")
 	}
 
-	// SNI
+	// SNI из параметра sni
 	if sni := params.Get("sni"); sni != "" {
 		sb.WriteString("    sni: ")
 		sb.WriteString(yamlQuote(sni))
@@ -1159,22 +1367,16 @@ func buildHysteria2YAML(sb *strings.Builder, u *url.URL, params url.Values) stri
 	return sb.String()
 }
 
-// extractProxyName извлекает имя прокси из URL или генерирует стандартное
-func extractProxyName(proxyURL string, index int) string {
-	u, err := url.Parse(proxyURL)
-	if err != nil {
-		return fmt.Sprintf("proxy-%d", index)
-	}
-
+// extractProxyName извлекает имя прокси из уже распарсенного URL или генерирует стандартное.
+// Принимает готовый *url.URL и url.Values, чтобы не парсить URL повторно.
+// Для VMess передаётся уже декодированный payload (vmessMap), чтобы не декодировать его дважды.
+func extractProxyName(u *url.URL, params url.Values, proxyURL, scheme string, index int, vmessMap map[string]any) string {
 	// VMess: имя берется из поля ps декодированного JSON payload,
 	// при его отсутствии — из фрагмента URL
-	if strings.ToLower(u.Scheme) == "vmess" {
-		if decoded, err := utils.DecodeUserInfo(vmessPayload(proxyURL)); err == nil {
-			var vm map[string]any
-			if json.Unmarshal(decoded, &vm) == nil {
-				if ps, _ := vm["ps"].(string); ps != "" {
-					return ps
-				}
+	if scheme == "vmess" {
+		if vmessMap != nil {
+			if ps, _ := vmessMap["ps"].(string); ps != "" {
+				return ps
 			}
 		}
 		if u.Fragment != "" {
@@ -1197,13 +1399,10 @@ func extractProxyName(proxyURL string, index int) string {
 			}
 		}
 		// Если фрагмент есть, используем его как имя
-		if fragment != "" {
-			return fragment
-		}
+		return fragment
 	}
 
 	// Попытка получить имя из параметров query
-	params := u.Query()
 	if remark := params.Get("remark"); remark != "" {
 		return remark
 	}
@@ -1219,9 +1418,33 @@ func extractProxyName(proxyURL string, index int) string {
 	return fmt.Sprintf("proxy-%d", index)
 }
 
+// writeProcessingError логирует полную ошибку и отвечает клиенту безопасным
+// сообщением без внутренних деталей (URL источников, сетевые ошибки и т.п.).
+func (s *Service) writeProcessingError(w http.ResponseWriter, r *http.Request, err error, op string) {
+	s.logger.Error("Request processing failed",
+		"op", op,
+		"error", err,
+		"ip", s.getClientIP(r),
+	)
+
+	var fe *errors.FilterError
+	if stderrors.As(err, &fe) {
+		switch fe.Code {
+		case errors.ErrCodeValidate:
+			// Сообщения валидации не содержат внутренних данных — их можно показать
+			http.Error(w, fe.Message, http.StatusBadRequest)
+			return
+		case errors.ErrCodeNetwork, errors.ErrCodeHTTP, errors.ErrCodeParse:
+			http.Error(w, "upstream source unavailable", http.StatusBadGateway)
+			return
+		}
+	}
+	http.Error(w, "internal processing error", http.StatusInternalServerError)
+}
+
 // handleFilter обрабатывает запросы на фильтрацию подписок
 func (s *Service) handleFilter(w http.ResponseWriter, r *http.Request) {
-	// Debug: log incoming request data
+	// Отладка: логируем данные входящего запроса
 	if s.debug {
 		clientIP := s.getClientIP(r)
 		ua := r.Header.Get("User-Agent")
@@ -1253,12 +1476,12 @@ func (s *Service) handleFilter(w http.ResponseWriter, r *http.Request) {
 
 	content, err := s.Filter(id, countryCodes, lim)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Processing error: %v", err), http.StatusInternalServerError)
+		s.writeProcessingError(w, r, err, "filter")
 		return
 	}
 	source, ok := s.sources[id]
 	if !ok || source == nil {
-		http.Error(w, "Source not found", http.StatusInternalServerError)
+		http.Error(w, "Source not found", http.StatusNotFound)
 		return
 	}
 
@@ -1273,7 +1496,7 @@ func (s *Service) handleFilter(w http.ResponseWriter, r *http.Request) {
 
 // handleMerge обрабатывает запросы на слияние подписок
 func (s *Service) handleMerge(w http.ResponseWriter, r *http.Request) {
-	// Debug: log incoming request data
+	// Отладка: логируем данные входящего запроса
 	if s.debug {
 		clientIP := s.getClientIP(r)
 		ua := r.Header.Get("User-Agent")
@@ -1327,7 +1550,7 @@ func (s *Service) handleMerge(w http.ResponseWriter, r *http.Request) {
 
 	content, err := s.Merge(sortedIDs, countryCodes, lim)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Processing error: %v", err), http.StatusInternalServerError)
+		s.writeProcessingError(w, r, err, "merge")
 		return
 	}
 
@@ -1342,13 +1565,23 @@ func (s *Service) handleMerge(w http.ResponseWriter, r *http.Request) {
 
 // serveFile отвечает клиенту результатом фильтрации/слияния с безопасными заголовками
 func (s *Service) serveFile(w http.ResponseWriter, content []byte, sourceURL, id, format, contentType string) {
+	// Проверяем id: вызывающий код уже должен был его проверить, но страхуемся повторно
+	if !s.validIDRe.MatchString(id) {
+		id = "unknown"
+	}
+
 	filename := "filtered_" + id + ".txt"
 	if u, err := url.Parse(sourceURL); err == nil {
 		base := path.Base(u.Path)
+		// Строгая проверка: разрешаем только безопасные имена файлов
 		if base != "" && s.validProfileNameRegex.MatchString(base) {
-			filename = base
+			// Дополнительная защита от попыток обхода пути (path traversal)
+			if !strings.Contains(base, "..") && !strings.Contains(base, "/") && !strings.Contains(base, "\\") {
+				filename = base
+			}
 		}
 	}
+	// Заменяем все символы, кроме букв, цифр, точки, подчёркивания и дефиса, на подчёркивание
 	filename = s.filenameCleanupRegex.ReplaceAllString(filename, "_")
 
 	// Определяем расширение файла на основе формата
@@ -1367,7 +1600,12 @@ func (s *Service) serveFile(w http.ResponseWriter, content []byte, sourceURL, id
 		}
 	}
 
+	// Финальная проверка: имя файла должно быть безопасно для ФС и HTTP-заголовков
 	filename = filepath.Base(filename)
+	// Если подозрительные последовательности всё ещё присутствуют — откатываемся к безопасному имени
+	if strings.Contains(filename, "..") || strings.Contains(filename, "/") || strings.Contains(filename, "\\") {
+		filename = "filtered_" + id + ".txt"
+	}
 	if len(filename) > MaxFilenameLength {
 		filename = filename[:MaxFilenameLength]
 	}
@@ -1471,21 +1709,46 @@ func getDefaultPort(scheme string) string {
 
 func createHTTPClientWithDialContext(hostname string, dialFunc func(context.Context, string, string) (net.Conn, error)) *http.Client {
 	tr := &http.Transport{
-		DialContext:        dialFunc,
-		ForceAttemptHTTP2:  true,
-		TLSClientConfig:    &tls.Config{ServerName: hostname},
+		DialContext:       dialFunc,
+		ForceAttemptHTTP2: true,
+		// Строгая проверка сертификатов: InsecureSkipVerify не устанавливается,
+		// ServerName фиксируется, устаревшие версии TLS запрещены.
+		TLSClientConfig: &tls.Config{
+			ServerName: hostname,
+			MinVersion: tls.VersionTLS12,
+		},
 		MaxIdleConns:       100,
 		IdleConnTimeout:    90 * time.Second,
 		DisableCompression: true,
 	}
-	return &http.Client{Transport: tr, Timeout: 30 * time.Second}
+	return &http.Client{
+		Transport: tr,
+		Timeout:   30 * time.Second,
+		// SSRF-защита: не следуем редиректам. Источник подписки должен
+		// отдавать контент напрямую; редирект мог бы увести запрос на
+		// другой хост/путь в обход валидации исходного URL.
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 }
 
-func streamProcessResponse(resp *http.Response, lineProcessor func(string) error) error {
-	scanner := bufio.NewScanner(resp.Body)
+// streamProcessResponse читает тело ответа построчно с ограничением общего размера.
+func streamProcessResponse(resp *http.Response, lineProcessor func(string) error, maxSize int64) error {
+	if maxSize <= 0 {
+		maxSize = 10 * 1024 * 1024
+	}
+	limited := io.LimitReader(resp.Body, maxSize+1)
+	scanner := bufio.NewScanner(limited)
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 4*1024*1024)
+	var total int64
 	for scanner.Scan() {
+		total += int64(len(scanner.Bytes())) + 1
+		if total > maxSize {
+			return errors.ValidationError("source response exceeds max size").
+				WithContext("maxSize", maxSize)
+		}
 		if err := lineProcessor(scanner.Text()); err != nil {
 			return err
 		}
@@ -1499,7 +1762,7 @@ func (s *Service) generateProfile(id string, countryCodes []string) (string, err
 	if !exists {
 		return "", errors.ValidationError(fmt.Sprintf("source not found for id: %s", id)).WithContext("sourceID", id)
 	}
-	// replicate main.processSource logic using s.* fields
+	// Повторяем логику processSource из main.go, используя поля сервиса
 	parsedSource, err := url.Parse(source.URL)
 	if err != nil || parsedSource.Host == "" {
 		return "", errors.ParseError("invalid source URL", err).
@@ -1554,6 +1817,13 @@ func (s *Service) generateProfile(id string, countryCodes []string) (string, err
 	var out []string
 	var rejectedLines []string
 	rejectedLines = append(rejectedLines, "## Source: "+source.URL)
+
+	// Вычисляем строки фильтрации стран один раз до цикла (не на каждой строке)
+	var allFilterStrings []string
+	if len(countryCodes) > 0 {
+		allFilterStrings = utils.LowerFilterStrings(utils.GetCountryFilterStringsForMultiple(countryCodes, s.countries))
+	}
+
 	lines := bytes.SplitSeq(origContent, []byte("\n"))
 	for lineBytes := range lines {
 		originalLine := strings.TrimRight(string(lineBytes), "\r\n")
@@ -1577,7 +1847,6 @@ func (s *Service) generateProfile(id string, countryCodes []string) (string, err
 			if len(countryCodes) > 0 {
 				parsedProcessed, parseErr := url.Parse(processedLine)
 				if parseErr == nil && parsedProcessed.Fragment != "" {
-					allFilterStrings := utils.GetCountryFilterStringsForMultiple(countryCodes, s.countries)
 					if !utils.IsFragmentMatchingCountry(parsedProcessed.Fragment, allFilterStrings) {
 						continue
 					}
@@ -1675,7 +1944,7 @@ func (s *Service) Merge(ids []string, countryCodes []string, lim int) ([]byte, e
 		return applyLimit(content, lim), nil
 	}
 
-	// streaming merge copy from main.handleMerge (omitting http responses)
+	// Потоковое слияние (копия логики handleMerge из main.go без HTTP-ответов)
 	nBuckets := s.mergeBuckets
 	if nBuckets <= 0 {
 		nBuckets = 256
@@ -1741,9 +2010,8 @@ func (s *Service) Merge(ids []string, countryCodes []string, lim int) ([]byte, e
 	}
 
 	for i := 0; i < nBuckets; i++ {
-		if err := bucketWriters[i].Flush(); err != nil {
-			// ignore
-		}
+		// Ошибка сброса буфера не критична — файл закрывается следом
+		_ = bucketWriters[i].Flush()
 		_ = bucketFiles[i].Close()
 	}
 
@@ -1817,7 +2085,7 @@ func (s *Service) Merge(ids []string, countryCodes []string, lim int) ([]byte, e
 
 // processSourceToBuckets отвечает за обработку одного источника в merge
 func (s *Service) processSourceToBuckets(id string, source *config.SafeSource, countryCodes []string, nBuckets int, bucketWriters []*bufio.Writer, bucketLocks *[]sync.Mutex) error {
-	// replicate main.processSourceToBuckets logic simplified
+	// Упрощённая копия логики processSourceToBuckets из main.go
 	parsedSource, err := url.Parse(source.URL)
 	if err != nil || parsedSource.Host == "" {
 		return errors.ParseError("invalid source URL", err).
@@ -1833,7 +2101,16 @@ func (s *Service) processSourceToBuckets(id string, source *config.SafeSource, c
 	}
 
 	origCache := filepath.Join(s.cfg.Cache.Directory, "orig_"+id+".txt")
-	content, err := s.fetchSourceContent(id, source, origCache, false, func(line string) error {
+
+	// Вычисляем строки фильтрации стран один раз до обработки строк
+	var allFilterStrings []string
+	if len(countryCodes) > 0 {
+		allFilterStrings = utils.LowerFilterStrings(utils.GetCountryFilterStringsForMultiple(countryCodes, s.countries))
+	}
+
+	// В потоковом режиме (с lineProcessor) содержимое не возвращается —
+	// строки обрабатываются на лету, поэтому результат игнорируем.
+	_, err = s.fetchSourceContent(id, source, origCache, false, func(line string) error {
 		if line == "" || strings.HasPrefix(line, "#") {
 			return nil
 		}
@@ -1850,7 +2127,6 @@ func (s *Service) processSourceToBuckets(id string, source *config.SafeSource, c
 			if len(countryCodes) > 0 {
 				parsedProcessed, parseErr := url.Parse(processedLine)
 				if parseErr == nil && parsedProcessed.Fragment != "" {
-					allFilterStrings := utils.GetCountryFilterStringsForMultiple(countryCodes, s.countries)
 					if !utils.IsFragmentMatchingCountry(parsedProcessed.Fragment, allFilterStrings) {
 						return nil
 					}
@@ -1875,15 +2151,13 @@ func (s *Service) processSourceToBuckets(id string, source *config.SafeSource, c
 			if writeErr != nil {
 				return writeErr
 			}
-		} else {
-			// ignore rejected lines here
 		}
+		// Отклонённые строки в режиме слияния не сохраняются
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	_ = content // unused
 	return nil
 }
 
@@ -1957,14 +2231,14 @@ func (s *Service) fetchSourceContent(id string, source *config.SafeSource, origC
 			}
 			defer func() { _ = resp.Body.Close() }()
 
-			if resp.StatusCode >= 400 {
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 				return nil, errors.NetworkError(fmt.Sprintf("status code %d", resp.StatusCode), nil).
 					WithContext("sourceID", id).
 					WithContext("url", source.URL).
 					WithContext("statusCode", resp.StatusCode)
 			}
 
-			if err := streamProcessResponse(resp, lineProcessor); err != nil {
+			if err := streamProcessResponse(resp, lineProcessor, s.cfg.Sources.MaxSize); err != nil {
 				return nil, errors.ParseError("stream processing failed", err).
 					WithContext("sourceID", id).
 					WithContext("url", source.URL)
@@ -1992,19 +2266,30 @@ func (s *Service) fetchSourceContent(id string, source *config.SafeSource, origC
 		}
 		defer func() { _ = resp.Body.Close() }()
 
-		if resp.StatusCode >= 400 {
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 			return nil, errors.NetworkError(fmt.Sprintf("status code %d", resp.StatusCode), nil).
 				WithContext("sourceID", id).
 				WithContext("url", source.URL).
 				WithContext("statusCode", resp.StatusCode)
 		}
 
-		body, err := io.ReadAll(resp.Body)
+		// Ограничиваем размер тела ответа (защита от исчерпания памяти)
+		maxSize := s.cfg.Sources.MaxSize
+		if maxSize <= 0 {
+			maxSize = 10 * 1024 * 1024
+		}
+		body, err := io.ReadAll(io.LimitReader(resp.Body, maxSize+1))
 		if err != nil {
 			return nil, errors.IOError("read response", err)
 		}
+		if int64(len(body)) > maxSize {
+			return nil, errors.ValidationError("source response exceeds max size").
+				WithContext("sourceID", id).
+				WithContext("maxSize", maxSize)
+		}
 		if !stdout {
-			_ = os.WriteFile(origCache, body, 0o600) // best effort
+			// Запись кэша не критична — при ошибке просто пропускаем
+			_ = os.WriteFile(origCache, body, 0o600)
 		}
 		return body, nil
 	})
@@ -2048,7 +2333,9 @@ func (s *Service) ProcessCLI(ids []string, countryCodes []string, stdout bool) e
 	return nil
 }
 
-// processSource обрабатывает один источник
+// processSource обрабатывает один источник в CLI-режиме.
+// Логика фильтрации (replace-правила, фильтр по странам) соответствует
+// HTTP-пути generateProfile, чтобы результаты режимов совпадали.
 func (s *Service) processSource(id string, stdout bool, countryCodes []string) (string, error) {
 	source, exists := s.sources[id]
 	if !exists {
@@ -2063,13 +2350,33 @@ func (s *Service) processSource(id string, stdout bool, countryCodes []string) (
 			WithContext("url", source.URL)
 	}
 
-	modCache := filepath.Join(s.cfg.Cache.Directory, id+".txt")
+	// Результаты с фильтрацией по странам кешируются отдельно,
+	// чтобы не перезаписывать базовый (нефильтрованный) профиль.
+	cacheSuffix := ""
+	if len(countryCodes) > 0 {
+		cacheSuffix = "_c_" + strings.Join(countryCodes, "_")
+	}
+	modCache := filepath.Join(s.cfg.Cache.Directory, id+cacheSuffix+".txt")
 	content, err := s.fetchSourceContent(id, source, modCache, stdout, nil)
 	if err != nil {
 		return "", err
 	}
+	origContent := content
 
-	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+	// Base64-подписки декодируются так же, как в HTTP-режиме
+	if !detectProxyScheme(origContent) {
+		if decoded := utils.AutoDecodeBase64(origContent); detectProxyScheme(decoded) {
+			origContent = decoded
+		}
+	}
+
+	// Вычисляем строки фильтрации стран один раз до цикла
+	var allFilterStrings []string
+	if len(countryCodes) > 0 {
+		allFilterStrings = utils.LowerFilterStrings(utils.GetCountryFilterStringsForMultiple(countryCodes, s.countries))
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(origContent)), "\n")
 	finalLines := make([]string, 0, len(lines))
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -2084,6 +2391,18 @@ func (s *Service) processSource(id string, stdout bool, countryCodes []string) (
 			}
 		}
 		if processedLine != "" {
+			processedLine = s.applyReplaceBadWords(processedLine)
+			if len(countryCodes) > 0 {
+				parsedProcessed, parseErr := url.Parse(processedLine)
+				if parseErr == nil && parsedProcessed.Fragment != "" {
+					if !utils.IsFragmentMatchingCountry(parsedProcessed.Fragment, allFilterStrings) {
+						continue
+					}
+				} else {
+					// Ссылка без фрагмента не проходит фильтр по странам
+					continue
+				}
+			}
 			finalLines = append(finalLines, processedLine)
 		}
 	}

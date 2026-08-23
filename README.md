@@ -9,9 +9,9 @@ _VLESS · VMess · Trojan · Shadowsocks · Hysteria2_
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/viktor45/sub-filter/container.yaml?style=flat)](https://github.com/Viktor45/sub-filter/actions/workflows/container.yaml)
 [![License](https://img.shields.io/badge/License-AGPLv3-green.svg)](LICENSE)
 [![Docker Image](https://img.shields.io/badge/Docker-ghcr.io%2Fviktor45%2Fsub--filter-blue?logo=docker)](https://github.com/viktor45/sub-filter/pkgs/container/sub-filter)
-[![en](https://img.shields.io/badge/lang-en-blue)](https://github.com/viktor45/sub-filter/blob/main/docs/en/README_en.md)
-[![ru](https://img.shields.io/badge/lang-ru-red)](https://github.com/viktor45/sub-filter/blob/main/docs/README.md)
-[![zh](https://img.shields.io/badge/lang-zh-blue)](https://github.com/viktor45/sub-filter/blob/main/docs/zh/README_zh.md)
+[![en](https://img.shields.io/badge/lang-en-blue)](docs/README.md)
+[![ru](https://img.shields.io/badge/lang-ru-red)](docs/ru/README.md)
+[![zh](https://img.shields.io/badge/lang-zh-blue)](docs/zh/README.md)
 
 **Removes junk. Keeps only secure servers.**
 
@@ -19,55 +19,70 @@ _VLESS · VMess · Trojan · Shadowsocks · Hysteria2_
 
 ---
 
-**sub-filter** is an intelligent proxy subscription filter for VLESS, VMess, Trojan, Shadowsocks, and Hysteria2.  
-It automatically:
+**sub-filter** is an intelligent proxy subscription filter for VLESS, VMess, Trojan,
+Shadowsocks, and Hysteria2. It automatically:
 
-- 🔒 **Blocks insecure configurations** (e.g., VLESS without encryption)
+- 🔒 **Blocks insecure configurations** (e.g., VLESS with `security=none`)
 - 🧪 **Validates correctness** (required parameters, allowed values)
-- 🚫 **Rule-based filtering of prohibited (bad) keywords**
+- 🚫 **Filters prohibited ("bad") keywords** by flexible rules (strip, replace, or delete)
 - 🌍 **Selects servers by country** (flag, name, ISO code)
 - 🔁 **Merges and deduplicates** multiple subscriptions into one clean list
 
 The result is a ready-to-use subscription for **Clash, Sing-Box, routers, and other clients**.
 
-> ⚠️ **Note**: This tool **does not test proxy liveness** (availability/latency).  
+> ⚠️ **Note**: This tool **does not test proxy liveness** (availability/latency).
 > For that, use [xray-checker](https://github.com/kutovoys/xray-checker).
 
 ---
 
 ## 📚 Documentation
 
-| Topic                 | Links                                                                                            |
-|-----------------------|--------------------------------------------------------------------------------------------------|
-| **Main Guide**        | [EN](docs/en/README_en.md) · [RU](docs/README.md) · [ZH](docs/zh/README_zh.md)                   |
-| **FAQ**               | [EN](docs/en/FAQ_en.md) · [RU](docs/FAQ.md) · [ZH](docs/zh/FAQ_zh.md)                            |
-| **Validation Rules**  | [EN](docs/en/FILTER_RULES_en.md) · [RU](docs/FILTER_RULES.md) · [ZH](docs/zh/FILTER_RULES_zh.md) |
-| **Bad words filters** | [EN](docs/en/BADWORDS_en.md) · [RU](docs/BADWORDS.md) · [ZH](docs/zh/BADWORDS_zh.md)             |
-| **Configuration**     | [config/config.yaml](config/config.yaml)                                                         |
-| **Rules Example**     | [config/rules.yaml](config/rules.yaml)                                                           |
-| **Bad words Example** | [config/badwords.yaml](config/badwords.yaml)                                                     |
-| Example configuration | [./config](./config)                                                                             |
-| for developers:       |
-| Extending             | [EN](docs/en/EXTENDING_en.md) · [RU](docs/EXTENDING.md) · [ZH](docs/zh/EXTENDING_zh.md)          |
-| Error Types           | [EN](docs/en/ERROR_TYPES_en.md) · [RU](docs/ERROR_TYPES.md) · [ZH](docs/zh/ERROR_TYPES_zh.md)    |
+English is the primary language. Russian and Chinese translations are provided in
+`docs/ru/` and `docs/zh/`.
 
+| Topic                          | EN                                           | RU                                | ZH                                |
+|--------------------------------|----------------------------------------------|-----------------------------------|-----------------------------------|
+| **Main guide**                 | [docs](docs/README.md)                       | [docs/ru](docs/ru/README.md)      | [docs/zh](docs/zh/README.md)      |
+| **Validation rules**           | [FILTER_RULES](docs/FILTER_RULES.md)         | [RU](docs/ru/FILTER_RULES.md)     | [ZH](docs/zh/FILTER_RULES.md)     |
+| **Bad-word filters**           | [BADWORDS](docs/BADWORDS.md)                 | [RU](docs/ru/BADWORDS.md)         | [ZH](docs/zh/BADWORDS.md)         |
+| **Output formats (`format=`)** | [FORMAT_PARAMETER](docs/FORMAT_PARAMETER.md) | [RU](docs/ru/FORMAT_PARAMETER.md) | [ZH](docs/zh/FORMAT_PARAMETER.md) |
+| **FAQ**                        | [FAQ](docs/FAQ.md)                           | [RU](docs/ru/FAQ.md)              | [ZH](docs/zh/FAQ.md)              |
+| **Development**                | [DEVELOPMENT](docs/DEVELOPMENT.md)           | [RU](docs/ru/DEVELOPMENT.md)      | [ZH](docs/zh/DEVELOPMENT.md)      |
+
+Configuration and rule examples live in [`config/`](config/):
+
+| File                                             | Purpose                     |
+|--------------------------------------------------|-----------------------------|
+| [`config/config.yaml`](config/config.yaml)       | Main configuration          |
+| [`config/rules.yaml`](config/rules.yaml)         | Validation rules            |
+| [`config/badwords.yaml`](config/badwords.yaml)   | Bad-word rules              |
+| [`config/sub.txt`](config/sub.txt)               | Subscription sources        |
+| [`config/countries.yaml`](config/countries.yaml) | Country data                |
+| [`config/uagent.txt`](config/uagent.txt)         | Allowed User-Agent patterns |
 
 ---
 
 ## 🚀 Quick Start
 
+Requires **Go 1.26+** to build.
+
 ```bash
-# Start server on port 8000
-./sub-filter 8000
+# Build
+go build -o sub-filter .
 
-# Test output
-curl -H "User-Agent: Clash" "http://localhost:8000/filter?id=1&c=RU"
+# Start the HTTP server on port 8000 (default)
+./sub-filter
 
-# Process subscriptions in CLI mode and print to terminal
+# Test the output (note: the User-Agent must be on the allow-list)
+curl -H "User-Agent: clash" "http://localhost:8000/filter?id=1&c=RU"
+
+# Process all configured subscriptions once in CLI mode and print to the terminal
 ./sub-filter --cli --stdout --country=NL,RU
 ```
 
-> 💡 **Don’t forget to review the configuration files!**
+> 💡 **Review the configuration files in `config/` before running.**
+
+Full usage details are in the [main guide](docs/README.md).
 
 ---
 
@@ -75,17 +90,21 @@ curl -H "User-Agent: Clash" "http://localhost:8000/filter?id=1&c=RU"
 
 ```bash
 docker run -d \
-  -p 8080:8080 \
+  -p 8000:8000 \
   -v $(pwd)/config:/config:ro \
   -v $(pwd)/cache:/tmp/sub-filter-cache \
-  ghcr.io/viktor45/sub-filter:latest \
-  8080
+  ghcr.io/viktor45/sub-filter:latest
 ```
+
+The image reads its configuration from `/config/config.yaml`
+(`SUBFILTER_CONFIG=/config/config.yaml`) and listens on port `8000` by default.
+See the [main guide](docs/README.md#docker) for more options.
 
 ---
 
 <div align="center">
 
-💡 **Tip**: Use `sub-filter` as a middleware between public subscriptions and your client — and forget about broken or misconfigured proxies!
+💡 **Tip**: Use `sub-filter` as middleware between public subscriptions and your
+client — and forget about broken or misconfigured proxies!
 
 </div>

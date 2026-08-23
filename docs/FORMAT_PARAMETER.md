@@ -1,209 +1,190 @@
-[EN](en/FORMAT_PARAMETER_en.md) / [RU](FORMAT_PARAMETER.md) / [ZH](zh/FORMAT_PARAMETER_zh.md)
+[EN](FORMAT_PARAMETER.md) / [RU](ru/FORMAT_PARAMETER.md) / [ZH](zh/FORMAT_PARAMETER.md)
 
 <!-- TOC -->
-* [Документация по параметру `format`](#документация-по-параметру-format)
-  * [Обзор](#обзор)
-  * [Поддерживаемые форматы](#поддерживаемые-форматы)
-    * [1. По умолчанию (обычный текст)](#1-по-умолчанию-обычный-текст)
-    * [2. Формат YAML](#2-формат-yaml)
-    * [3. Кодировка Base64](#3-кодировка-base64)
-    * [4. Комбинированные форматы](#4-комбинированные-форматы)
-      * [YAML + Base64](#yaml--base64)
-  * [Примеры использования](#примеры-использования)
-    * [Базовая фильтрация с форматом по умолчанию](#базовая-фильтрация-с-форматом-по-умолчанию)
-    * [Фильтрация в YAML для Clash](#фильтрация-в-yaml-для-clash)
-    * [Объединение нескольких источников в YAML](#объединение-нескольких-источников-в-yaml)
-    * [YAML, закодированный в Base64 (для встраивания в конфиги)](#yaml-закодированный-в-base64-для-встраивания-в-конфиги)
-    * [Фильтрация с кодами стран и форматом](#фильтрация-с-кодами-стран-и-форматом)
-  * [Интеграция с клиентами](#интеграция-с-клиентами)
-    * [Clash / Mihomo](#clash--mihomo)
-    * [Base64 для встраивания](#base64-для-встраивания)
-  * [Справочник параметров запроса](#справочник-параметров-запроса)
-  * [Устранение неполадок](#устранение-неполадок)
-    * [Проблемы с форматом YAML](#проблемы-с-форматом-yaml)
-    * [Проблемы с декодированием Base64](#проблемы-с-декодированием-base64)
-  * [Вопросы производительности](#вопросы-производительности)
-  * [Совместимость](#совместимость)
+* [The `format` parameter](#the-format-parameter)
+  * [Supported formats](#supported-formats)
+    * [Plain text (default)](#plain-text-default)
+    * [YAML (Clash/Mihomo)](#yaml-clashmihomo)
+    * [Base64](#base64)
+    * [Combined: YAML + Base64](#combined-yaml--base64)
+  * [YAML conversion details](#yaml-conversion-details)
+    * [Proxy names](#proxy-names)
+    * [Per-protocol fields](#per-protocol-fields)
+  * [Response headers and filenames](#response-headers-and-filenames)
+  * [Usage examples](#usage-examples)
+  * [Troubleshooting](#troubleshooting)
 <!-- TOC -->
 
-# Документация по параметру `format`
+# The `format` parameter
 
-## Обзор
-Параметр `format=` позволяет преобразовать ответ со списком прокси от эндпоинтов `/filter` и `/merge` в различные форматы, подходящие для разных клиентов.
+The `format=` query parameter of `/filter` and `/merge` transforms the proxy
+list into a form suitable for different clients.
 
-## Поддерживаемые форматы
+| Value              | Result                                        |
+| ------------------ | --------------------------------------------- |
+| *(empty/absent)*   | Plain text, one proxy URL per line            |
+| `yaml`             | Clash/Mihomo-compatible YAML proxy list       |
+| `base64`           | Base64-encoded plain text                     |
+| `yaml+base64`      | YAML proxy list, then base64-encoded          |
 
-### 1. По умолчанию (обычный текст)
-Если параметр `format` не указан или пуст, ответ содержит одну ссылку на прокси в каждой строке.
+The value is case-insensitive. Only the tokens `yaml` and `base64` are
+accepted; anything else returns `400 Bad Request`.
 
-**Пример:**
-```
+> 📝 In a URL query string a literal `+` is decoded as a space, so
+> `format=yaml+base64` and `format=yaml%20base64` are equivalent — both are
+> accepted.
+
+## Supported formats
+
+### Plain text (default)
+
+Without `format`, the response contains one proxy URL per line:
+
+```text
 /filter?id=1
 ```
 
-**Вывод:**
-```
-ss://example.com:8388#proxy1
-vless://example.com:443#proxy2
-trojan://example.com:443#proxy3
+```text
+ss://BASE64@example.com:8388#proxy1
+vless://uuid@example.com:443?security=tls&sni=example.com#proxy2
 ```
 
-| Параметр         | Значение                    |
-| ---------------- | --------------------------- |
-| Content-Type     | `text/plain; charset=utf-8` |
-| Расширение файла | `.txt`                      |
+### YAML (Clash/Mihomo)
 
-### 2. Формат YAML
-Указание `format=yaml` преобразует список прокси в формат YAML, совместимый с клиентами **Clash** и **Mihomo**.
+`format=yaml` converts every supported proxy link into a structured
+Clash/Mihomo proxy entry:
 
-**Пример:**
-```
+```text
 /filter?id=1&format=yaml
 /merge?ids=1,2&format=yaml
 ```
 
-**Вывод:**
 ```yaml
 proxies:
-  - name: "example.com-0"
-    url: "ss://example.com:8388#proxy1"
-  - name: "example.com-1"
-    url: "vless://example.com:443#proxy2"
-  - name: "example.com-2"
-    url: "trojan://example.com:443#proxy3"
+  - name: "proxy1"
+    type: ss
+    server: "example.com"
+    port: 8388
+    cipher: "2022-blake3-aes-256-gcm"
+    password: "mypassword"
+  - name: "proxy2"
+    type: vless
+    server: "example.com"
+    port: 443
+    uuid: "myuuid"
+    network: "tcp"
+    tls: true
+    servername: "example.com"
 ```
 
-| Параметр         | Значение                            |
-| ---------------- | ----------------------------------- |
-| Content-Type     | `application/x-yaml; charset=utf-8` |
-| Расширение файла | `.yaml`                             |
+If no proxies remain after filtering, a minimal `proxies: []` document is
+returned.
 
-📌 **Примечание:** Имена прокси автоматически извлекаются из:
-- Фрагмента URL (например, `#name=MyProxy`)
-- Query-параметров (`remark=`, `desc=`)
-- Имени хоста из URL
-- Генерируется как `proxy-N`, если ничего из вышеперечисленного недоступно
+### Base64
 
-### 3. Кодировка Base64
-Указание `format=base64` кодирует ответ в base64. Может комбинироваться с другими форматами.
+`format=base64` base64-encodes the plain-text list:
 
-**Пример:**
-```
+```text
 /filter?id=1&format=base64
 ```
 
-**Вывод:**
-```
+```text
 c3M6Ly9leGFtcGxlLmNvbTo4Mzg4I3Byb3h5MQp2bGVzczo...
 ```
 
-| Параметр         | Значение                   |
-| ---------------- | -------------------------- |
-| Content-Type     | `application/octet-stream` |
-| Расширение файла | `.b64`                     |
+### Combined: YAML + Base64
 
-### 4. Комбинированные форматы
-Можно комбинировать форматы, используя разделитель `+` или разделяя их запятыми. Форматы применяются в порядке указания.
+Both tokens can be given in any order (`yaml+base64` or `base64+yaml`); the
+YAML conversion is always applied first, then the result is base64-encoded:
 
-**Примеры:**
-
-#### YAML + Base64
-```
+```text
 /filter?id=1&format=yaml+base64
 ```
-Сначала выполняется преобразование в YAML, затем результат кодируется в base64.
 
-**Вывод:**
-```
-cHJveGllczoKICAtIG5hbWU6ICJleGFtcGxlLmNvbS0wIgogICAgdXJsOiAic3M6Ly9leGFtcGxlLmNvbTo4Mzg4I3Byb3h5MSI=
+```text
+cHJveGllczoKICAtIG5hbWU6ICJwcm94eTEiCiAgICB0eXBlOiBzcwogICAg...
 ```
 
-| Параметр         | Значение                   |
-| ---------------- | -------------------------- |
-| Content-Type     | `application/octet-stream` |
-| Расширение файла | `.yaml.b64`                |
+## YAML conversion details
 
-## Примеры использования
+The converter parses the **normalized** links produced by the protocol packages
+(SS userinfo is base64 `cipher:password`, VMess is `vmess://BASE64(JSON)`).
 
-### Базовая фильтрация с форматом по умолчанию
+- Comments, empty lines, and unsupported schemes (anything other than `ss`,
+  `vless`, `vmess`, `trojan`, `hy2`/`hysteria2`) are skipped — they are never
+  turned into fake entries.
+- All string values are quoted and escaped, so special characters cannot break
+  the YAML structure.
+
+### Proxy names
+
+Names are resolved in this order:
+
+1. **VMess**: the `ps` field of the decoded JSON payload, then the URL fragment.
+2. **Other protocols**: the URL fragment — a `name=...` part if present,
+   otherwise the whole fragment.
+3. Query parameters `remark=` or `desc=`.
+4. `<hostname>-<index>`, then `proxy-<index>` as a last resort.
+
+### Per-protocol fields
+
+| Protocol    | Emitted fields                                                                                                                                                                                          |
+|-------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `ss`        | `server`, `port`, `cipher`, `password`, optional `plugin: obfs` + `plugin-opts.mode`, `udp`                                                                                                             |
+| `vless`     | `server`, `port`, `uuid`, `network`, `tls`, `servername`, `reality-opts` (`public-key`, `short-id`), `client-fingerprint`, `alpn`, `flow`, transport opts (`ws-opts`, `grpc-opts`, `xhttp-opts`), `udp` |
+| `vmess`     | `server`, `port`, `uuid`, `alterId`, `cipher`, `network`, `tls`, `servername`, transport opts (`ws-opts`, `h2-opts`, `grpc-opts`)                                                                       |
+| `trojan`    | `server`, `port`, `password`, `sni`, `reality-opts`, `skip-cert-verify`, `alpn`, `network`, transport opts, `udp`                                                                                       |
+| `hysteria2` | `server`, `port`, `password`, `obfs` (salamander), `sni`, `skip-cert-verify`, `up`, `down`, `udp`                                                                                                       |
+
+Transport notes: the canonical Xray parameter is `type` (`network` is a
+fallback); REALITY fields map to `pbk`/`sid`/`fp`; Hysteria2 password comes
+from the userinfo or `obfs-password`; legacy `allowInsecure` maps to
+`skip-cert-verify`; speed limits read `upmbps`/`downmbps` (with `up`/`down`
+fallbacks).
+
+## Response headers and filenames
+
+Responses are served as attachments with safe headers
+(`X-Content-Type-Options: nosniff`, RFC 5987 encoded filename).
+
+| Format          | Content-Type                        | File extension |
+| --------------- | ----------------------------------- | -------------- |
+| Plain (default) | `text/plain; charset=utf-8`         | `.txt`         |
+| YAML            | `application/x-yaml; charset=utf-8` | `.yaml`        |
+| Base64          | `application/octet-stream`          | `.b64`         |
+| YAML + Base64   | `application/octet-stream`          | `.yaml`        |
+
+## Usage examples
+
 ```bash
-curl "http://localhost:8080/filter?id=1&c=US,JP"
+# Plain text (default)
+curl -H "User-Agent: clash" "http://localhost:8000/filter?id=1&c=US,JP"
+
+# YAML for Clash/Mihomo
+curl -H "User-Agent: clash" "http://localhost:8000/filter?id=1&format=yaml" > profile.yaml
+
+# Merged sources as YAML
+curl -H "User-Agent: clash" "http://localhost:8000/merge?ids=1,2&format=yaml"
+
+# Base64-encoded YAML (for embedding)
+curl -H "User-Agent: clash" "http://localhost:8000/filter?id=1&format=yaml+base64"
+
+# YAML with country filter and line limit
+curl -H "User-Agent: clash" "http://localhost:8000/filter?id=1&c=US,JP&format=yaml&lim=100"
 ```
 
-### Фильтрация в YAML для Clash
-```bash
-curl "http://localhost:8080/filter?id=1&format=yaml" | cat > profile.yaml
-```
+> 🔐 All endpoints still require an allowed `User-Agent` and are rate-limited —
+> see the [main guide](README.md#request-protection).
 
-### Объединение нескольких источников в YAML
-```bash
-curl "http://localhost:8080/merge?ids=1,2&format=yaml"
-```
+## Troubleshooting
 
-### YAML, закодированный в Base64 (для встраивания в конфиги)
-```bash
-curl "http://localhost:8080/filter?id=1&format=yaml+base64"
-```
+| Symptom                            | Cause / solution                                                                |
+|------------------------------------|---------------------------------------------------------------------------------|
+| `400 Bad Request` on `format=`     | Unknown token (e.g. `json`). Only `yaml` and `base64` are allowed.              |
+| Fewer proxies in YAML than in text | Unsupported schemes and unparseable links are skipped during conversion.        |
+| Base64 won't decode                | Use a standard decoder (`base64 -d`); ensure no newlines were added in transit. |
+| Empty YAML                         | All proxies were filtered out; the response is `proxies: []`.                   |
 
-### Фильтрация с кодами стран и форматом
-```bash
-curl "http://localhost:8080/filter?id=1&c=US,JP,CN&format=yaml"
-```
-
-## Интеграция с клиентами
-
-### Clash / Mihomo
-Используйте `format=yaml` для получения YAML-вывода, совместимого с Clash и Mihomo:
-```bash
-curl "http://localhost:8080/filter?id=1&format=yaml" > clash-proxy.yaml
-```
-Затем импортируйте этот YAML-файл в конфигурацию Clash.
-
-### Base64 для встраивания
-Когда нужно встроить список прокси в другие конфигурации или инструменты, ожидающие данные в кодировке base64:
-```bash
-# Получить список прокси в открытом виде, закодированный в base64
-ENCODED=$(curl "http://localhost:8080/filter?id=1&format=base64")
-
-# Получить YAML, закодированный в base64
-YAML_ENCODED=$(curl "http://localhost:8080/filter?id=1&format=yaml+base64")
-```
-
-## Справочник параметров запроса
-
-| Параметр | Значения                                       | Пример         |
-| -------- | ---------------------------------------------- | -------------- |
-| `format` | `yaml`, `base64`, `yaml+base64`, `base64+yaml` | `?format=yaml` |
-| `id`     | ID источника                                   | `?id=1`        |
-| `ids`    | ID источников через запятую                    | `?ids=1,2`     |
-| `c`      | Коды стран                                     | `?c=US,JP`     |
-| `lim`    | Ограничение количества строк                   | `?lim=100`     |
-
-## Устранение неполадок
-
-### Проблемы с форматом YAML
-- Значение параметра `format` валидируется: при недопустимом значении (например, `json`) сервер возвращает `400 Bad Request`
-- YAML-вывод содержит структурированные поля прокси (`server`, `port`, `password`, `uuid` и т.д.) для Clash/Mihomo
-- Комментарии, пустые строки и неподдерживаемые схемы (все, кроме `ss`, `vless`, `vmess`, `trojan`, `hy2`/`hysteria2`) игнорируются
-- Если в ответе нет ни одного прокси, возвращается минимальный документ `proxies: []`
-
-### Проблемы с декодированием Base64
-- Используйте стандартные декодеры base64: `base64 -d` в Linux/Mac или модуль `base64` в Python
-- Убедитесь, что при передаче не добавляются символы новой строки
-- Content-Type для ответов в base64 — `application/octet-stream`
-
-## Вопросы производительности
-- Преобразование в YAML добавляет минимальные накладные расходы, так как выполняется один проход по строкам
-- Кодирование в Base64 увеличивает размер ответа примерно на **33%**
-- Комбинирование форматов применяет преобразования последовательно
-- Все ответы по-прежнему подчиняются ограничениям скорости и размера
-
-## Совместимость
-
-| Формат           | Совместимость                                                                      |
-| ---------------- | ---------------------------------------------------------------------------------- |
-| **YAML**         | Совместим с Clash, Mihomo и другими инструментами, принимающими YAML-списки прокси |
-| **Base64**       | Совместим с любым инструментом, ожидающим данные в кодировке base64                |
-| **По умолчанию** | Совместим со всеми существующими клиентами и инструментами                         |
-
----
+**Performance notes:** YAML conversion is a single pass over the lines; base64
+adds ~33% to the response size; combined formats apply transformations
+sequentially. All responses remain subject to rate limiting and `lim`.

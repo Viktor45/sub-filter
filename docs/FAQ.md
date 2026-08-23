@@ -1,66 +1,96 @@
-[EN](en/FAQ_en.md) / [RU](FAQ.md) / [ZH](zh/FAQ_zh.md)
+[EN](FAQ.md) / [RU](ru/FAQ.md) / [ZH](zh/FAQ.md)
 
 <!-- TOC -->
-* [Ответы на вопросы](#ответы-на-вопросы)
-  * [Зачем вообще нужна эта программа?](#зачем-вообще-нужна-эта-программа)
-  * [Что именно удаляет программа?](#что-именно-удаляет-программа)
-  * [Зачем фильтровать по странам?](#зачем-фильтровать-по-странам)
-  * [Как работает фильтрация по странам?](#как-работает-фильтрация-по-странам)
-  * [Где посмотреть, что было выкинуто из подписки программой?](#где-посмотреть-что-было-выкинуто-из-подписки-программой)
-  * [Не уйдут ли мои данные куда-то?](#не-уйдут-ли-мои-данные-куда-то)
+* [Frequently Asked Questions](#frequently-asked-questions)
+  * [Why does this program exist?](#why-does-this-program-exist)
+  * [What exactly does the program reject?](#what-exactly-does-the-program-reject)
+  * [Why filter by country?](#why-filter-by-country)
+  * [How does country filtering work?](#how-does-country-filtering-work)
+  * [Where can I see what was rejected?](#where-can-i-see-what-was-rejected)
+  * [Why do I get "400 Invalid User-Agent"?](#why-do-i-get-400-invalid-user-agent)
+  * [Will my data be sent anywhere?](#will-my-data-be-sent-anywhere)
 <!-- TOC -->
 
-# Ответы на вопросы
+# Frequently Asked Questions
 
-## Зачем вообще нужна эта программа?
+## Why does this program exist?
 
-Иногда подписки на прокси-серверы ломаются из-за одной-единственной плохой строки — и тогда клиент на роутере или в приложении отказывается их загружать целиком. Вместо того чтобы вручную вычищать такую подписку или добавлять каждый сервер по отдельности, была создана эта программа:
+Proxy subscriptions sometimes break because of a single invalid line, causing a
+client (on a router or in an app) to reject the entire subscription. Instead of
+cleaning subscriptions by hand, this tool automatically removes broken,
+insecure, or unwanted servers. It is especially useful for routers and
+resource-constrained devices.
 
-Чтобы автоматически чистить публичные подписки от нерабочих, небезопасных или нежелательных серверов. Особенно полезно для роутеров и устройств с ограниченными ресурсами.
+> ⚠️ The program **does not test proxy liveness** — only configuration
+> correctness.
 
-> ⚠️ Программа не проверяет живучесть прокси — только корректность их конфигурации.
+## What exactly does the program reject?
 
-## Что именно удаляет программа?
+With the bundled `config/rules.yaml`:
 
-- VLESS с `security=none` (незашифрованный трафик — **запрещён во всех случаях**)
-- VLESS без обязательных параметров: `encryption`, `sni`, а также `pbk` (при `security=reality`), `serviceName` (при `type=grpc`), `path` (при `type=ws`/`xhttp`)
-- VMess без `tls=tls`
-- Trojan с ошибками (например, `type=grpc` без `serviceName`)
-- Hysteria2 без `obfs` или `obfs-password`
-- Серверы с «запрещёнными словами» в названии
-- Серверы, не соответствующие списку указанных стран
+- VLESS with `security=none` (or a missing `security`, which is treated as
+  `none`), or missing `sni`
+- VLESS missing `pbk` when `security=reality`, `serviceName` when `type=grpc`,
+  or `path` for `ws`/`httpupgrade`/`xhttp`/`splithttp`
+- VMess with `security` set to `none`, `zero`, or `null` (unencrypted)
+- Trojan with any `flow` parameter (removed in Xray-core 2024+)
+- Shadowsocks with deprecated CFB/CTR ciphers
+- Hysteria2 without `obfs`/`obfs-password`, or with `insecure=1`/`true`
+- Servers whose names match a `delete` bad-word rule
+- Servers not matching the requested country list (when a country filter is set)
+- Links with unsupported schemes or malformed URLs
 
-## Зачем фильтровать по странам?
+The full rule set and how to tune it are in
+[FILTER_RULES](FILTER_RULES.md).
 
-Чтобы использовать только те серверы, которые находятся в нужных вам юрисдикциях — например, для повышения скорости и улучшения связанности.
+## Why filter by country?
 
-## Как работает фильтрация по странам?
+To use only servers in the jurisdictions you want — for example, to improve
+speed and connection stability.
 
-Программа ищет внутри **фрагмента** ссылки (`#...`) любые из следующих строк:
+## How does country filtering work?
 
-- Код страны (CCA2): `AD`
-- Трёхбуквенный код (CCA3): `AND`
-- Эмодзи флага: `🇦🇩`
-- Общее название: `Andorra`
-- Родное название: `Principat d'Andorra`
+The program scans the **fragment** of each proxy link (`#...`) for any of these
+strings for the requested countries:
 
-Сравнение **регистронезависимое** и поддерживает URL-декодирование.
+- ISO 3166-1 alpha-3 code: `AND`
+- Flag emoji: `🇦🇩`
+- Common name: `Andorra`
+- Native names: `Principat d'Andorra`
 
-## Где посмотреть, что было выкинуто из подписки программой?
+Matching is **case-insensitive** and supports **URL decoding**. The two-letter
+code you pass (`c=AD`) selects the country but is not itself searched in the
+fragment. Links without a fragment do not pass a country filter.
 
-В папке кеша (`/tmp/sub-filter-cache`) создаются файлы:
+## Where can I see what was rejected?
 
-- `mod_??.txt` — отфильтрованная подписка
-- `rejected_??.txt` — список отклонённых строк с причинами
+In server mode, the cache directory (`/tmp/sub-filter-cache` by default) holds,
+for each source and country combination:
 
-Имя файла зависит от номера подписки (`?id=1` → `rejected_1.txt`) и, при фильтрации по странам, от кода страны (например, `rejected_1_ad.txt`).
+- `orig_<id>[_c_<CODES>].txt` — the original fetched subscription
+- `mod_<id>[_c_<CODES>].txt` — the filtered result
+- `rejected_<id>[_c_<CODES>].txt` — rejected lines, each preceded by a
+  `# REASON: ...` line
 
-## Не уйдут ли мои данные куда-то?
+`<CODES>` is the sorted, underscore-joined country codes, e.g.
+`rejected_1_c_AD.txt` for `?id=1&c=AD`.
 
-Нет. Все операции происходят **локально**. Программа только:
+## Why do I get "400 Invalid User-Agent"?
 
-1. Скачивает публичную подписку
-2. Обрабатывает её на вашем устройстве
-3. Отдаёт результат вашему клиенту
+`/filter` and `/merge` only accept requests whose `User-Agent` starts with a
+built-in prefix (`clash`, `happ`, `incy`) or matches a pattern in
+`config/uagent.txt`. Built-in prefixes are case-sensitive, so use
+`User-Agent: clash` (lowercase) with `curl`. Most popular clients are already
+covered by `uagent.txt`.
 
-Никакие данные не отправляются третьим лицам. Программа может работать как в фоновом сервере, так и в однократном CLI-режиме. Она не требует облачных сервисов и может быть запущена даже в Docker-контейнере на вашем устройстве.
+## Will my data be sent anywhere?
+
+No. All processing happens **locally**. The program only:
+
+1. Downloads the public subscriptions you configured,
+2. Processes them on your device,
+3. Delivers the result to your client (Clash, router, etc.).
+
+**No data is sent to third parties.** The tool can run as a background server
+or in one-time CLI mode, needs no cloud services, and can run in a Docker
+container on your own device.

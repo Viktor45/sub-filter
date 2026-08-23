@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"gopkg.in/yaml.v3"
 
@@ -45,7 +46,7 @@ type Config struct {
 	Validation ValidationConfig `yaml:"validation"`
 	Logging    LoggingConfig    `yaml:"logging"`
 
-	// Runtime-loaded data
+	// Данные, загружаемые на этапе выполнения
 	SourcesMap   SourceMap                      `yaml:"-"`
 	Rules        map[string]validator.Validator `yaml:"-"`
 	Countries    map[string]utils.CountryInfo   `yaml:"-"`
@@ -254,7 +255,7 @@ func (c *Config) loadRuntimeData() error {
 		if countries, err := utils.LoadCountries(c.Validation.CountriesFile); err == nil {
 			c.Countries = countries
 		} else {
-			// tolerate missing/invalid countries file and use empty map
+			// Допускаем отсутствие/некорректность файла стран и используем пустую карту
 			c.Countries = make(map[string]utils.CountryInfo)
 		}
 	} else {
@@ -264,17 +265,48 @@ func (c *Config) loadRuntimeData() error {
 	return nil
 }
 
-// Validate выполняет валидацию конфигурации
+// Validate выполняет валидацию конфигурации с расширенными проверками схемы.
+// Нулевые значения заполняются дефолтами (идемпотентность), а явно заданные
+// некорректные значения вызывают ошибку.
 func (c *Config) Validate() error {
-	// Валидация сервера
+	// --- Сервер ---
 	if c.Server.Port == 0 {
 		return errors.New("server.port must be set (1-65535)")
+	}
+	if c.Server.Port > 65535 {
+		return errors.New("server.port must be <= 65535")
 	}
 	if c.Server.ReadTimeout == 0 {
 		return errors.New("server.read_timeout must be > 0")
 	}
+	// Дефолты для необязательных тайм-аутов
+	if c.Server.WriteTimeout == 0 {
+		c.Server.WriteTimeout = 10 * time.Second
+	}
+	if c.Server.IdleTimeout == 0 {
+		c.Server.IdleTimeout = 60 * time.Second
+	}
+	// Верхние границы для явно заданных значений
+	if c.Server.ReadTimeout > 5*time.Minute {
+		return errors.New("server.read_timeout must be <= 5m")
+	}
+	if c.Server.WriteTimeout > 5*time.Minute {
+		return errors.New("server.write_timeout must be <= 5m")
+	}
+	if c.Server.IdleTimeout > 10*time.Minute {
+		return errors.New("server.idle_timeout must be <= 10m")
+	}
 
-	// Валидация кэша
+	// Валидация хоста — только валидные IP/hostname
+	if c.Server.Host != "" && c.Server.Host != "0.0.0.0" {
+		if ip := net.ParseIP(c.Server.Host); ip == nil {
+			if !isValidHostname(c.Server.Host) {
+				return fmt.Errorf("invalid server.host: %s", c.Server.Host)
+			}
+		}
+	}
+
+	// --- Кэш ---
 	if c.Cache.Directory == "" {
 		c.Cache.Directory = filepath.Join(os.TempDir(), "sub-filter-cache")
 	}
@@ -284,13 +316,48 @@ func (c *Config) Validate() error {
 	if c.Cache.MaxAge < c.Cache.TTL {
 		return errors.New("cache.max_age must be >= cache.ttl")
 	}
+	if c.Cache.MaxAge > 7*24*time.Hour {
+		return errors.New("cache.max_age must be <= 168h")
+	}
+	if c.Cache.CleanupTime == 0 {
+		c.Cache.CleanupTime = 2 * time.Minute
+	}
+	if c.Cache.CleanupTime > time.Hour {
+		return errors.New("cache.cleanup_interval must be <= 1h")
+	}
+	if c.Cache.MergeBuckets <= 0 {
+		c.Cache.MergeBuckets = 256
+	}
+	if c.Cache.MergeBuckets > 4096 {
+		return errors.New("cache.merge_buckets must be <= 4096")
+	}
 
 	// Создать директорию кэша, если нужно
-	if err := os.MkdirAll(c.Cache.Directory, 0o755); err != nil {
+	if err := os.MkdirAll(c.Cache.Directory, 0o750); err != nil {
 		return fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
-	// Файлы валидации
+	// --- Источники ---
+	if c.Sources.FetchTimeout == 0 {
+		c.Sources.FetchTimeout = 10 * time.Second
+	}
+	if c.Sources.FetchTimeout > 2*time.Minute {
+		return errors.New("sources.fetch_timeout must be <= 2m")
+	}
+	if c.Sources.MaxSize <= 0 {
+		c.Sources.MaxSize = 10 * 1024 * 1024
+	}
+	if c.Sources.MaxSize > 100*1024*1024 {
+		return errors.New("sources.max_size must be <= 100MB")
+	}
+	if c.Sources.MaxSources <= 0 {
+		c.Sources.MaxSources = 1000
+	}
+	if c.Sources.MaxSources > 10000 {
+		return errors.New("sources.max_sources must be <= 10000")
+	}
+
+	// --- Файлы валидации ---
 	if c.Validation.RulesFile == "" {
 		c.Validation.RulesFile = "./config/rules.yaml"
 	}
@@ -301,24 +368,75 @@ func (c *Config) Validate() error {
 		c.Validation.CountriesFile = "./config/countries.yaml"
 	}
 
-	// Проверить наличие требуемых файлов.
-	// Проверяем только явно указанные файлы, не установленные по умолчанию
-	requiredFiles := []string{}
-	if c.Sources.File != "" {
-		requiredFiles = append(requiredFiles, c.Sources.File)
+	// --- Лимиты валидации ---
+	if c.Validation.MaxPatterns <= 0 {
+		c.Validation.MaxPatterns = 20
 	}
-	// RulesFile проверяем только если он был явно установлен (не по умолчанию)
-	if c.Validation.RulesFile != "" && c.Validation.RulesFile != "./config/rules.yaml" {
-		requiredFiles = append(requiredFiles, c.Validation.RulesFile)
+	if c.Validation.MaxPatterns > 100 {
+		return errors.New("validation.max_patterns must be <= 100")
+	}
+	if c.Validation.MaxPatternLen <= 0 {
+		c.Validation.MaxPatternLen = 100
+	}
+	if c.Validation.MaxPatternLen > 500 {
+		return errors.New("validation.max_pattern_length must be <= 500")
+	}
+	if c.Validation.MaxCountries <= 0 {
+		c.Validation.MaxCountries = 20
+	}
+	if c.Validation.MaxCountries > 100 {
+		return errors.New("validation.max_countries must be <= 100")
+	}
+	if c.Validation.MaxMergeIDs <= 0 {
+		c.Validation.MaxMergeIDs = 20
+	}
+	if c.Validation.MaxMergeIDs > 200 {
+		return errors.New("validation.max_merge_ids must be <= 200")
 	}
 
-	for _, file := range requiredFiles {
-		if !fileExists(file) {
-			return fmt.Errorf("required file not found: %s", file)
+	// --- Проверка наличия требуемых файлов ---
+	if c.Sources.File != "" {
+		if !fileExists(c.Sources.File) {
+			return fmt.Errorf("sources file not found: %s", c.Sources.File)
+		}
+	}
+	if c.Validation.RulesFile != "" && c.Validation.RulesFile != "./config/rules.yaml" {
+		if !fileExists(c.Validation.RulesFile) {
+			return fmt.Errorf("rules file not found: %s", c.Validation.RulesFile)
+		}
+	}
+	if c.Validation.UAFile != "" && c.Validation.UAFile != "./config/uagent.txt" {
+		if !fileExists(c.Validation.UAFile) {
+			return fmt.Errorf("ua file not found: %s", c.Validation.UAFile)
 		}
 	}
 
 	return nil
+}
+
+// isValidHostname проверяет валидность hostname
+func isValidHostname(hostname string) bool {
+	if len(hostname) > 253 {
+		return false
+	}
+	// Валидация hostname по RFC 1123
+	for _, part := range strings.Split(hostname, ".") {
+		if len(part) == 0 || len(part) > 63 {
+			return false
+		}
+		for i, r := range part {
+			if i == 0 && (r == '-' || r == '_') {
+				return false
+			}
+			if i == len(part)-1 && (r == '-' || r == '_') {
+				return false
+			}
+			if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // fileExists проверяет, существует ли файл
@@ -358,21 +476,71 @@ func isValidSourceURL(rawURL string) bool {
 	if host == "" {
 		return false
 	}
-	if host == "localhost" {
+
+	// Если хост указан как IP-литерал, проверяем его через общий allowlist
+	if ip := net.ParseIP(host); ip != nil {
+		if !IsIPAllowed(ip) {
+			return false
+		}
+	}
+
+	// Блокируем внутренние/служебные доменные имена
+	lowerHost := strings.ToLower(host)
+	if lowerHost == "localhost" || strings.HasSuffix(lowerHost, ".localhost") {
 		return false
 	}
-	if strings.HasPrefix(host, "127.") {
+	internalSuffixes := []string{".local", ".internal", ".lan", ".home.arpa", ".corp", ".intranet", ".private"}
+	for _, suffix := range internalSuffixes {
+		if strings.HasSuffix(lowerHost, suffix) {
+			return false
+		}
+	}
+
+	// Валидируем порт, если он указан явно
+	if portStr := u.Port(); portStr != "" {
+		port, err := strconv.Atoi(portStr)
+		if err != nil || port < 1 || port > 65535 {
+			return false
+		}
+	}
+
+	// Запрещаем userinfo в URL источника (не используется и может путать парсеры)
+	if u.User != nil {
 		return false
 	}
-	if strings.HasSuffix(host, ".local") || strings.HasSuffix(host, ".internal") {
-		return false
-	}
+
 	return true
 }
 
+// cgnatNet — диапазон Carrier-Grade NAT (100.64.0.0/10), не должен использоваться как внешний источник.
+var cgnatNet = func() *net.IPNet {
+	_, n, _ := net.ParseCIDR("100.64.0.0/10")
+	return n
+}()
+
+// benchmarkNet — диапазон 198.18.0.0/15 для бенчмаркинга сетей (RFC 2544).
+var benchmarkNet = func() *net.IPNet {
+	_, n, _ := net.ParseCIDR("198.18.0.0/15")
+	return n
+}()
+
+// IsIPAllowed проверяет, является ли IP-адрес допустимым для подключения к источнику.
+// Отклоняются loopback, приватные, link-local, multicast, unspecified адреса,
+// а также диапазоны CGNAT (100.64.0.0/10) и бенчмаркинга (198.18.0.0/15).
+// Используется как защита от SSRF при загрузке источников подписок.
 func IsIPAllowed(ip net.IP) bool {
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsMulticast() {
+	if ip == nil {
 		return false
+	}
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+		ip.IsMulticast() || ip.IsUnspecified() || ip.IsInterfaceLocalMulticast() {
+		return false
+	}
+	// Дополнительные диапазоны, не являющиеся публичными
+	if ip4 := ip.To4(); ip4 != nil {
+		if cgnatNet.Contains(ip4) || benchmarkNet.Contains(ip4) {
+			return false
+		}
 	}
 	return true
 }
@@ -428,7 +596,7 @@ func loadBadWordsFile(filename string) ([]BadWordRule, error) {
 	if err := yaml.Unmarshal(data, &rules); err == nil && len(rules) > 0 {
 		return rules, nil
 	}
-	// fallback: older plain-text format
+	// Резервный вариант: старый текстовый формат
 	lines, err := loadTextFile(filename)
 	if err != nil {
 		return nil, err

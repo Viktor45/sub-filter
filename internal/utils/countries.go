@@ -22,11 +22,11 @@ import (
 type CountryInfo struct {
 	CCA3   string `mapstructure:"cca3"`
 	Flag   string `mapstructure:"flag"`
-	Name   string `mapstructure:"name"`   // Common name only
+	Name   string `mapstructure:"name"`   // только общепринятое название
 	Native string `mapstructure:"native"` // "A|B|C"
 }
 
-// --- REST Countries API structs ---
+// --- Структуры REST Countries API ---
 type Country struct {
 	Name struct {
 		Common     string `json:"common"`
@@ -133,7 +133,7 @@ func GenerateCountries() {
 		panic(err)
 	}
 
-	fmt.Println("✅ countries.yaml создан в требуемом формате")
+	fmt.Println("✅ countries.yaml created in the required format")
 }
 
 // LoadCountries загружает файл стран YAML и возвращает карту код->CountryInfo.
@@ -220,15 +220,28 @@ func GetCountryFilterStringsForMultiple(codes []string, countryMap map[string]Co
 }
 
 // IsFragmentMatchingCountry проверяет, содержит ли фрагмент одну из строк фильтра.
+// ВАЖНО: элементы filterStrings должны быть заранее приведены к нижнему регистру
+// (см. LowerFilterStrings). Фрагмент приводится к нижнему регистру один раз.
 func IsFragmentMatchingCountry(fragment string, filterStrings []string) bool {
 	if len(filterStrings) == 0 {
 		return true
 	}
 	lowerFragment := strings.ToLower(FullyDecode(fragment))
 	for _, term := range filterStrings {
-		if strings.Contains(lowerFragment, strings.ToLower(term)) {
+		if strings.Contains(lowerFragment, term) {
 			return true
 		}
 	}
 	return false
+}
+
+// LowerFilterStrings возвращает копию строк фильтра в нижнем регистре.
+// Вызывается один раз на запрос, чтобы не приводить термины в нижний регистр
+// на каждой проверяемой строке.
+func LowerFilterStrings(filterStrings []string) []string {
+	out := make([]string, len(filterStrings))
+	for i, t := range filterStrings {
+		out[i] = strings.ToLower(t)
+	}
+	return out
 }

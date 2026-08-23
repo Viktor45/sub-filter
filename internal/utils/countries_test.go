@@ -79,7 +79,7 @@ func TestGetCountryFilterStrings(t *testing.T) {
 }
 
 func TestIsFragmentMatchingCountry(t *testing.T) {
-	filter := []string{"AND", "🇦🇩", "Andorra", "Principat d'Andorra"}
+	filter := LowerFilterStrings([]string{"AND", "🇦🇩", "Andorra", "Principat d'Andorra"})
 	if !IsFragmentMatchingCountry("#Server 🇦🇩", filter) {
 		t.Error("Expected match for flag")
 	}

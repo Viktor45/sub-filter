@@ -25,20 +25,20 @@ func NewRegexCache() *RegexCache {
 
 // Get возвращает скомпилированное регулярное выражение из кэша или компилирует новое
 func (rc *RegexCache) Get(pattern string) (*regexp.Regexp, error) {
-	// Try to get from cache
+	// Пытаемся получить из кэша
 	if cached, ok := rc.cache.Load(pattern); ok {
 		rc.recordHit()
 		return cached.(*regexp.Regexp), nil
 	}
 
-	// Compile new regex
+	// Компилируем новое регулярное выражение
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		rc.recordMiss()
 		return nil, err
 	}
 
-	// Store in cache
+	// Сохраняем в кэш
 	rc.cache.Store(pattern, re)
 	rc.recordMiss()
 

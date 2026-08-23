@@ -60,20 +60,23 @@ func main() {
 		if *countryCodesCLI != "" {
 			rawCodes := strings.Split(*countryCodesCLI, ",")
 			if len(rawCodes) > cfg.Validation.MaxCountries {
-				log.Error("Too many country codes", "count", len(rawCodes), "max", 20)
+				log.Error("Too many country codes", "count", len(rawCodes), "max", cfg.Validation.MaxCountries)
 				os.Exit(1)
 			}
+			// Компилируем шаблон один раз до цикла
+			countryCodeRe := regexp.MustCompile(`^[A-Z]{2}$`)
 			for _, code := range rawCodes {
 				code = strings.TrimSpace(code)
 				if code == "" {
 					continue
 				}
-				// Validate ISO 3166-1 alpha-2 format (uppercase, exactly 2 letters)
-				if len(code) != 2 || !regexp.MustCompile(`^[A-Z]{2}$`).MatchString(strings.ToUpper(code)) {
+				// Проверяем формат ISO 3166-1 alpha-2 (заглавные, ровно 2 буквы)
+				upper := strings.ToUpper(code)
+				if len(code) != 2 || !countryCodeRe.MatchString(upper) {
 					log.Error("Invalid country code format", "code", code)
 					os.Exit(1)
 				}
-				parsedCountryCodes = append(parsedCountryCodes, strings.ToUpper(code))
+				parsedCountryCodes = append(parsedCountryCodes, upper)
 			}
 		}
 
@@ -88,7 +91,7 @@ func main() {
 			MergeBuckets:    cfg.Cache.MergeBuckets,
 		}
 
-		// Create service options debug flag
+		// Передаём флаг отладки в опции сервиса
 		opts.Debug = *debugMode
 		// Создаем сервис
 		svc, err := service.NewService(cfg, log, opts)
@@ -173,7 +176,7 @@ func main() {
 		cfg.Server.Port = 8000
 	}
 
-	// Prepare service options
+	// Подготавливаем опции сервиса
 	opts := &service.ServiceOptions{
 		Sources:         cfg.SourcesMap,
 		Rules:           cfg.Rules,
@@ -185,14 +188,14 @@ func main() {
 		Debug:           *debugMode,
 	}
 
-	// Create service
+	// Создаём сервис
 	svc, err := service.NewService(cfg, log, opts)
 	if err != nil {
 		log.Error("Failed to start server", "error", err)
 		os.Exit(1)
 	}
 
-	// Setup graceful shutdown handler
+	// Настраиваем обработчик корректного завершения работы
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
 

@@ -1,193 +1,125 @@
-[EN](en/FILTER_RULES_en.md) / [RU](FILTER_RULES.md) / [ZH](zh/FILTER_RULES_zh.md)
+[EN](FILTER_RULES.md) / [RU](ru/FILTER_RULES.md) / [ZH](zh/FILTER_RULES.md)
 
 <!-- TOC -->
-* [Документация для `rules.yaml`](#документация-для-rulesyaml)
-  * [Структура и основные концепции](#структура-и-основные-концепции)
-  * [1. `required_params` — Обязательные параметры](#1-required_params--обязательные-параметры)
-  * [2. `allowed_values` — Разрешённые значения](#2-allowed_values--разрешённые-значения)
-  * [3. `forbidden_values` — Запрещённые значения](#3-forbidden_values--запрещённые-значения)
-  * [4. `conditional` — Условные правила](#4-conditional--условные-правила)
-  * [VLESS — Полная документация](#vless--полная-документация)
-    * [Структура правил](#структура-правил)
-    * [Обязательные параметры](#обязательные-параметры)
-    * [Разрешённые параметры](#разрешённые-параметры)
-    * [Запрещённые параметры](#запрещённые-параметры)
-    * [Условные правила](#условные-правила)
-    * [Примеры корректных ссылок](#примеры-корректных-ссылок)
-  * [VMess — Полная документация](#vmess--полная-документация)
-    * [Структура правил](#структура-правил-1)
-    * [Обязательные параметры](#обязательные-параметры-1)
-    * [Разрешённые параметры](#разрешённые-параметры-1)
-    * [Запрещённые параметры](#запрещённые-параметры-1)
-    * [Условные правила](#условные-правила-1)
-    * [Примеры корректных ссылок](#примеры-корректных-ссылок-1)
-  * [Trojan — Полная документация](#trojan--полная-документация)
-    * [Структура правил](#структура-правил-2)
-    * [Обязательные параметры](#обязательные-параметры-2)
-    * [Разрешённые параметры](#разрешённые-параметры-2)
-    * [🔴 Запрещённые параметры](#-запрещённые-параметры)
-    * [Условные правила](#условные-правила-2)
-    * [Примеры корректных ссылок](#примеры-корректных-ссылок-2)
-  * [Shadowsocks (SS) — Полная документация](#shadowsocks-ss--полная-документация)
-    * [Структура правил](#структура-правил-3)
-    * [Обязательные параметры](#обязательные-параметры-3)
-    * [Разрешённые методы шифрования](#разрешённые-методы-шифрования)
-      * [✅ AEAD методы (современный стандарт)](#-aead-методы-современный-стандарт)
-      * [✅ Shadowsocks 2022 (новый стандарт с Blake3)](#-shadowsocks-2022-новый-стандарт-с-blake3)
-      * [✅ Специальный метод](#-специальный-метод)
-    * [🔴 Запрещённые методы (УДАЛЕНЫ в Xray-core 2024+)](#-запрещённые-методы-удалены-в-xray-core-2024)
-    * [Примеры корректных ссылок](#примеры-корректных-ссылок-3)
-  * [Hysteria2 — Полная документация](#hysteria2--полная-документация)
-    * [Структура правил](#структура-правил-4)
-    * [Обязательные параметры](#обязательные-параметры-4)
-    * [Разрешённые параметры](#разрешённые-параметры-3)
-    * [Примеры корректных ссылок](#примеры-корректных-ссылок-4)
-  * [Критические изменения (февраль 2026)](#критические-изменения-февраль-2026)
-    * [🔴 Trojan: Параметр `flow` больше не поддерживается](#-trojan-параметр-flow-больше-не-поддерживается)
-    * [🔴 Shadowsocks: CFB и CTR методы больше не поддерживаются](#-shadowsocks-cfb-и-ctr-методы-больше-не-поддерживаются)
-  * [Дополнительные ресурсы](#дополнительные-ресурсы)
+* [Validation rules (`rules.yaml`)](#validation-rules-rulesyaml)
+  * [How validation works](#how-validation-works)
+  * [Rule types](#rule-types)
+    * [required_params](#required_params)
+    * [allowed_values](#allowed_values)
+    * [forbidden_values](#forbidden_values)
+    * [conditional](#conditional)
+  * [VLESS](#vless)
+  * [VMess](#vmess)
+  * [Trojan](#trojan)
+  * [Shadowsocks](#shadowsocks)
+  * [Hysteria2](#hysteria2)
+  * [Tuning the strictness](#tuning-the-strictness)
+  * [Notable rejections](#notable-rejections)
+  * [References](#references)
 <!-- TOC -->
 
-# Документация для `rules.yaml`
+# Validation rules (`rules.yaml`)
 
----
+The file [`config/rules.yaml`](../config/rules.yaml) defines which proxy
+configurations are considered valid and which are rejected. It is split into
+per-protocol sections: `vless`, `vmess`, `trojan`, `ss`, `hysteria2`.
 
-## Структура и основные концепции
+You can add your own rules or modify existing ones. Restart the filter after
+editing the file.
 
-Файл `config/rules.yaml` содержит **правила валидации** для всех поддерживаемых протоколов прокси. Эти правила определяют, какие конфигурации считаются **корректными**, а какие подлежат **отклонению**.
+## How validation works
 
-Файл разделён на **секции по протоколам**:
-- `vless` — VLESS протокол
-- `vmess` — VMess протокол
-- `trojan` — Trojan протокол
-- `ss` — Shadowsocks протокол
-- `hysteria2` — Hysteria2 протокол
+Each protocol parser extracts the link parameters and hands them to a generic
+rule engine (`internal/validator`). Checks run in this order:
 
----
+1. **`required_params`** — every listed parameter must be present.
+2. **`forbidden_values`** — if a listed parameter has a forbidden value, the
+   link is rejected. Case-insensitive; the wildcard `"*"` forbids any value.
+3. **`allowed_values`** — if a listed parameter is present, its value must be
+   in the allow-list. Case-insensitive.
+4. **`conditional`** — when all `when` conditions match, the `require`
+   parameters become mandatory. Condition values are compared
+   **case-sensitively** (they are logical conditions, not user input).
 
-## 1. `required_params` — Обязательные параметры
+A link that fails any check is rejected and recorded in the
+`rejected_*.txt` cache file with the reason.
 
-Список параметров, которые **обязательно должны присутствовать** в ссылке.
+> 📝 Some `required_params` entries in the bundled `rules.yaml` are commented
+> out on purpose — the defaults are deliberately lenient ("security over
+> quantity"). See [Tuning the strictness](#tuning-the-strictness).
 
-**Поведение:**
-- Если хотя бы одного параметра **нет** — ссылка **отклоняется**
-- Проверка выполняется **первой** перед всеми остальными правилами
+## Rule types
 
-**Пример:**
+### required_params
+
+A list of parameters that must be present in the link.
+
 ```yaml
 vless:
   required_params:
-    - encryption
     - sni
 ```
 
-**Интерпретация:** VLESS-ссылка должна содержать параметры `encryption` и `sni`. Если одного из них нет — ссылка будет отклонена.
+If any parameter is missing, the link is rejected. This check runs first.
 
----
+### allowed_values
 
-## 2. `allowed_values` — Разрешённые значения
+Acceptable values for a parameter. Checked only when the parameter is present.
 
-Список **допустимых значений** для конкретного параметра.
-
-**Поведение:**
-- Проверяется **только если параметр присутствует**
-- Если значение параметра **не входит** в список — ссылка **отклоняется**
-- Сравнение **регистронезависимое** (aes-256-gcm = AES-256-GCM)
-- Приоритет: **меньше, чем `forbidden_values`**
-
-**Пример:**
 ```yaml
 ss:
   allowed_values:
     method:
-      - "aes-128-gcm"
       - "aes-256-gcm"
       - "chacha20-poly1305"
-      - "2022-blake3-aes-256-gcm"
 ```
 
-**Интерпретация:** Для Shadowsocks разрешены только эти методы шифрования. Если указан другой метод (например, `aes-128-cfb`) — ссылка отклоняется.
+Comparison is case-insensitive (`aes-256-gcm` = `AES-256-GCM`). A value not in
+the list rejects the link.
 
----
+### forbidden_values
 
-## 3. `forbidden_values` — Запрещённые значения
+Prohibited values for a parameter. Checked only when the parameter is present.
+Takes precedence over `allowed_values`.
 
-Список **запрещённых значений** для конкретного параметра.
-
-**Поведение:**
-- Проверяется **только если параметр присутствует**
-- Если значение **входит** в список — ссылка **отклоняется**
-- **Имеет приоритет над `allowed_values`** (проверяется первым)
-- Сравнение **регистронезависимое**
-- Поддерживает **wildcard** `"*"` — означает запрет **любого** значения параметра
-
-**Примеры:**
 ```yaml
 vless:
   forbidden_values:
-    security: ["none"]      # security=none запрещён
-    authority: [""]         # пустой authority запрещён
+    security: ["none"]      # security=none is prohibited
+    authority: [""]         # empty authority is prohibited
 
 trojan:
   forbidden_values:
-    flow: ["*"]             # ВСЕ значения flow запрещены (параметр полностью удалён)
+    flow: ["*"]             # ANY flow value is prohibited
 ```
 
-**Интерпретация:** 
-- VLESS с `security=none` отклоняется
-- Trojan с любым значением `flow` отклоняется (параметр устарел в Xray-core 2024+)
+The wildcard `"*"` forbids the parameter with any value.
 
-> ⚠️ **Важно:** `forbidden_values` имеет **глобальный** характер. Чтобы разрешить исключение (например, `security=none` только для определённого типа), используйте **условные правила** `conditional`.
+### conditional
 
----
+Rules applied only when specific conditions are met:
 
-## 4. `conditional` — Условные правила
-
-Правила, которые применяются **только при выполнении определённых условий**.
-
-**Структура:**
 ```yaml
 conditional:
-  - when: { параметр: значение }
-    require: [список_обязательных_параметров]
-```
-
-**Поведение:**
-- Проверяется **после** `required_params`, `allowed_values`, `forbidden_values`
-- Условие `when` работает как логическое И (все условия должны быть истинны)
-- Если условие выполнено, то параметры из `require` становятся **обязательными**
-
-**Примеры:**
-```yaml
-conditional:
-  # Если security=reality, обязательно должен быть pbk
   - when: { security: "reality" }
     require: ["pbk"]
-
-  # Если type=grpc, обязательно должен быть serviceName
   - when: { type: "grpc" }
     require: ["serviceName"]
-
-  # Если type=ws, обязательно должен быть path
-  - when: { type: "ws" }
-    require: ["path"]
 ```
 
-**Интерпретация:**
-- VLESS с `security=reality` должен содержать параметр `pbk`
-- VLESS с `type=grpc` должен содержать параметр `serviceName`
-- VLESS с `type=ws` должен содержать параметр `path`
+All entries in `when` must match (logical AND); then every parameter in
+`require` becomes mandatory.
 
 ---
 
-## VLESS — Полная документация
+## VLESS
 
-### Структура правил
 ```yaml
 vless:
   required_params:
     - sni
-    # encryption опционален в URI, но рекомендуется явно указывать "none" для совместимости.
+    # encryption is optional in the URI; uncomment to require it
+    # - encryption
   forbidden_values:
     security: ["none"]
     authority: [""]
@@ -214,73 +146,39 @@ vless:
       require: ["path"]
 ```
 
-### Обязательные параметры
+| Aspect      | Rule                                                                                                               |
+|-------------|--------------------------------------------------------------------------------------------------------------------|
+| Required    | `sni`                                                                                                              |
+| `security`  | `tls` or `reality` only; `none` is forbidden. A missing `security` is treated as `none` by the parser and rejected |
+| `type`      | `tcp`, `ws`, `httpupgrade`, `grpc`, `xhttp`, `splithttp`                                                           |
+| `flow`      | `xtls-rprx-vision`, `xtls-rprx-vision-udp443`, `xtls-rprx-vision-direct`                                           |
+| `mode`      | `gun`, `multi` (gRPC modes)                                                                                        |
+| Conditional | `security=reality` → `pbk`; `type=grpc` → `serviceName`; `type=ws/httpupgrade/xhttp/splithttp` → `path`            |
 
-| Параметр     | Описание                                                           |
-|--------------|--------------------------------------------------------------------|
-| `encryption` | Метод шифрования (опционален, рекомендуется явно указывать `none`) |
-| `sni`        | Server Name Indication (обязателен для TLS/REALITY)                |
+**Valid examples:**
 
-### Разрешённые параметры
-
-| Параметр   | Допустимые значения                                                      | Описание                                |
-|------------|--------------------------------------------------------------------------|-----------------------------------------|
-| `security` | `tls`, `reality`                                                         | Тип безопасности. **Запрещено:** `none` |
-| `type`     | `tcp`, `ws`, `httpupgrade`, `grpc`, `xhttp`, `splithttp`                 | Тип транспорта                          |
-| `flow`     | `xtls-rprx-vision`, `xtls-rprx-vision-udp443`, `xtls-rprx-vision-direct` | XTLS flow (только для REALITY)          |
-| `mode`     | `gun`, `multi`                                                           | Режим для gRPC                          |
-
-### Запрещённые параметры
-
-| Параметр    | Запрещённые значения | Причина                        |
-|-------------|----------------------|--------------------------------|
-| `security`  | `none`               | Нет безопасности — небезопасно |
-| `authority` | `` (пусто)           | Нарушает gRPC спецификацию     |
-
-> 🔎 Если параметр `security` отсутствует, он автоматически обрабатывается как `none` на уровне VLESS-парсера и затем отклоняется правилами `forbidden_values`.
-
-### Условные правила
-
-| Условие            | Обязательный параметр | Описание                         |
-|--------------------|-----------------------|----------------------------------|
-| `security=reality` | `pbk`                 | REALITY требует публичного ключа |
-| `type=grpc`        | `serviceName`         | gRPC требует имени сервиса       |
-| `type=ws`          | `path`                | WebSocket требует пути           |
-| `type=httpupgrade` | `path`                | HTTP Upgrade требует пути        |
-| `type=xhttp`       | `path`                | XHTTP требует пути               |
-| `type=splithttp`   | `path`                | SplitHTTP требует пути           |
-
-### Примеры корректных ссылок
-
-✅ VLESS TCP с TLS:
-```
+```text
 vless://uuid@example.com:443?encryption=none&sni=example.com&security=tls&type=tcp
-```
-
-✅ VLESS gRPC с REALITY:
-```
 vless://uuid@example.com:443?encryption=none&sni=example.com&security=reality&pbk=key&type=grpc&serviceName=service&mode=gun
-```
-
-✅ VLESS WebSocket:
-```
 vless://uuid@example.com:443?encryption=none&sni=example.com&security=tls&type=ws&path=/path
 ```
 
 ---
 
-## VMess — Полная документация
+## VMess
 
-### Структура правил
 ```yaml
 vmess:
-  required_params:
-    - uuid
+  # uuid is not required by default (some implementations omit it);
+  # uncomment to require it
+  # required_params:
+  #   - uuid
   forbidden_values:
-    security: ["none"]
+    security: ["null", "zero", "none"]
+    scy: ["null"]
   allowed_values:
     net: ["tcp", "ws", "grpc", "httpupgrade", "h2", "xhttp", "splithttp"]
-    security: ["auto", "aes-128-gcm", "chacha20-poly1305", "zero", "none"]
+    security: ["auto", "aes-128-gcm", "chacha20-poly1305"]
   conditional:
     - when: { net: "grpc" }
       require: ["serviceName"]
@@ -294,60 +192,28 @@ vmess:
       require: ["path"]
 ```
 
-### Обязательные параметры
+| Aspect      | Rule                                                                                               |
+|-------------|----------------------------------------------------------------------------------------------------|
+| Required    | none by default (server address and UUID are still enforced by the parser itself)                  |
+| `security`  | `auto`, `aes-128-gcm`, `chacha20-poly1305`; `none`, `zero`, `null` are **forbidden** (unencrypted) |
+| `scy`       | `null` is forbidden                                                                                |
+| `net`       | `tcp`, `ws`, `grpc`, `httpupgrade`, `h2`, `xhttp`, `splithttp`                                     |
+| Conditional | `net=grpc` → `serviceName`; `net=ws/httpupgrade/xhttp/splithttp` → `path`                          |
 
-| Параметр | Описание                  |
-|----------|---------------------------|
-| `uuid`   | UUID клиента (обязателен) |
-
-### Разрешённые параметры
-
-| Параметр   | Допустимые значения                                            | Описание         |
-|------------|----------------------------------------------------------------|------------------|
-| `net`      | `tcp`, `ws`, `grpc`, `httpupgrade`, `h2`, `xhttp`, `splithttp` | Тип транспорта   |
-| `security` | `auto`, `aes-128-gcm`, `chacha20-poly1305`, `zero`, `none`     | Метод шифрования |
-
-### Запрещённые параметры
-
-| Параметр   | Запрещённые значения | Причина                      |
-|------------|----------------------|------------------------------|
-| `security` | `none`               | Нет шифрования — небезопасно |
-
-> ⚠️ **Примечание:** Значения `zero` и `none` для безопасности включены в `allowed_values` для **обратной совместимости**, но внесены в `forbidden_values` для **отклонения** — т.е. они де-факто запрещены.
-
-### Условные правила
-
-| Условие           | Обязательный параметр | Описание                   |
-|-------------------|-----------------------|----------------------------|
-| `net=grpc`        | `serviceName`         | gRPC требует имени сервиса |
-| `net=ws`          | `path`                | WebSocket требует пути     |
-| `net=httpupgrade` | `path`                | HTTP Upgrade требует пути  |
-| `net=xhttp`       | `path`                | XHTTP требует пути         |
-| `net=splithttp`   | `path`                | SplitHTTP требует пути     |
-
-### Примеры корректных ссылок
-
-✅ VMess TCP с AES-128-GCM:
-```
-vmess://uuid@example.com:10086?net=tcp&security=aes-128-gcm&tls=tls
-```
-
-✅ VMess WebSocket:
-```
-vmess://uuid@example.com:80?net=ws&security=auto&path=/api
-```
+> ⚠️ Unlike older rule sets, `zero` and `none` encryption are rejected, not
+> tolerated.
 
 ---
 
-## Trojan — Полная документация
+## Trojan
 
-### Структура правил
 ```yaml
 trojan:
-  required_params:
-    - password
+  # password is not required by default; uncomment to require it
+  # required_params:
+  #   - password
   forbidden_values:
-    flow: ["*"]  # Любое значение flow запрещено (параметр удалён в Xray-core 2024+)
+    flow: ["*"]   # flow was removed from Trojan in Xray-core 2024+
   allowed_values:
     type: ["tcp", "ws", "grpc", "httpupgrade", "xhttp", "splithttp"]
     security: ["tls", "reality"]
@@ -367,67 +233,41 @@ trojan:
       require: ["path"]
 ```
 
-### Обязательные параметры
+| Aspect      | Rule                                                                                                    |
+|-------------|---------------------------------------------------------------------------------------------------------|
+| Required    | none by default (the parser still requires a valid host/port)                                           |
+| `flow`      | **forbidden with any value** — removed from Trojan in Xray-core 2024+                                   |
+| `type`      | `tcp`, `ws`, `grpc`, `httpupgrade`, `xhttp`, `splithttp`                                                |
+| `security`  | `tls`, `reality`                                                                                        |
+| `mode`      | `gun`, `multi` (gRPC modes)                                                                             |
+| Conditional | `security=reality` → `pbk`; `type=grpc` → `serviceName`; `type=ws/httpupgrade/xhttp/splithttp` → `path` |
 
-| Параметр   | Описание                               |
-|------------|----------------------------------------|
-| `password` | Пароль для аутентификации (обязателен) |
+**Valid examples:**
 
-### Разрешённые параметры
-
-| Параметр   | Допустимые значения                                      | Описание         |
-|------------|----------------------------------------------------------|------------------|
-| `type`     | `tcp`, `ws`, `grpc`, `httpupgrade`, `xhttp`, `splithttp` | Тип транспорта   |
-| `security` | `tls`, `reality`                                         | Тип безопасности |
-| `mode`     | `gun`, `multi`                                           | Режим для gRPC   |
-
-### 🔴 Запрещённые параметры
-
-| Параметр | Запрещённые значения            | Причина                         |
-|----------|---------------------------------|---------------------------------|
-| `flow`   | **ВСЕ** значения (wildcard `*`) | ❌ **УДАЛЁН в Xray-core 2024+** |
-
-> ⚠️ **КРИТИЧНО:** Параметр `flow` больше **не поддерживается** в современных версиях Xray-core. Любой Trojan конфиг с параметром `flow` будет **автоматически отклонен** при фильтрации.
-
-### Условные правила
-
-| Условие            | Обязательный параметр | Описание                         |
-|--------------------|-----------------------|----------------------------------|
-| `security=reality` | `pbk`                 | REALITY требует публичного ключа |
-| `type=grpc`        | `serviceName`         | gRPC требует имени сервиса       |
-| `type=ws`          | `path`                | WebSocket требует пути           |
-| `type=httpupgrade` | `path`                | HTTP Upgrade требует пути        |
-| `type=xhttp`       | `path`                | XHTTP требует пути               |
-| `type=splithttp`   | `path`                | SplitHTTP требует пути           |
-
-### Примеры корректных ссылок
-
-✅ Trojan TCP с TLS:
-```
+```text
 trojan://password@example.com:443?security=tls&type=tcp
-```
-
-✅ Trojan gRPC:
-```
 trojan://password@example.com:443?security=tls&type=grpc&serviceName=service&mode=gun
 ```
 
-❌ **НЕВЕРНО** — содержит запрещённый параметр `flow`:
-```
-trojan://password@example.com:443?flow=xtls-rprx-vision  ← ОТКЛОНЕНО
+❌ Rejected — contains the removed `flow` parameter:
+
+```text
+trojan://password@example.com:443?flow=xtls-rprx-vision
 ```
 
 ---
 
-## Shadowsocks (SS) — Полная документация
+## Shadowsocks
 
-### Структура правил
 ```yaml
 ss:
   required_params:
-    - password
-    - method
+    # password and method are not required by default;
+    # uncomment to strengthen security
+    # - password
+    # - method
   forbidden_values:
+    # deprecated stream ciphers (removed from Xray-core 2024+)
     method:
       - "aes-128-cfb"
       - "aes-256-cfb"
@@ -435,83 +275,43 @@ ss:
       - "aes-256-ctr"
   allowed_values:
     method:
+      # AEAD ciphers (modern standard)
       - "aes-128-gcm"
       - "aes-256-gcm"
       - "chacha20-poly1305"
       - "xchacha20-poly1305"
+      # Shadowsocks 2022 (Blake3)
       - "2022-blake3-aes-128-gcm"
       - "2022-blake3-aes-256-gcm"
       - "2022-blake3-chacha20-poly1305"
-      - "none"
+      # unencrypted; disabled by default
+      # - "none"
 ```
 
-### Обязательные параметры
+| Aspect    | Rule                                                                                                                                                                         |
+|-----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Required  | none by default (the parser still validates the cipher syntax)                                                                                                               |
+| Allowed   | AEAD: `aes-128-gcm`, `aes-256-gcm`, `chacha20-poly1305`, `xchacha20-poly1305`; SS2022: `2022-blake3-aes-128-gcm`, `2022-blake3-aes-256-gcm`, `2022-blake3-chacha20-poly1305` |
+| Forbidden | `aes-128-cfb`, `aes-256-cfb`, `aes-128-ctr`, `aes-256-ctr` (removed from Xray-core 2024+)                                                                                    |
+| `none`    | **not allowed** by default (commented out in the bundled rules)                                                                                                              |
 
-| Параметр   | Описание                               |
-|------------|----------------------------------------|
-| `password` | Пароль для аутентификации (обязателен) |
-| `method`   | Метод шифрования (обязателен)          |
+**Recommended:** `2022-blake3-aes-256-gcm` (most secure and modern) or
+`aes-256-gcm` (traditional AEAD).
 
-### Разрешённые методы шифрования
-
-#### ✅ AEAD методы (современный стандарт)
-
-| Метод                | Рекомендация                                                            |
-|----------------------|-------------------------------------------------------------------------|
-| `aes-128-gcm`        | ✅ Поддерживается, но менее безопасен чем 256-bit                       |
-| `aes-256-gcm`        | ✅ **РЕКОМЕНДУЕТСЯ** — хороший баланс безопасности и производительности |
-| `chacha20-poly1305`  | ✅ Поддерживается, альтернатива AES (по СПЦ)                            |
-| `xchacha20-poly1305` | ✅ Поддерживается, усиленная версия ChaCha20                            |
-
-#### ✅ Shadowsocks 2022 (новый стандарт с Blake3)
-
-| Метод                           | Рекомендация                                          |
-|---------------------------------|-------------------------------------------------------|
-| `2022-blake3-aes-128-gcm`       | ✅ Поддерживается (SS 2022 спецификация)              |
-| `2022-blake3-aes-256-gcm`       | ✅ **РЕКОМЕНДУЕТСЯ** — самый безопасный и современный |
-| `2022-blake3-chacha20-poly1305` | ✅ Поддерживается (SS 2022 спецификация)              |
-
-#### ✅ Специальный метод
-
-| Метод  | Рекомендация                                                    |
-|--------|-----------------------------------------------------------------|
-| `none` | ⚠️ Без шифрования — используется редко, только для тестирования |
-
-### 🔴 Запрещённые методы (УДАЛЕНЫ в Xray-core 2024+)
-
-| Метод         | Причина удаления             |
-|---------------|------------------------------|
-| `aes-128-cfb` | ❌ Устаревший потоковый шифр |
-| `aes-256-cfb` | ❌ Устаревший потоковый шифр |
-| `aes-128-ctr` | ❌ Устаревший потоковый шифр |
-| `aes-256-ctr` | ❌ Устаревший потоковый шифр |
-
-> ⚠️ **КРИТИЧНО:** Методы CFB и CTR **больше не реализованы** в Xray-core 2024+. Любой Shadowsocks конфиг с этими методами будет **автоматически отклонен** при фильтрации.
-
-### Примеры корректных ссылок
-
-✅ **РЕКОМЕНДУЕТСЯ** — SS 2022 с Blake3:
-```
-ss://2022-blake3-aes-256-gcm:password@example.com:8388
-```
-
-✅ Shadowsocks с AES-256-GCM:
-```
-ss://aes-256-gcm:password@example.com:8388
-```
-
-❌ **НЕВЕРНО** — содержит устаревший метод CFB:
-```
-ss://aes-256-cfb:password@example.com:8388  ← ОТКЛОНЕНО (метод удалён)
+```text
+ss://2022-blake3-aes-256-gcm:password@example.com:8388   ✅
+ss://aes-256-gcm:password@example.com:8388               ✅
+ss://aes-256-cfb:password@example.com:8388               ❌ rejected (deprecated cipher)
 ```
 
 ---
 
-## Hysteria2 — Полная документация
+## Hysteria2
 
-### Структура правил
 ```yaml
 hysteria2:
+  forbidden_values:
+    insecure: ["1", "true"]
   required_params:
     - obfs
     - obfs-password
@@ -519,89 +319,46 @@ hysteria2:
     obfs: ["salamander"]
 ```
 
-### Обязательные параметры
+| Aspect     | Rule                                                               |
+|------------|--------------------------------------------------------------------|
+| Required   | `obfs`, `obfs-password` (obfuscation is mandatory)                 |
+| `obfs`     | `salamander` only                                                  |
+| `insecure` | `1` / `true` are forbidden (certificate verification must stay on) |
 
-| Параметр        | Описание                           |
-|-----------------|------------------------------------|
-| `obfs`          | Метод обфускации (обязателен)      |
-| `obfs-password` | Пароль для обфускации (обязателен) |
+**Valid example:**
 
-### Разрешённые параметры
-
-| Параметр | Допустимые значения | Описание                                     |
-|----------|---------------------|----------------------------------------------|
-| `obfs`   | `salamander`        | Единственный поддерживаемый метод обфускации |
-
-### Примеры корректных ссылок
-
-✅ Hysteria2 с обфускацией:
-```
+```text
 hy2://password@example.com:443?obfs=salamander&obfs-password=secret
 ```
 
 ---
 
-## Критические изменения (февраль 2026)
+## Tuning the strictness
 
-### 🔴 Trojan: Параметр `flow` больше не поддерживается
+The bundled rules are intentionally strict. You can adjust them:
 
-**Что изменилось:**
-- В Xray-core 2024+ параметр `flow` был **удалён** из протокола Trojan
-- В `rules.yaml` добавлено: `forbidden_values: { flow: ["*"] }`
-- Любой Trojan конфиг с параметром `flow` будет **отклонен**
+- **Relax**: remove entries from `forbidden_values` or `conditional`.
+- **Strengthen**: uncomment the `required_params` entries (`encryption` for
+  VLESS, `uuid` for VMess, `password` for Trojan, `password`/`method` for SS)
+  or re-enable the unencrypted `none` method for Shadowsocks.
 
-**Примеры отклонённых ссылок:**
-```
-❌ trojan://password@example.com:443?flow=xtls-rprx-vision
-❌ trojan://password@example.com:443?type=tcp&flow=xtls-rprx-vision-udp443
-```
+Any change requires a restart to take effect.
 
-**Что делать:**
-1. **Обновите конфиги:** удалите параметр `flow` из URL
-2. **Правильная ссылка:**
-   ```
-   ✅ trojan://password@example.com:443?security=tls&type=tcp
-   ```
+## Notable rejections
 
----
+These rejections follow upstream Xray-core changes and are the most common
+reason public subscriptions lose entries:
 
-### 🔴 Shadowsocks: CFB и CTR методы больше не поддерживаются
+| Protocol    | Rejected when                                   | Why                                                 |
+|-------------|-------------------------------------------------|-----------------------------------------------------|
+| VLESS       | `security=none` or missing `security`           | Unencrypted traffic                                 |
+| VMess       | `security` is `none`/`zero`/`null`              | Unencrypted traffic                                 |
+| Trojan      | any `flow` parameter                            | Removed from Trojan in Xray-core 2024+              |
+| Shadowsocks | CFB/CTR ciphers                                 | Removed from Xray-core 2024+                        |
+| Hysteria2   | missing `obfs`/`obfs-password`, or `insecure=1` | Obfuscation required; TLS verification must stay on |
 
-**Что изменилось:**
-- В Xray-core 2024+ удалены методы `aes-128-cfb`, `aes-256-cfb`, `aes-128-ctr`, `aes-256-ctr`
-- В `rules.yaml` добавлено: `forbidden_values: { method: [aes-128-cfb, aes-256-cfb, aes-128-ctr, aes-256-ctr] }`
-- Любой Shadowsocks конфиг с этими методами будет **отклонен**
+## References
 
-**Примеры отклонённых ссылок:**
-```
-❌ ss://aes-128-cfb:password@example.com:8388
-❌ ss://aes-256-ctr:password@example.com:8388
-```
-
-**Рекомендуемые методы:**
-- **Лучший выбор:** `ss://2022-blake3-aes-256-gcm:password@example.com:8388` (современный стандарт)
-- **Альтернатива:** `ss://aes-256-gcm:password@example.com:8388` (традиционный AEAD)
-
-**Что делать:**
-1. **Обновите конфиги:** замените метод шифрования
-2. **Правильные ссылки:**
-   ```
-   ✅ ss://2022-blake3-aes-256-gcm:password@example.com:8388
-   ✅ ss://aes-256-gcm:password@example.com:8388
-   ✅ ss://chacha20-poly1305:password@example.com:8388
-   ```
-
----
-
-## Дополнительные ресурсы
-
-- **Xray-core спецификация:** https://xtls.github.io/
-- **VLESS спецификация:** https://github.com/XTLS/Xray-core/blob/main/features/inbound/vless/encoding.go
-- **Trojan спецификация:** https://trojan-gfw.github.io/
-- **Shadowsocks спецификация:** https://shadowsocks.org/
-
----
-
-**Версия документации:** 2.1 (Май 2026)  
-**Совместимость:** Xray-core 2024+ (98%+)  
-**Дата обновления:** 31 мая 2026 г.
+- Xray-core: https://xtls.github.io/
+- Trojan: https://trojan-gfw.github.io/
+- Shadowsocks: https://shadowsocks.org/

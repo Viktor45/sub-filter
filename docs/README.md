@@ -1,200 +1,240 @@
-[EN](en/README_en.md) / [RU](README.md) / [ZH](zh/README_zh.md)
+[EN](README.md) / [RU](ru/README.md) / [ZH](zh/README.md)
 
 <!-- TOC -->
 * [sub-filter](#sub-filter)
-  * [Что умеет программа?](#что-умеет-программа)
-  * [Как собрать программу?](#как-собрать-программу)
-    * [Архитектура](#архитектура)
-  * [Как запустить?](#как-запустить)
-    * [Формат конфигурации](#формат-конфигурации)
-    * [Режим 1: HTTP-сервер (динамическая фильтрация)](#режим-1-http-сервер-динамическая-фильтрация)
-      * [Синтаксис:](#синтаксис)
-      * [Примеры:](#примеры)
-      * [Эндпоинты:](#эндпоинты)
-    * [Режим 2: CLI (однократная обработка)](#режим-2-cli-однократная-обработка)
-      * [Синтаксис:](#синтаксис-1)
-      * [Флаги:](#флаги)
-      * [Примеры:](#примеры-1)
-  * [Фильтрация по странам](#фильтрация-по-странам)
-    * [Формат стран](#формат-стран)
-  * [Что означают параметры?](#что-означают-параметры)
-  * [Флаги CLI](#флаги-cli)
-  * [Как проверить, что всё работает?](#как-проверить-что-всё-работает)
-    * [Сервер](#сервер)
-    * [CLI](#cli)
-  * [Как использовать в клиенте?](#как-использовать-в-клиенте)
+  * [Features](#features)
+  * [Build](#build)
+  * [Configuration](#configuration)
+    * [Nested format](#nested-format)
+    * [Legacy flat keys](#legacy-flat-keys)
+    * [Environment variables](#environment-variables)
+  * [Mode 1: HTTP server](#mode-1-http-server)
+    * [Endpoints](#endpoints)
+    * [Query parameters](#query-parameters)
+    * [Request protection](#request-protection)
+  * [Mode 2: CLI](#mode-2-cli)
+  * [Country filtering](#country-filtering)
+  * [Cache files](#cache-files)
+  * [Client integration](#client-integration)
   * [Docker](#docker)
-    * [Запуск сервера](#запуск-сервера)
-    * [CLI в Docker](#cli-в-docker)
+    * [Run the server](#run-the-server)
+    * [CLI in Docker](#cli-in-docker)
+  * [Architecture](#architecture)
 <!-- TOC -->
 
 # sub-filter
 
-Умный фильтр подписок на прокси-серверы (VLESS, VMess, Trojan, Shadowsocks, Hysteria2).  
-Программа проверяет каждую ссылку внутри подписки на:
+A smart proxy subscription filter for **VLESS, VMess, Trojan, Shadowsocks, and Hysteria2**
+(`vless://`, `vmess://`, `trojan://`, `ss://`, `hysteria2://`, `hy2://`).
 
-- безопасность (например, блокирует `security=none` в VLESS),
-- корректность (например, требует `pbk` при `security=reality`),
-- наличие «запрещённых слов» в названии или адресе сервера на основании гибких правил (вырезать или удалить),
-- фильтрация описания серверов по странам, их флагам и национальным названиям.
+The tool validates every proxy link in a subscription by checking:
 
-Результат — чистая, рабочая подписка, готовая к использованию в Clash, Sing-Box, роутерах и других клиентах.
+- **Security** (e.g., blocks `security=none` in VLESS),
+- **Correctness** (e.g., requires `pbk` when `security=reality`),
+- **Prohibited ("bad") keywords** in server names, handled by flexible rules
+  (strip, replace, or delete),
+- **Country markers** in the link fragment (flag, name, ISO code).
 
-> ⚠️ Программа **не проверяет живучесть** прокси. Для этого используйте [xray-checker](https://github.com/kutovoys/xray-checker).
+The result is a clean, secure subscription ready for Clash, Sing-Box, routers,
+and other clients.
 
----
-
-## Что умеет программа?
-
-✅ Валидация по гибким [правилам](./FILTER_RULES.md) из `rules.yaml` и [настройкам](./BADWORDS.md) из `badwords.yaml`  
-✅ Фильтрация по **одной или нескольким странам** (до 20) и плохим словам  
-✅ Дедупликация ссылок с выбором наиболее полной версии среди одинаковых серверов  
-✅ Кеширование (по умолчанию 30 минут)  
-✅ Поддержка CLI-режима с выводом в терминал
+> ⚠️ The tool **does not test proxy liveness** — only configuration correctness.
+> For liveness checks use [xray-checker](https://github.com/kutovoys/xray-checker).
 
 ---
 
-## Как собрать программу?
+## Features
 
-Требуется Go 1.21+.
+- ✅ Validation via flexible [rules](FILTER_RULES.md) from `rules.yaml`
+- ✅ [Bad-word filtering](BADWORDS.md) from `badwords.yaml` (strip / replace / delete)
+- ✅ Filtering by **one or more countries** (up to 20 by default)
+- ✅ Deduplication that keeps the most complete version of duplicate servers
+- ✅ Merging multiple subscriptions into one (`/merge`)
+- ✅ Output formats: plain text, YAML (Clash/Mihomo), base64 — see [FORMAT_PARAMETER](FORMAT_PARAMETER.md)
+- ✅ Disk caching (30 minutes by default)
+- ✅ HTTP server and one-shot CLI modes
+
+---
+
+## Build
+
+Requires **Go 1.26+** (see `go.mod`).
 
 ```bash
 go build -o sub-filter .
 ```
 
-### Архитектура
-
-Проект использует модульную архитектуру с dependency injection:
-
-- **`pkg/config`**: Загрузка и валидация конфигурации из YAML/JSON/TOML файлов
-- **`pkg/service`**: Основная бизнес-логика, HTTP handlers, кэширование regex
-- **`pkg/errors`**: Типизированные ошибки с кодами и severity
-- **`pkg/logger`**: Структурированное логирование на основе slog
-- **`pkg/cache`**: Кэширование скомпилированных regex для производительности
-
-Протоколы (VLESS, VMess, etc.) реализованы в отдельных пакетах с общим интерфейсом `ProxyLink`.
-
 ---
 
-## Как запустить?
+## Configuration
 
-Программа поддерживает два режима работы: **HTTP-сервер** и **CLI (консольный)**.
+The program reads a single YAML config file, resolved in this order:
 
-Пример [конфигурационных файлов](../config)
+1. `--config <path>` flag
+2. `SUBFILTER_CONFIG` environment variable
+3. `./config/config.yaml` (default)
 
-### Формат конфигурации
+### Nested format
 
-Основной файл `config/config.yaml`:
+The preferred structure uses nested sections:
 
 ```yaml
-# Пути к файлам
-sources_file: "./config/sub.txt"      # Список URL подписок
-rules_file: "./config/rules.yaml"     # Правила валидации
-bad_words_file: "./config/badwords.yaml" # Запрещенные слова
-uagent_file: "./config/uagent.txt"    # User-Agent для запросов
+server:
+  port: 8000                 # HTTP port
+  host: 0.0.0.0              # bind address
+  read_timeout: 10s
+  write_timeout: 10s
+  idle_timeout: 60s
 
-# Кэширование
-cache_dir: "/tmp/sub-filter-cache"    # Директория кэша
-cache_ttl: 1800s                      # Время жизни кэша
+cache:
+  directory: /tmp/sub-filter-cache
+  ttl: 30m                   # how long cached results stay fresh
+  max_age: 24h               # hard expiry for cache entries
+  cleanup_interval: 2m
+  merge_buckets: 256         # shards for disk-based streaming merge
 
-# Лимиты
-max_country_codes: 20                 # Макс кодов стран
-max_merge_ids: 10                     # Макс подписок для merge
-merge_buckets: 256                    # Шарды для merge
+sources:
+  file: ./config/sub.txt     # subscription URLs, one per line
+  fetch_timeout: 10s
+  max_size: 10485760         # max source size in bytes (10 MB)
+  max_sources: 1000
+
+validation:
+  rules_file: ./config/rules.yaml
+  bad_words_file: ./config/badwords.yaml
+  countries_file: ./config/countries.yaml
+  ua_file: ./config/uagent.txt   # extra allowed User-Agent patterns
+  max_countries: 20          # max codes per request
+  max_merge_ids: 20          # max sources per /merge request
+
+logging:
+  level: info                # debug, info, warn, error
+  format: json               # json or text
 ```
+
+### Legacy flat keys
+
+For backward compatibility the loader also accepts flat keys:
+`sources_file`, `rules_file`, `bad_words_file`, `countries_file`, `uagent_file`,
+`cache_dir`, `cache_ttl`, `max_country_codes`, `max_merge_ids`, `merge_buckets`.
+The bundled [`config/config.yaml`](../config/config.yaml) uses this flat form.
+Nested values take precedence over flat ones.
+
+### Environment variables
+
+| Variable           | Purpose                                      |
+|--------------------|----------------------------------------------|
+| `SUBFILTER_CONFIG` | Path to the config file                      |
+| `SUBFILTER_PORT`   | Overrides `server.port`                      |
+| `LOG_LEVEL`        | Log level (`debug`, `info`, `warn`, `error`) |
 
 ---
 
-### Режим 1: HTTP-сервер (динамическая фильтрация)
+## Mode 1: HTTP server
 
-Запускается с указанием порта. Подписки фильтруются «на лету» при каждом запросе.
-
-#### Синтаксис:
+Filters subscriptions on the fly for every request.
 
 ```bash
-./sub-filter <порт> [cache_ttl] [sources_file] [bad_words_file] [uagent_file] [rules_file]
+./sub-filter [port]
 ```
 
-#### Примеры:
+The only positional argument is the port (default `8000`). All other settings
+come from the config file.
 
 ```bash
-# Минимальный запуск (использует файлы из ./config/)
-./sub-filter 8000
+# Minimal start (uses ./config/config.yaml, port 8000)
+./sub-filter
 
-# Полный запуск
-./sub-filter 8000 1800 ./config/sub.txt ./config/bad.txt ./config/uagent.txt ./config/rules.yaml
+# Start on a custom port
+./sub-filter 8080
+
+# Custom config file and verbose logging
+./sub-filter --config ./my-config.yaml --debug
 ```
 
-#### Эндпоинты:
+### Endpoints
 
-| Эндпоинт  | Описание                                     |
+| Endpoint  | Description                                  |
 | --------- | -------------------------------------------- |
-| `/filter` | Фильтрация одной подписки                    |
-| `/merge`  | Объединение и фильтрация нескольких подписок |
+| `/filter` | Filter a single subscription                 |
+| `/merge`  | Merge and filter multiple subscriptions      |
+| `/health` | Health check, returns `{"status":"ok", ...}` |
 
-**Параметры:**
+### Query parameters
 
-- `id` — номер строки из `sources_file` (для `/filter`)
-- `ids` — номера строк через запятую (для `/merge`, максимум 20)
-- `c` — коды стран по [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes) через запятую (максимум 20)
-- `lim` — максимальное количество ссылок в результате (для `/filter` и `/merge`)
-- `format` — формат вывода: `yaml` (для Clash/Mihomo), `base64`, или комбинация вроде `yaml+base64` (опционально)
+| Parameter | Applies to | Description                                                                                                                                       |
+|-----------|------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
+| `id`      | `/filter`  | Source ID — the line number in `sources.file` (1-based, valid lines only)                                                                         |
+| `ids`     | `/merge`   | Source IDs, comma-separated or repeated (`ids=1&ids=2`); legacy `id` also accepted. Max `validation.max_merge_ids`                                |
+| `c`       | both       | [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes) country codes, comma-separated. Max `validation.max_countries` |
+| `lim`     | both       | Maximum number of proxy lines in the response                                                                                                     |
+| `format`  | both       | Output format: `yaml`, `base64`, or a combination — see [FORMAT_PARAMETER](FORMAT_PARAMETER.md)                                                   |
 
-**Примеры:**
+**Examples:**
 
-- `/filter?id=1` — фильтрация первой подписки
-- `/filter?id=1&c=DE` — фильтрация по Германии
-- `/filter?id=1&format=yaml` — фильтрация в формате YAML (для Clash/Mihomo)
-- `/filter?id=1&format=base64` — base64-кодированный простой текст
-- `/merge?ids=1,2,3&c=US,CA` — объединение трёх подписок с фильтрацией по США и Канаде
-- `/merge?ids=1,2,3&format=yaml` — объединение подписок в формате YAML
+```text
+/filter?id=1                       → filter the first subscription
+/filter?id=1&c=DE                  → keep only German servers
+/filter?id=1&format=yaml           → Clash/Mihomo YAML output
+/merge?ids=1,2,3&c=US,CA           → merge three sources, keep US/CA servers
+/merge?ids=1,2&format=yaml&lim=100 → merged YAML, at most 100 lines
+```
 
-Подробная документация по форматам: [FORMAT_PARAMETER.md](./FORMAT_PARAMETER.md)
+### Request protection
+
+Both `/filter` and `/merge` are protected (do not disable without a security review):
+
+- **User-Agent allow-list.** A request is accepted only if its `User-Agent`
+  starts with a built-in prefix (`clash`, `happ`, `incy`) or matches a regex
+  pattern from `validation.ua_file` (`config/uagent.txt`). Built-in prefixes are
+  matched case-sensitively, so `curl -H "User-Agent: clash" ...` works while
+  `Clash` does not. Other requests get `400 Invalid User-Agent`.
+- **Per-IP rate limiting.** Sustained 10 requests/second with a burst of 5.
+  Excess requests get `429 Too Many Requests`.
+- **Strict source ID validation.** IDs must match `^[a-zA-Z0-9_]+$` and be at
+  most 64 characters.
 
 ---
 
-### Режим 2: CLI (однократная обработка)
+## Mode 2: CLI
 
-Обрабатывает все подписки один раз и сохраняет результаты в кеш.
-
-#### Синтаксис:
+Processes subscriptions once and writes the results to the cache directory
+(or prints them to the terminal).
 
 ```bash
-./sub-filter --cli [--stdout] [--config файл.yaml] [--country AD,DE]
+./sub-filter --cli [--stdout] [--config file.yaml] [--country AD,DE] [--debug] [id ...]
 ```
 
-#### Флаги:
+| Flag        | Description                                                          |
+|-------------|----------------------------------------------------------------------|
+| `--cli`     | Run in CLI mode                                                      |
+| `--stdout`  | Print results to the terminal instead of writing cache files         |
+| `--config`  | Use an external config file                                          |
+| `--country` | Filter by country codes (e.g. `--country=NL,RU`), same rules as `c=` |
+| `--debug`   | Verbose startup info and processing logs                             |
 
-| Флаг        | Описание                                            |
-| ----------- | --------------------------------------------------- |
-| `--cli`     | Запуск в CLI-режиме                                 |
-| `--stdout`  | Вывод результата в терминал                         |
-| `--config`  | Использовать внешний файл конфигурации              |
-| `--country` | Фильтрация по странам (например, `--country=AR,AE`) |
-
-#### Примеры:
+Source IDs can be passed as positional arguments; if none are given, all
+configured sources are processed.
 
 ```bash
-# Обработать все подписки и сохранить в кеш
+# Process all configured sources and save to the cache directory
 ./sub-filter --cli
 
-# Вывести результат в терминал
+# Print results to the terminal
 ./sub-filter --cli --stdout
 
-# Обработать с фильтрацией по странам
+# Process with country filtering
 ./sub-filter --cli --country=NL,RU
 
-# Использовать внешний конфиг
-./sub-filter --cli --config ./my-config.yaml
+# Process only sources 1 and 3 with a custom config
+./sub-filter --cli --config ./my-config.yaml 1 3
 ```
 
 ---
 
-## Фильтрация по странам
+## Country filtering
 
-### Формат стран
-
-Информация о странах хранится в `./config/countries.yaml` в **плоском формате**:
+Country data lives in `config/countries.yaml` (flat map keyed by the CCA2 code):
 
 ```yaml
 RU:
@@ -204,102 +244,109 @@ RU:
   native: 'Россия|Российская Федерация'
 ```
 
-Программа ищет внутри **фрагмента ссылки** (`#...`) следующие строки:
+When a country filter is active, the program scans the **fragment** (`#...`) of
+each proxy link for any of these strings for the requested countries:
 
-- **Код страны (CCA2)**: `RU`
-- **Код (CCA3)**: `RUS`
-- **Флаг**: `🇷🇺`
-- **Общее название**: `Russia`
-- **Национальные названия**: `Россия`, `Российская Федерация`
+- **CCA3 code**: `RUS`
+- **Flag emoji**: `🇷🇺`
+- **Common name**: `Russia`
+- **Native names**: `Россия`, `Российская Федерация`
 
-Сравнение — **регистронезависимое** и поддерживает **URL-декодирование**.
+Matching is **case-insensitive** and supports **URL decoding**. Links without a
+fragment do not pass a country filter.
 
----
-
-## Что означают параметры?
-
-| Параметр         | Описание                                                                                             |
-| ---------------- | ---------------------------------------------------------------------------------------------------- |
-| `<порт>`         | Порт HTTP-сервера (обязателен в серверном режиме)                                                    |
-| `cache_ttl`      | Время кеширования в секундах (по умолчанию 1800)                                                     |
-| `sources_file`   | Список URL-подписок (по одному на строку) [sub.txt](../config/sub.txt)                               |
-| `bad_words_file` | Список правил обработки запрещённых слов (удалить/вырезать) [badwords.yaml](../config/badwords.yaml) |
-| `uagent_file`    | Список разрешённых User-Agent (например, `Clash`) [uagent.txt](../config/uagent.txt)                 |
-| `rules_file`     | Файл правил валидации [rules.yaml](../config/rules.yaml)                                             |
+> 📝 The two-letter CCA2 code (e.g. `RU`) is used as the request key but is not
+> itself searched inside fragments; matching relies on CCA3, flag, and names.
 
 ---
 
-## Флаги CLI
+## Cache files
 
-| Флаг        | Описание                             |
-| ----------- | ------------------------------------ |
-| `--cli`     | Запуск в CLI-режиме                  |
-| `--stdout`  | Вывод результата в stdout            |
-| `--config`  | Путь к файлу конфигурации            |
-| `--country` | Фильтрация по странам (только в CLI) |
+Results are stored in `cache.directory` (`/tmp/sub-filter-cache` by default).
 
----
+Server mode (`/filter`) creates, per source and country combination:
 
-## Как проверить, что всё работает?
+| File                              | Content                                  |
+| --------------------------------- | ---------------------------------------- |
+| `orig_<id>[_c_<CODES>].txt`       | Original fetched subscription            |
+| `mod_<id>[_c_<CODES>].txt`        | Filtered profile (served to clients)     |
+| `rejected_<id>[_c_<CODES>].txt`   | Rejected lines with reasons              |
 
-### Сервер
+`/merge` writes `merge_<id1>_<id2>...[_c_<CODES>].txt`.
+CLI mode writes `<id>[_c_<CODES>].txt`.
 
-```bash
-curl -H "User-Agent: Clash" "http://localhost:8000/filter?id=1&c=AD"
-```
-
-### CLI
-
-```bash
-./sub-filter --cli --country=US --stdout
-```
-
-Результаты сохраняются в `/tmp/sub-filter-cache` (или в указанную директорию).
+`<CODES>` is the sorted, underscore-joined list of country codes
+(e.g. `mod_1_c_DE_NL.txt`). Files are refreshed when older than `cache.ttl`.
 
 ---
 
-## Как использовать в клиенте?
+## Client integration
 
-Добавьте подписку вида:
+Add a dynamic subscription URL to your client:
 
+```text
+http://your-server:8000/filter?id=1&c=NL,RU
 ```
-http://ваш-сервер:8000/filter?id=1&c=NL,RU
-```
 
-> 🔒 Рекомендуется использовать за reverse proxy с HTTPS.
+Remember that the client's `User-Agent` must be on the allow-list (most popular
+clients are covered by `config/uagent.txt`).
+
+> 🔒 **Recommendation**: run behind an HTTPS reverse proxy (Nginx, Caddy,
+> Cloudflare, etc.).
 
 ---
 
 ## Docker
 
-### Запуск сервера
+The image reads config from `/config/config.yaml` and listens on port `8000`
+(configurable via `SUBFILTER_PORT`).
+
+### Run the server
 
 ```bash
 docker run -d \
-  -p 8080:8080 \
+  -p 8000:8000 \
   -v $(pwd)/config:/config:ro \
   -v $(pwd)/cache:/tmp/sub-filter-cache \
-  ghcr.io/viktor45/sub-filter:latest \
-  8080 1800
+  ghcr.io/viktor45/sub-filter:latest
 ```
 
-### CLI в Docker
+### CLI in Docker
 
 ```bash
-# Обработка подписок
+# Process subscriptions and write results into ./cache
 docker run --rm \
   -v $(pwd)/config:/config:ro \
   -v $(pwd)/cache:/tmp/sub-filter-cache \
   ghcr.io/viktor45/sub-filter:latest \
   --cli --country=DE
 
-# Вывод в терминал
+# Print results to the terminal
 docker run --rm \
   -v $(pwd)/config:/config:ro \
-  -v $(pwd)/cache:/tmp/sub-filter-cache \
   ghcr.io/viktor45/sub-filter:latest \
   --cli --stdout
-
 ```
 
-> 💡 Убедитесь, что папки `./config` и `./cache` существуют перед запуском.
+A ready-made [`docker-compose.yml`](../docker-compose.yml) and a Podman quadlet
+example [`subfilter.container`](../subfilter.container) are included in the
+repository.
+
+> 💡 Make sure the `./config` and `./cache` directories exist before running.
+
+---
+
+## Architecture
+
+The project uses a modular architecture with dependency injection:
+
+- **`pkg/config`** — config loading and validation (YAML, nested + legacy flat keys)
+- **`pkg/service`** — core business logic: HTTP handlers, filtering, merge, caching
+- **`pkg/errors`** — typed errors with codes and severity
+- **`pkg/logger`** — structured logging built on `slog`
+- **`pkg/cache`** — compiled-regex cache with hit/miss statistics
+- **`internal/validator`** — generic rule engine and validation policies
+- **`internal/utils`** — URL normalization, host/port validation, country lookup, dedupe helpers
+- **`vless`, `vmess`, `trojan`, `ss`, `hysteria2`** — protocol parsers implementing the common `ProxyLink` interface
+
+See [DEVELOPMENT](DEVELOPMENT.md) for how to extend the project.

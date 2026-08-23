@@ -50,7 +50,7 @@
 
 ## Go стандарты разработки
 
-См. [.github/instructions/go.instructions.md](.github/instructions/go.instructions.md) для идиоматичного Go, соглашений об именах и стандартов code review используемых в проекте.
+См. [.github/instructions/go.instructions.md](instructions/go.instructions.md) для идиоматичного Go, соглашений об именах и стандартов code review используемых в проекте.
 
 ## PR формат
 
@@ -66,4 +66,4 @@
 - `internal/validator/validator.go`
 - `internal/utils/utils.go`
 - `config/rules.yaml`, `config/badwords.yaml`, `config/countries.yaml`
-- `docs/en/README_en.md`, `docs/en/FILTER_RULES_en.md`, `docs/en/BADWORDS_en.md`
+- `docs/README.md`, `docs/FILTER_RULES.md`, `docs/BADWORDS.md`

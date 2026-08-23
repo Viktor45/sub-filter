@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -180,6 +181,51 @@ func TestService_BadWordReplaceAction(t *testing.T) {
 	}
 }
 
+// TestService_ProcessSource_CountryFilter проверяет, что CLI-путь (processSource)
+// фильтрует серверы по странам так же, как HTTP-путь (generateProfile).
+func TestService_ProcessSource_CountryFilter(t *testing.T) {
+	userinfo := base64.StdEncoding.EncodeToString([]byte("aes-256-gcm:test123"))
+	content := "ss://" + userinfo + "@example.com:8388#Andorra Node\n" +
+		"ss://" + userinfo + "@example2.com:8388#France Node\n"
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, content)
+	}))
+	defer ts.Close()
+
+	cfg := &config.Config{
+		Server: config.ServerConfig{Port: 8080},
+		Cache: config.CacheConfig{
+			Directory: t.TempDir(),
+			TTL:       30 * time.Minute,
+		},
+	}
+	log := logger.NewDefault(logger.ParseLevel("error"))
+	opts := &ServiceOptions{
+		Sources: map[string]*config.SafeSource{
+			"x": {URL: ts.URL, IP: net.ParseIP("127.0.0.1")},
+		},
+		Rules: make(map[string]validator.Validator),
+		Countries: map[string]utils.CountryInfo{
+			"AD": {CCA3: "AND", Flag: "🇦🇩", Name: "Andorra", Native: "Andorra|Principat d'Andorra"},
+		},
+	}
+	svc, err := NewService(cfg, log, opts)
+	if err != nil {
+		t.Fatalf("Failed to create service: %v", err)
+	}
+
+	result, err := svc.processSource("x", true, []string{"AD"})
+	if err != nil {
+		t.Fatalf("processSource failed: %v", err)
+	}
+	if !strings.Contains(result, "Andorra Node") {
+		t.Errorf("expected Andorra server to be kept, got:\n%s", result)
+	}
+	if strings.Contains(result, "France Node") {
+		t.Errorf("expected France server to be filtered out, got:\n%s", result)
+	}
+}
+
 func TestService_BufferPool(t *testing.T) {
 	svc := makeSimpleService(t)
 
@@ -271,7 +317,7 @@ func BenchmarkService_BufferPool(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		buf := svc.bufferPool.Get().(*strings.Builder)
+		buf := svc.bufferPool.Get().(*bytes.Buffer)
 		buf.WriteString("test data")
 		buf.Reset()
 		svc.bufferPool.Put(buf)
@@ -363,10 +409,30 @@ func TestFormatContent_YAMLAndBase64(t *testing.T) {
 // TestFormatContent_Invalid проверяет отклонение недопустимых значений format
 func TestFormatContent_Invalid(t *testing.T) {
 	content := []byte("ss://example.com:8388")
-	for _, format := range []string{"json", "xml", "yaml,base64", "yaml base64", "yaml+json"} {
+	for _, format := range []string{"json", "xml", "yaml,base64", "yaml+json"} {
 		if _, _, err := formatContent(content, format); err == nil {
 			t.Errorf("Expected error for format %q, got nil", format)
 		}
+	}
+}
+
+// TestFormatContent_SpaceSeparated проверяет, что разделитель-пробел принимается
+// (в query-строке "+" декодируется как пробел, поэтому оба варианта эквивалентны).
+func TestFormatContent_SpaceSeparated(t *testing.T) {
+	content := []byte("ss://dXNlcjpwYXNz@example.com:8388")
+	formatted, contentType, err := formatContent(content, "yaml base64")
+	if err != nil {
+		t.Fatalf("Unexpected error for space-separated format: %v", err)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(string(formatted))
+	if err != nil {
+		t.Fatalf("Failed to decode base64: %v", err)
+	}
+	if !strings.Contains(string(decoded), "proxies:") {
+		t.Errorf("Expected YAML in base64 decoded output")
+	}
+	if contentType != "application/octet-stream" {
+		t.Errorf("Expected application/octet-stream, got %s", contentType)
 	}
 }
 
@@ -440,7 +506,7 @@ func TestParseProxyToYAML_SS(t *testing.T) {
 	if !strings.Contains(yaml, "port: 8388") {
 		t.Error("Expected correct port")
 	}
-	if !strings.Contains(yaml, "cipher: 2022-blake3-aes-256-gcm") {
+	if !strings.Contains(yaml, "cipher: \"2022-blake3-aes-256-gcm\"") {
 		t.Errorf("Expected correct cipher, got:\n%s", yaml)
 	}
 	if !strings.Contains(yaml, "password: \"mypassword\"") {
@@ -462,7 +528,7 @@ func TestParseProxyToYAML_VLESS(t *testing.T) {
 	if !strings.Contains(yaml, "server: \"example.com\"") {
 		t.Error("Expected server")
 	}
-	if !strings.Contains(yaml, "network: tcp") {
+	if !strings.Contains(yaml, "network: \"tcp\"") {
 		t.Error("Expected network parameter")
 	}
 	if !strings.Contains(yaml, "tls: true") {
@@ -483,8 +549,8 @@ func TestParseProxyToYAML_VLESS_Reality(t *testing.T) {
 		"reality-opts:",
 		"public-key: \"pubkey123\"",
 		"short-id: \"abcd\"",
-		"client-fingerprint: chrome",
-		"network: ws",
+		"client-fingerprint: \"chrome\"",
+		"network: \"ws\"",
 		"ws-opts:",
 		"path: \"/ws\"",
 		"Host: \"cdn.example.com\"",
@@ -501,7 +567,7 @@ func TestParseProxyToYAML_VLESS_GRPC(t *testing.T) {
 	link := "vless://myuuid@example.com:443?security=tls&sni=example.com&type=grpc&serviceName=grpcsvc"
 	yaml := parseProxyToYAML(link, 0)
 
-	for _, want := range []string{"network: grpc", "grpc-opts:", "grpc-service-name: \"grpcsvc\""} {
+	for _, want := range []string{"network: \"grpc\"", "grpc-opts:", "grpc-service-name: \"grpcsvc\""} {
 		if !strings.Contains(yaml, want) {
 			t.Errorf("Expected %q in YAML, got:\n%s", want, yaml)
 		}
@@ -528,8 +594,8 @@ func TestParseProxyToYAML_VMess(t *testing.T) {
 		"port: 443",
 		"uuid: \"myuuid\"",
 		"alterId: 0",
-		"cipher: auto",
-		"network: ws",
+		"cipher: \"auto\"",
+		"network: \"ws\"",
 		"tls: true",
 		"servername: \"example.com\"",
 		"ws-opts:",
@@ -573,7 +639,7 @@ func TestParseProxyToYAML_Trojan_WS(t *testing.T) {
 	link := "trojan://mypassword@example.com:443?sni=example.com&type=ws&path=%2Fws&host=cdn.example.com"
 	yaml := parseProxyToYAML(link, 0)
 
-	for _, want := range []string{"network: ws", "ws-opts:", "path: \"/ws\"", "Host: \"cdn.example.com\""} {
+	for _, want := range []string{"network: \"ws\"", "ws-opts:", "path: \"/ws\"", "Host: \"cdn.example.com\""} {
 		if !strings.Contains(yaml, want) {
 			t.Errorf("Expected %q in YAML, got:\n%s", want, yaml)
 		}
@@ -591,7 +657,7 @@ func TestParseProxyToYAML_Hysteria2(t *testing.T) {
 		"server: \"example.com\"",
 		"port: 443",
 		"password: \"obfspass\"",
-		"obfs: salamander",
+		"obfs: \"salamander\"",
 		"sni: \"example.com\"",
 		"skip-cert-verify: true",
 		"up: \"100\"",
@@ -675,7 +741,11 @@ func TestExtractProxyName(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		name := extractProxyName(test.url, 0)
+		u, err := url.Parse(test.url)
+		if err != nil {
+			t.Fatalf("Failed to parse URL %s: %v", test.url, err)
+		}
+		name := extractProxyName(u, u.Query(), test.url, strings.ToLower(u.Scheme), 0, nil)
 		if !strings.Contains(name, strings.Split(test.expected, "-")[0]) {
 			t.Errorf("For URL %s, expected name containing %s, got %s", test.url, test.expected, name)
 		}
@@ -690,10 +760,21 @@ func TestExtractProxyName_VMess(t *testing.T) {
 	}
 	link := "vmess://" + base64.StdEncoding.EncodeToString(payload)
 
-	if name := extractProxyName(link, 3); name != "my vmess node" {
+	u, err := url.Parse(link)
+	if err != nil {
+		t.Fatalf("Failed to parse URL: %v", err)
+	}
+	vm := decodeVMESSPayload(link)
+	if name := extractProxyName(u, u.Query(), link, "vmess", 3, vm); name != "my vmess node" {
 		t.Errorf("Expected name from ps field, got %q", name)
 	}
-	if name := extractProxyName("vmess://!!!invalid!!!", 3); name != "vmess-3" {
+
+	invalid := "vmess://!!!invalid!!!"
+	u2, err := url.Parse(invalid)
+	if err != nil {
+		t.Fatalf("Failed to parse invalid URL: %v", err)
+	}
+	if name := extractProxyName(u2, u2.Query(), invalid, "vmess", 3, nil); name != "vmess-3" {
 		t.Errorf("Expected fallback name vmess-3, got %q", name)
 	}
 }

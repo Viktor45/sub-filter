@@ -44,8 +44,10 @@ func NewSSLink(
 
 // Matches возвращает true для строк, начинающихся с "ss://".
 // Matches сообщает, является ли строка Shadowsocks-ссылкой.
+// Сравнивается только префикс без приведения всей строки к нижнему регистру.
 func (s *SSLink) Matches(sLink string) bool {
-	return strings.HasPrefix(strings.ToLower(sLink), "ss://")
+	const prefix = "ss://"
+	return len(sLink) >= len(prefix) && strings.EqualFold(sLink[:len(prefix)], prefix)
 }
 
 // Process парсит и нормализует Shadowsocks URI, возвращая нормализованную

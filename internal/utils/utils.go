@@ -59,7 +59,7 @@ func ParamsFromInterface(src map[string]any) map[string]string {
 				dst[k] = "false"
 			}
 		default:
-			// fallback to fmt.Sprintf
+			// Резервный вариант для остальных типов
 			dst[k] = fmt.Sprintf("%v", vv)
 		}
 	}
@@ -325,7 +325,7 @@ func NormalizeLinkKey(line string) (string, error) {
 		if scheme == "trojan" && nk == "flow" {
 			continue
 		}
-		// preserve original key casing for the first occurrence
+		// Сохраняем исходный регистр ключа при первом вхождении
 		if _, exists := origKey[nk]; !exists {
 			origKey[nk] = k
 		}

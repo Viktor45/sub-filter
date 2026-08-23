@@ -42,8 +42,10 @@ func NewVMessLink(
 }
 
 // Matches проверяет, является ли строка VMess-ссылкой.
+// Сравнивается только префикс без приведения всей строки к нижнему регистру.
 func (v *VMessLink) Matches(s string) bool {
-	return strings.HasPrefix(strings.ToLower(s), "vmess://")
+	const prefix = "vmess://"
+	return len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix)
 }
 
 // Process парсит, валидирует и нормализует VMess-ссылку.
@@ -52,10 +54,11 @@ func (v *VMessLink) Process(s string) (string, string) {
 	if len(s) > maxURILength {
 		return "", "line too long"
 	}
-	if !strings.HasPrefix(strings.ToLower(s), "vmess://") {
+	const prefix = "vmess://"
+	if len(s) < len(prefix) || !strings.EqualFold(s[:len(prefix)], prefix) {
 		return "", "not a VMess link"
 	}
-	b64 := strings.TrimPrefix(s, "vmess://")
+	b64 := s[len(prefix):]
 	if b64 == "" {
 		return "", "empty VMess payload"
 	}

@@ -40,8 +40,10 @@ func NewTrojanLink(
 }
 
 // Matches сообщает, что строка соответствует формату Trojan URI (trojan://).
+// Сравнивается только префикс без приведения всей строки к нижнему регистру.
 func (t *TrojanLink) Matches(s string) bool {
-	return strings.HasPrefix(strings.ToLower(s), "trojan://")
+	const prefix = "trojan://"
+	return len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix)
 }
 
 // Process парсит и нормализует Trojan URI, возвращая нормализованную

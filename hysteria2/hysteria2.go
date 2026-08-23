@@ -41,9 +41,14 @@ func NewHysteria2Link(
 }
 
 // Matches сообщает, соответствует ли строка формату Hysteria2 (hysteria2:// или hy2://).
+// Сравнивается только префикс без приведения всей строки к нижнему регистру.
 func (h *Hysteria2Link) Matches(s string) bool {
-	lower := strings.ToLower(s)
-	return strings.HasPrefix(lower, "hysteria2://") || strings.HasPrefix(lower, "hy2://")
+	const prefixLong = "hysteria2://"
+	const prefixShort = "hy2://"
+	if len(s) >= len(prefixLong) && strings.EqualFold(s[:len(prefixLong)], prefixLong) {
+		return true
+	}
+	return len(s) >= len(prefixShort) && strings.EqualFold(s[:len(prefixShort)], prefixShort)
 }
 
 // Process парсит и нормализует Hysteria2 URI, возвращая нормализованную

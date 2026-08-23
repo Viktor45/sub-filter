@@ -50,8 +50,10 @@ func NewVLESSLink(
 }
 
 // Matches проверяет, является ли строка VLESS-ссылкой.
+// Сравнивается только префикс без приведения всей строки к нижнему регистру.
 func (v *VLESSLink) Matches(s string) bool {
-	return strings.HasPrefix(strings.ToLower(s), "vless://")
+	const prefix = "vless://"
+	return len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix)
 }
 
 // Process парсит, валидирует и нормализует VLESS-ссылку.
