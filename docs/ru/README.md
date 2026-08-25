@@ -171,6 +171,7 @@ logging:
 | `c`      | оба          | Коды стран [ISO 3166-1 alpha-2](https://ru.wikipedia.org/wiki/ISO_3166-1) через запятую. Максимум `validation.max_countries`     |
 | `lim`    | оба          | Максимальное количество строк прокси в ответе                                                                                    |
 | `format` | оба          | Формат вывода: `yaml`, `base64` или комбинация — см. [FORMAT_PARAMETER](FORMAT_PARAMETER.md)                                     |
+| `ip`     | оба          | Стек IP для загрузки источников: `4` (только IPv4) или `6` (только IPv6). Если не указан, поведение не меняется                  |
 
 **Примеры:**
 
@@ -178,6 +179,7 @@ logging:
 /filter?id=1                       → фильтрация первой подписки
 /filter?id=1&c=DE                  → только серверы Германии
 /filter?id=1&format=yaml           → вывод YAML для Clash/Mihomo
+/filter?id=1&ip=6                  → загрузка источника только через IPv6
 /merge?ids=1,2,3&c=US,CA           → объединение трёх источников, серверы США/Канады
 /merge?ids=1,2&format=yaml&lim=100 → объединённый YAML, не более 100 строк
 ```

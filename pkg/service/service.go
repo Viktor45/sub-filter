@@ -1470,11 +1470,16 @@ func (s *Service) handleFilter(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Invalid country codes: %v", err), http.StatusBadRequest)
 		return
 	}
+	ipVersion, err := parseIPVersion(r.URL.Query().Get("ip"))
+	if err != nil {
+		http.Error(w, "Invalid ip parameter: expected 4 or 6", http.StatusBadRequest)
+		return
+	}
 	// Ограничиваем число отдаваемых строк для слабых клиентов (iOS), чтобы избежать их перегрузки при больших профилях
 	lim := parseLimit(r.URL.Query().Get("lim"))
 	format := r.URL.Query().Get("format")
 
-	content, err := s.Filter(id, countryCodes, lim)
+	content, err := s.Filter(id, countryCodes, lim, ipVersion)
 	if err != nil {
 		s.writeProcessingError(w, r, err, "filter")
 		return
@@ -1544,11 +1549,16 @@ func (s *Service) handleMerge(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Invalid country codes: %v", err), http.StatusBadRequest)
 		return
 	}
+	ipVersion, err := parseIPVersion(r.URL.Query().Get("ip"))
+	if err != nil {
+		http.Error(w, "Invalid ip parameter: expected 4 or 6", http.StatusBadRequest)
+		return
+	}
 	// Ограничиваем число отдаваемых строк для слабых клиентов (iOS), чтобы избежать их перегрузки при больших профилях
 	lim := parseLimit(r.URL.Query().Get("lim"))
 	format := r.URL.Query().Get("format")
 
-	content, err := s.Merge(sortedIDs, countryCodes, lim)
+	content, err := s.Merge(sortedIDs, countryCodes, lim, ipVersion)
 	if err != nil {
 		s.writeProcessingError(w, r, err, "merge")
 		return
@@ -1634,6 +1644,21 @@ func parseLimit(s string) int {
 		return v
 	}
 	return 0
+}
+
+// parseIPVersion разбирает параметр ip: пустое значение сохраняет поведение
+// по умолчанию, "4"/"6" форсируют исходящие запросы через IPv4/IPv6.
+func parseIPVersion(s string) (int, error) {
+	switch s {
+	case "":
+		return 0, nil
+	case "4":
+		return 4, nil
+	case "6":
+		return 6, nil
+	default:
+		return 0, errors.ValidationError(fmt.Sprintf("invalid ip parameter: %q (expected 4 or 6)", s))
+	}
 }
 
 // parseCountryCodes парсит список кодов стран и проверяет их.
@@ -1756,8 +1781,9 @@ func streamProcessResponse(resp *http.Response, lineProcessor func(string) error
 	return scanner.Err()
 }
 
-// generateProfile выполняет полную логику processSource из main.go и возвращает контент
-func (s *Service) generateProfile(id string, countryCodes []string) (string, error) {
+// generateProfile выполняет полную логику processSource из main.go и возвращает контент.
+// ipVersion: 0 — поведение по умолчанию, 4/6 — форсировать стек для запросов к источникам.
+func (s *Service) generateProfile(id string, countryCodes []string, ipVersion int) (string, error) {
 	source, exists := s.sources[id]
 	if !exists {
 		return "", errors.ValidationError(fmt.Sprintf("source not found for id: %s", id)).WithContext("sourceID", id)
@@ -1781,6 +1807,9 @@ func (s *Service) generateProfile(id string, countryCodes []string) (string, err
 	if len(countryCodes) > 0 {
 		cacheSuffix = "_c_" + strings.Join(countryCodes, "_")
 	}
+	if ipVersion != 0 {
+		cacheSuffix += fmt.Sprintf("_ip%d", ipVersion)
+	}
 
 	origCache := filepath.Join(s.cfg.Cache.Directory, "orig_"+id+cacheSuffix+".txt")
 	modCache := filepath.Join(s.cfg.Cache.Directory, "mod_"+id+cacheSuffix+".txt")
@@ -1800,7 +1829,7 @@ func (s *Service) generateProfile(id string, countryCodes []string) (string, err
 		}
 	}
 
-	content, err := s.fetchSourceContent(id, source, origCache, false, nil)
+	content, err := s.fetchSourceContent(id, source, origCache, false, ipVersion, nil)
 	if err != nil {
 		return "", err
 	}
@@ -1919,16 +1948,18 @@ func (s *Service) generateProfile(id string, countryCodes []string) (string, err
 }
 
 // Filter создает профиль для указанного id и применяет лимит строк.
-func (s *Service) Filter(id string, countryCodes []string, lim int) ([]byte, error) {
-	content, err := s.generateProfile(id, countryCodes)
+// ipVersion: 0 — поведение по умолчанию, 4/6 — форсировать стек для запросов к источникам.
+func (s *Service) Filter(id string, countryCodes []string, lim int, ipVersion int) ([]byte, error) {
+	content, err := s.generateProfile(id, countryCodes, ipVersion)
 	if err != nil {
 		return nil, err
 	}
 	return applyLimit([]byte(content), lim), nil
 }
 
-// Merge выполняет объединение нескольких источников с дедупликацией и кешированием
-func (s *Service) Merge(ids []string, countryCodes []string, lim int) ([]byte, error) {
+// Merge выполняет объединение нескольких источников с дедупликацией и кешированием.
+// ipVersion: 0 — поведение по умолчанию, 4/6 — форсировать стек для запросов к источникам.
+func (s *Service) Merge(ids []string, countryCodes []string, lim int, ipVersion int) ([]byte, error) {
 	sorted := make([]string, len(ids))
 	copy(sorted, ids)
 	sort.Strings(sorted)
@@ -1936,6 +1967,9 @@ func (s *Service) Merge(ids []string, countryCodes []string, lim int) ([]byte, e
 	mergeCacheKey := "merge_" + strings.Join(sorted, "_")
 	if len(countryCodes) > 0 {
 		mergeCacheKey += "_c_" + strings.Join(countryCodes, "_")
+	}
+	if ipVersion != 0 {
+		mergeCacheKey += fmt.Sprintf("_ip%d", ipVersion)
 	}
 
 	cacheFilePath := filepath.Join(s.cfg.Cache.Directory, mergeCacheKey+".txt")
@@ -1999,7 +2033,7 @@ func (s *Service) Merge(ids []string, countryCodes []string, lim int) ([]byte, e
 			if !exists {
 				return errors.ValidationError(fmt.Sprintf("source not found for id: %s", id)).WithContext("sourceID", id)
 			}
-			if err := s.processSourceToBuckets(id, source, countryCodes, nBuckets, bucketWriters, &bucketLocks); err != nil {
+			if err := s.processSourceToBuckets(id, source, countryCodes, ipVersion, nBuckets, bucketWriters, &bucketLocks); err != nil {
 				return errors.ParseError(fmt.Sprintf("error processing source id '%s'", id), err).WithContext("sourceID", id)
 			}
 			return nil
@@ -2084,7 +2118,7 @@ func (s *Service) Merge(ids []string, countryCodes []string, lim int) ([]byte, e
 }
 
 // processSourceToBuckets отвечает за обработку одного источника в merge
-func (s *Service) processSourceToBuckets(id string, source *config.SafeSource, countryCodes []string, nBuckets int, bucketWriters []*bufio.Writer, bucketLocks *[]sync.Mutex) error {
+func (s *Service) processSourceToBuckets(id string, source *config.SafeSource, countryCodes []string, ipVersion int, nBuckets int, bucketWriters []*bufio.Writer, bucketLocks *[]sync.Mutex) error {
 	// Упрощённая копия логики processSourceToBuckets из main.go
 	parsedSource, err := url.Parse(source.URL)
 	if err != nil || parsedSource.Host == "" {
@@ -2100,7 +2134,11 @@ func (s *Service) processSourceToBuckets(id string, source *config.SafeSource, c
 		return errors.ValidationError(fmt.Sprintf("invalid source host: %s", host)).WithContext("host", host)
 	}
 
-	origCache := filepath.Join(s.cfg.Cache.Directory, "orig_"+id+".txt")
+	cacheSuffix := ""
+	if ipVersion != 0 {
+		cacheSuffix = fmt.Sprintf("_ip%d", ipVersion)
+	}
+	origCache := filepath.Join(s.cfg.Cache.Directory, "orig_"+id+cacheSuffix+".txt")
 
 	// Вычисляем строки фильтрации стран один раз до обработки строк
 	var allFilterStrings []string
@@ -2110,7 +2148,7 @@ func (s *Service) processSourceToBuckets(id string, source *config.SafeSource, c
 
 	// В потоковом режиме (с lineProcessor) содержимое не возвращается —
 	// строки обрабатываются на лету, поэтому результат игнорируем.
-	_, err = s.fetchSourceContent(id, source, origCache, false, func(line string) error {
+	_, err = s.fetchSourceContent(id, source, origCache, false, ipVersion, func(line string) error {
 		if line == "" || strings.HasPrefix(line, "#") {
 			return nil
 		}
@@ -2176,8 +2214,22 @@ func buildProfileInterval(ttl time.Duration) string {
 	return fmt.Sprintf("#profile-update-interval: %d", interval)
 }
 
-// fetchSourceContent дублирует аналогичную функцию из main, но работает с s.fetchGroup
-func (s *Service) fetchSourceContent(id string, source *config.SafeSource, origCache string, stdout bool, lineProcessor func(string) error) ([]byte, error) {
+// selectIPForVersion возвращает первый адрес семейства 4 или 6 из списка,
+// прошедший SSRF-проверку, либо nil при отсутствии подходящего адреса.
+func selectIPForVersion(ips []net.IP, version int) net.IP {
+	for _, ip := range ips {
+		isV4 := ip.To4() != nil
+		if (version == 4) == isV4 && config.IsIPAllowed(ip) {
+			return ip
+		}
+	}
+	return nil
+}
+
+// fetchSourceContent дублирует аналогичную функцию из main, но работает с s.fetchGroup.
+// ipVersion: 0 — подключение к IP, зафиксированному при загрузке источника;
+// 4/6 — хост резолвится заново и используется только адрес нужного семейства.
+func (s *Service) fetchSourceContent(id string, source *config.SafeSource, origCache string, stdout bool, ipVersion int, lineProcessor func(string) error) ([]byte, error) {
 	// реализация почти идентична версии в main.go, заменены обращения на s.cfg и s.fetchGroup
 	if !stdout {
 		if info, err := os.Stat(origCache); err == nil && time.Since(info.ModTime()) <= s.cfg.Cache.TTL {
@@ -2207,14 +2259,40 @@ func (s *Service) fetchSourceContent(id string, source *config.SafeSource, origC
 		portStr = getDefaultPort(parsedSource.Scheme)
 	}
 
+	// По умолчанию подключаемся к IP, зафиксированному при загрузке источника.
+	// Для ip=4/6 резолвим хост заново и выбираем адрес нужного семейства;
+	// повторная SSRF-проверка обязательна (защита от DNS rebinding).
+	targetIP := source.IP
+	if ipVersion != 0 {
+		host := parsedSource.Hostname()
+		ips, err := net.LookupIP(host)
+		if err != nil {
+			return nil, errors.NetworkError("resolve host", err).
+				WithContext("sourceID", id).
+				WithContext("host", host)
+		}
+		targetIP = selectIPForVersion(ips, ipVersion)
+		if targetIP == nil {
+			return nil, errors.ValidationError(fmt.Sprintf("source has no allowed IPv%d address", ipVersion)).
+				WithContext("sourceID", id).
+				WithContext("host", host)
+		}
+	}
+
 	dialFunc := func(ctx context.Context, network, _ string) (net.Conn, error) {
 		dialer := &net.Dialer{Timeout: 5 * time.Second}
-		return dialer.DialContext(ctx, network, net.JoinHostPort(source.IP.String(), portStr))
+		return dialer.DialContext(ctx, network, net.JoinHostPort(targetIP.String(), portStr))
 	}
 	client := createHTTPClientWithDialContext(parsedSource.Hostname(), dialFunc)
 
+	// Запросы с разными ip-стеками не должны схлопываться в singleflight
+	fetchKey := id
+	if ipVersion != 0 {
+		fetchKey = fmt.Sprintf("%s_ip%d", id, ipVersion)
+	}
+
 	if lineProcessor != nil {
-		_, err, _ := s.fetchGroup.Do(id, func() (any, error) {
+		_, err, _ := s.fetchGroup.Do(fetchKey, func() (any, error) {
 			req, err := http.NewRequest("GET", source.URL, nil)
 			if err != nil {
 				return nil, errors.NetworkError("create request", err).
@@ -2249,7 +2327,7 @@ func (s *Service) fetchSourceContent(id string, source *config.SafeSource, origC
 		return nil, err
 	}
 
-	result, err, _ := s.fetchGroup.Do(id, func() (any, error) {
+	result, err, _ := s.fetchGroup.Do(fetchKey, func() (any, error) {
 		req, err := http.NewRequest("GET", source.URL, nil)
 		if err != nil {
 			return nil, errors.NetworkError("create request", err).
@@ -2357,7 +2435,7 @@ func (s *Service) processSource(id string, stdout bool, countryCodes []string) (
 		cacheSuffix = "_c_" + strings.Join(countryCodes, "_")
 	}
 	modCache := filepath.Join(s.cfg.Cache.Directory, id+cacheSuffix+".txt")
-	content, err := s.fetchSourceContent(id, source, modCache, stdout, nil)
+	content, err := s.fetchSourceContent(id, source, modCache, stdout, 0, nil)
 	if err != nil {
 		return "", err
 	}

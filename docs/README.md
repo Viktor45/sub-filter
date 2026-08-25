@@ -169,6 +169,7 @@ come from the config file.
 | `c`       | both       | [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes) country codes, comma-separated. Max `validation.max_countries` |
 | `lim`     | both       | Maximum number of proxy lines in the response                                                                                                     |
 | `format`  | both       | Output format: `yaml`, `base64`, or a combination — see [FORMAT_PARAMETER](FORMAT_PARAMETER.md)                                                   |
+| `ip`      | both       | IP stack used to fetch sources: `4` (IPv4 only) or `6` (IPv6 only). Omitted: no preference, behavior is unchanged                                 |
 
 **Examples:**
 
@@ -176,6 +177,7 @@ come from the config file.
 /filter?id=1                       → filter the first subscription
 /filter?id=1&c=DE                  → keep only German servers
 /filter?id=1&format=yaml           → Clash/Mihomo YAML output
+/filter?id=1&ip=6                  → fetch the source over IPv6 only
 /merge?ids=1,2,3&c=US,CA           → merge three sources, keep US/CA servers
 /merge?ids=1,2&format=yaml&lim=100 → merged YAML, at most 100 lines
 ```

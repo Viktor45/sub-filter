@@ -63,6 +63,8 @@ Primary behaviors:
 
 Both `/filter` and `/merge` accept a `format=` query parameter (see `docs/FORMAT_PARAMETER.md`): plain text (default), `yaml` (Clash/Mihomo proxy list), `base64`, or combinations (e.g. `yaml+base64`; note `+` decodes to a space, and `formatContent` accepts both). Invalid values return `400 Bad Request`. Formatting happens in `formatContent`/`contentToYAML` in `pkg/service/service.go` after filtering/merge; `serveFile` adjusts filename extension and Content-Type accordingly.
 
+`ip=4|6` forces outbound source fetches onto one stack: `fetchSourceContent` re-resolves the host and dials the first address of that family that passes `config.IsIPAllowed` (SSRF check must stay — it guards against DNS rebinding). Omitted → the IP pinned at source-load time is used, behavior unchanged. Stack-specific results get separate cache files (`_ip4`/`_ip6` suffix) and singleflight keys.
+
 YAML conversion gotchas (⚠️ easy to break):
 
 - Builders (`buildSSYAML`, `buildVLESSYAML`, `buildVMESSYAML`, `buildTrojanYAML`, `buildHysteria2YAML`) must parse the **normalized** link forms the protocol packages emit: SS userinfo is base64 (`utils.DecodeUserInfo`), VMess is `vmess://BASE64(JSON)` with the `#fragment` stripped via `vmessPayload()`.
@@ -107,6 +109,17 @@ Important nested fields:
 
 `config.Load` also honors `SUBFILTER_CONFIG`, `SUBFILTER_PORT`, and `LOG_LEVEL`.
 
+Runtime artifacts, not source (do not commit changes from them):
+
+- `cache/` — disk cache directory created/populated at runtime.
+- `tmp/` — untracked local samples; `tmp/test.txt` feeds `TestFormatYAML_RealFile_NoLostParams` when present.
+
+## Deployment
+
+- `Dockerfile`: multi-stage build to a `scratch` image, binary at `/app/filter`, defaults `SUBFILTER_CONFIG=/config/config.yaml`. `docker-compose.yml` wraps it.
+- `subfilter.container` is a Podman quadlet example for rootless systemd deployment; published image is `ghcr.io/viktor45/sub-filter`.
+- CI lives in `.github/workflows/`: `test.yaml` (tests + vet + build on push/PR), `container.yaml` (image build/push), `release.yaml`, `ghcr-cleaner.yaml`.
+
 ## Country Filtering
 
 - `/filter` and `/merge` use `c=` and `parseCountryCodes`.
@@ -130,10 +143,12 @@ Important nested fields:
 ## Tests
 
 - `go test ./...` — run all tests
+- `go vet ./...` — CI runs vet plus `go build .` alongside tests; run both before committing
 - `go test ./pkg/service ./pkg/config ./internal/validator` — test core packages
 - `go test ./ss ./vless ./vmess ./trojan ./hysteria2` — test protocol implementations
 - `go test -race ./...` — test for race conditions
 - `go test ./pkg/service/ -bench=. -benchmem -run='^$'` — benchmarks for parsing, YAML conversion, base64, bad-word filtering (`bench_format_test.go`)
+- `security_test.go` (repo root) — security-focused tests: header injection, SSRF source-URL/IP validation, regex pattern limits, rate-limiter concurrency, file permissions. Changes to request protections must keep these passing.
 
 ## Go Development Standards
 

@@ -265,7 +265,7 @@ func TestService_FilterAndMerge(t *testing.T) {
 	svc.sources["a"] = &config.SafeSource{URL: ts.URL, IP: net.ParseIP("127.0.0.1")}
 
 	// Фильтруем без лимита
-	res, err := svc.Filter("a", nil, 0)
+	res, err := svc.Filter("a", nil, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func TestService_FilterAndMerge(t *testing.T) {
 
 	// limit=2 должен ограничить максимум двумя неколичественными записями; у нас только
 	// одна прокси-ссылка, поэтому ожидаем одну строку назад.
-	res2, err := svc.Filter("a", nil, 2)
+	res2, err := svc.Filter("a", nil, 2, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +286,7 @@ func TestService_FilterAndMerge(t *testing.T) {
 
 	// Слияние двух источников
 	svc.sources["b"] = &config.SafeSource{URL: ts.URL, IP: net.ParseIP("127.0.0.1")}
-	merged, err := svc.Merge([]string{"a", "b"}, nil, 0)
+	merged, err := svc.Merge([]string{"a", "b"}, nil, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +295,7 @@ func TestService_FilterAndMerge(t *testing.T) {
 	}
 
 	// Слияние с лимитом
-	merged2, err := svc.Merge([]string{"a", "b"}, nil, 1)
+	merged2, err := svc.Merge([]string{"a", "b"}, nil, 1, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

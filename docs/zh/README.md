@@ -169,6 +169,7 @@ logging:
 | `c`      | 两者      | 逗号分隔的 [ISO 3166-1 alpha-2](https://zh.wikipedia.org/wiki/ISO_3166-1) 国家代码。最多 `validation.max_countries` 个 |
 | `lim`    | 两者      | 响应中代理行的最大数量                                                                                                 |
 | `format` | 两者      | 输出格式：`yaml`、`base64` 或组合——见 [FORMAT_PARAMETER](FORMAT_PARAMETER.md)                                          |
+| `ip`     | 两者      | 获取源时使用的 IP 协议栈：`4`（仅 IPv4）或 `6`（仅 IPv6）。不传则行为不变                                              |
 
 **示例：**
 
@@ -176,6 +177,7 @@ logging:
 /filter?id=1                       → 过滤第一个订阅
 /filter?id=1&c=DE                  → 仅德国服务器
 /filter?id=1&format=yaml           → 输出 Clash/Mihomo 的 YAML
+/filter?id=1&ip=6                  → 仅通过 IPv6 获取源
 /merge?ids=1,2,3&c=US,CA           → 合并三个源，仅美国/加拿大服务器
 /merge?ids=1,2&format=yaml&lim=100 → 合并后的 YAML，最多 100 行
 ```
