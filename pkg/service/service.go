@@ -97,6 +97,19 @@ func detectProxyScheme(content []byte) bool {
 	return false
 }
 
+// decodeIfBase64 декодирует base64-подписку, если в исходном содержимом нет
+// прокси-схем, а после декодирования они появляются; иначе возвращает как есть.
+// Единая точка обработки base64 для всех путей: /filter, /merge и CLI.
+func decodeIfBase64(content []byte) []byte {
+	if detectProxyScheme(content) {
+		return content
+	}
+	if decoded := utils.AutoDecodeBase64(content); detectProxyScheme(decoded) {
+		return decoded
+	}
+	return content
+}
+
 // ProxyLink это интерфейс, реализованный процессорами протоколов (ss, vless, etc).
 // Это сделано намеренно; любые значения, чьи методы совпадают, могут быть
 // сохранены в этот интерфейс независимо от пакета.
@@ -1758,29 +1771,6 @@ func createHTTPClientWithDialContext(hostname string, dialFunc func(context.Cont
 	}
 }
 
-// streamProcessResponse читает тело ответа построчно с ограничением общего размера.
-func streamProcessResponse(resp *http.Response, lineProcessor func(string) error, maxSize int64) error {
-	if maxSize <= 0 {
-		maxSize = 10 * 1024 * 1024
-	}
-	limited := io.LimitReader(resp.Body, maxSize+1)
-	scanner := bufio.NewScanner(limited)
-	buf := make([]byte, 0, 64*1024)
-	scanner.Buffer(buf, 4*1024*1024)
-	var total int64
-	for scanner.Scan() {
-		total += int64(len(scanner.Bytes())) + 1
-		if total > maxSize {
-			return errors.ValidationError("source response exceeds max size").
-				WithContext("maxSize", maxSize)
-		}
-		if err := lineProcessor(scanner.Text()); err != nil {
-			return err
-		}
-	}
-	return scanner.Err()
-}
-
 // generateProfile выполняет полную логику processSource из main.go и возвращает контент.
 // ipVersion: 0 — поведение по умолчанию, 4/6 — форсировать стек для запросов к источникам.
 func (s *Service) generateProfile(id string, countryCodes []string, ipVersion int) (string, error) {
@@ -1833,15 +1823,7 @@ func (s *Service) generateProfile(id string, countryCodes []string, ipVersion in
 	if err != nil {
 		return "", err
 	}
-	origContent := content
-
-	hasProxy := detectProxyScheme(origContent)
-	if !hasProxy {
-		decoded := utils.AutoDecodeBase64(origContent)
-		if detectProxyScheme(decoded) {
-			origContent = decoded
-		}
-	}
+	origContent := decodeIfBase64(content)
 
 	var out []string
 	var rejectedLines []string
@@ -2234,9 +2216,10 @@ func (s *Service) fetchSourceContent(id string, source *config.SafeSource, origC
 	if !stdout {
 		if info, err := os.Stat(origCache); err == nil && time.Since(info.ModTime()) <= s.cfg.Cache.TTL {
 			if content, err := os.ReadFile(origCache); err == nil {
-				// Если lineProcessor предоставлен, обработаем кэшированный контент
+				// Если lineProcessor предоставлен, обработаем кэшированный контент;
+				// base64-подписка декодируется целиком до разбора на строки.
 				if lineProcessor != nil {
-					for line := range strings.SplitSeq(strings.TrimSpace(string(content)), "\n") {
+					for line := range strings.SplitSeq(strings.TrimSpace(string(decodeIfBase64(content))), "\n") {
 						if err := lineProcessor(line); err != nil {
 							return nil, err
 						}
@@ -2316,10 +2299,30 @@ func (s *Service) fetchSourceContent(id string, source *config.SafeSource, origC
 					WithContext("statusCode", resp.StatusCode)
 			}
 
-			if err := streamProcessResponse(resp, lineProcessor, s.cfg.Sources.MaxSize); err != nil {
-				return nil, errors.ParseError("stream processing failed", err).
+			// Читаем тело целиком, а не построчно: base64-подписка декодируется
+			// только целиком (отдельная строка base64 не является валидной подпиской).
+			// Размер ограничен maxSize, как и в непотоковом пути.
+			maxSize := s.cfg.Sources.MaxSize
+			if maxSize <= 0 {
+				maxSize = 10 * 1024 * 1024
+			}
+			body, err := io.ReadAll(io.LimitReader(resp.Body, maxSize+1))
+			if err != nil {
+				return nil, errors.IOError("read response", err)
+			}
+			if int64(len(body)) > maxSize {
+				return nil, errors.ValidationError("source response exceeds max size").
 					WithContext("sourceID", id).
-					WithContext("url", source.URL)
+					WithContext("maxSize", maxSize)
+			}
+			if !stdout {
+				// Запись кэша не критична — при ошибке просто пропускаем
+				_ = os.WriteFile(origCache, body, 0o600)
+			}
+			for line := range strings.SplitSeq(strings.TrimSpace(string(decodeIfBase64(body))), "\n") {
+				if err := lineProcessor(line); err != nil {
+					return nil, err
+				}
 			}
 
 			return nil, nil
@@ -2439,14 +2442,8 @@ func (s *Service) processSource(id string, stdout bool, countryCodes []string) (
 	if err != nil {
 		return "", err
 	}
-	origContent := content
-
 	// Base64-подписки декодируются так же, как в HTTP-режиме
-	if !detectProxyScheme(origContent) {
-		if decoded := utils.AutoDecodeBase64(origContent); detectProxyScheme(decoded) {
-			origContent = decoded
-		}
-	}
+	origContent := decodeIfBase64(content)
 
 	// Вычисляем строки фильтрации стран один раз до цикла
 	var allFilterStrings []string
