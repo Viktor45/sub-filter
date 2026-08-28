@@ -1,25 +1,34 @@
+> [!WARNING]
+> **DEPRECATED:** This project is about to be deprecated as of August 2026.
+>
+> This project is no longer supported. You can continue to use it in full, but bug fixes and technical support are not provided. You can fork the project and improve it yourself without any problems.
+> >  Please use [fumox](https://github.com/Viktor45/fumox/blob/main/USERGUIDE.md) instead for advanced and similar functions.
+
+---
+
+
 [EN](README.md) / [RU](ru/README.md) / [ZH](zh/README.md)
 
 <!-- TOC -->
-* [sub-filter](#sub-filter)
-  * [Features](#features)
-  * [Build](#build)
-  * [Configuration](#configuration)
-    * [Nested format](#nested-format)
-    * [Legacy flat keys](#legacy-flat-keys)
-    * [Environment variables](#environment-variables)
-  * [Mode 1: HTTP server](#mode-1-http-server)
-    * [Endpoints](#endpoints)
-    * [Query parameters](#query-parameters)
-    * [Request protection](#request-protection)
-  * [Mode 2: CLI](#mode-2-cli)
-  * [Country filtering](#country-filtering)
-  * [Cache files](#cache-files)
-  * [Client integration](#client-integration)
-  * [Docker](#docker)
-    * [Run the server](#run-the-server)
-    * [CLI in Docker](#cli-in-docker)
-  * [Architecture](#architecture)
+- [sub-filter](#sub-filter)
+  - [Features](#features)
+  - [Build](#build)
+  - [Configuration](#configuration)
+    - [Nested format](#nested-format)
+    - [Legacy flat keys](#legacy-flat-keys)
+    - [Environment variables](#environment-variables)
+  - [Mode 1: HTTP server](#mode-1-http-server)
+    - [Endpoints](#endpoints)
+    - [Query parameters](#query-parameters)
+    - [Request protection](#request-protection)
+  - [Mode 2: CLI](#mode-2-cli)
+  - [Country filtering](#country-filtering)
+  - [Cache files](#cache-files)
+  - [Client integration](#client-integration)
+  - [Docker](#docker)
+    - [Run the server](#run-the-server)
+    - [CLI in Docker](#cli-in-docker)
+  - [Architecture](#architecture)
 <!-- TOC -->
 
 # sub-filter
@@ -123,7 +132,7 @@ Nested values take precedence over flat ones.
 ### Environment variables
 
 | Variable           | Purpose                                      |
-|--------------------|----------------------------------------------|
+| ------------------ | -------------------------------------------- |
 | `SUBFILTER_CONFIG` | Path to the config file                      |
 | `SUBFILTER_PORT`   | Overrides `server.port`                      |
 | `LOG_LEVEL`        | Log level (`debug`, `info`, `warn`, `error`) |
@@ -163,7 +172,7 @@ come from the config file.
 ### Query parameters
 
 | Parameter | Applies to | Description                                                                                                                                       |
-|-----------|------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
+| --------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `id`      | `/filter`  | Source ID — the line number in `sources.file` (1-based, valid lines only)                                                                         |
 | `ids`     | `/merge`   | Source IDs, comma-separated or repeated (`ids=1&ids=2`); legacy `id` also accepted. Max `validation.max_merge_ids`                                |
 | `c`       | both       | [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes) country codes, comma-separated. Max `validation.max_countries` |
@@ -208,7 +217,7 @@ Processes subscriptions once and writes the results to the cache directory
 ```
 
 | Flag        | Description                                                          |
-|-------------|----------------------------------------------------------------------|
+| ----------- | -------------------------------------------------------------------- |
 | `--cli`     | Run in CLI mode                                                      |
 | `--stdout`  | Print results to the terminal instead of writing cache files         |
 | `--config`  | Use an external config file                                          |
@@ -268,11 +277,11 @@ Results are stored in `cache.directory` (`/tmp/sub-filter-cache` by default).
 
 Server mode (`/filter`) creates, per source and country combination:
 
-| File                              | Content                                  |
-| --------------------------------- | ---------------------------------------- |
-| `orig_<id>[_c_<CODES>].txt`       | Original fetched subscription            |
-| `mod_<id>[_c_<CODES>].txt`        | Filtered profile (served to clients)     |
-| `rejected_<id>[_c_<CODES>].txt`   | Rejected lines with reasons              |
+| File                            | Content                              |
+| ------------------------------- | ------------------------------------ |
+| `orig_<id>[_c_<CODES>].txt`     | Original fetched subscription        |
+| `mod_<id>[_c_<CODES>].txt`      | Filtered profile (served to clients) |
+| `rejected_<id>[_c_<CODES>].txt` | Rejected lines with reasons          |
 
 `/merge` writes `merge_<id1>_<id2>...[_c_<CODES>].txt`.
 CLI mode writes `<id>[_c_<CODES>].txt`.

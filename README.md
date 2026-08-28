@@ -1,3 +1,12 @@
+> [!WARNING]
+> **DEPRECATED:** This project is about to be deprecated as of August 2026.
+>
+> This project is no longer supported. You can continue to use it in full, but bug fixes and technical support are not provided. You can fork the project and improve it yourself without any problems.
+> >  Please use [fumox](https://github.com/Viktor45/fumox/blob/main/USERGUIDE.md) instead for advanced and similar functions.
+
+---
+
+
 <div align="center">
 
 # 🧹 sub-filter
@@ -41,7 +50,7 @@ English is the primary language. Russian and Chinese translations are provided i
 `docs/ru/` and `docs/zh/`.
 
 | Topic                          | EN                                           | RU                                | ZH                                |
-|--------------------------------|----------------------------------------------|-----------------------------------|-----------------------------------|
+| ------------------------------ | -------------------------------------------- | --------------------------------- | --------------------------------- |
 | **Main guide**                 | [docs](docs/README.md)                       | [docs/ru](docs/ru/README.md)      | [docs/zh](docs/zh/README.md)      |
 | **Validation rules**           | [FILTER_RULES](docs/FILTER_RULES.md)         | [RU](docs/ru/FILTER_RULES.md)     | [ZH](docs/zh/FILTER_RULES.md)     |
 | **Bad-word filters**           | [BADWORDS](docs/BADWORDS.md)                 | [RU](docs/ru/BADWORDS.md)         | [ZH](docs/zh/BADWORDS.md)         |
@@ -52,7 +61,7 @@ English is the primary language. Russian and Chinese translations are provided i
 Configuration and rule examples live in [`config/`](config/):
 
 | File                                             | Purpose                     |
-|--------------------------------------------------|-----------------------------|
+| ------------------------------------------------ | --------------------------- |
 | [`config/config.yaml`](config/config.yaml)       | Main configuration          |
 | [`config/rules.yaml`](config/rules.yaml)         | Validation rules            |
 | [`config/badwords.yaml`](config/badwords.yaml)   | Bad-word rules              |
